@@ -31,9 +31,11 @@ export function InvoiceOcrUpload() {
       const res = await postOcrReceipt(headers, body);
       setResult(res);
     } catch (err) {
-      const status = err instanceof ApiError ? err.status : 0;
       // Route may be absent until compliance-core lands — keep same request shape.
-      if (status === 404 || status === 0 || status >= 500) {
+      if (err instanceof ApiError && err.status !== 404 && err.status < 500) {
+        setError(err.message);
+      } else {
+        const status = err instanceof ApiError ? err.status : 0;
         const stub: OcrJobResponse = {
           tenant_id: headers.tenantId,
           status: "accepted",
@@ -44,14 +46,6 @@ export function InvoiceOcrUpload() {
           status === 404
             ? "Backend OCR route not available yet (404). Request used the same OcrRequest shape: { file_url }. Showing accepted stub."
             : `Could not reach OCR endpoint (${status || "network"}). Request shape preserved as { file_url }. Showing accepted stub.`,
-        );
-      } else {
-        setError(
-          err instanceof ApiError
-            ? err.message
-            : err instanceof Error
-              ? err.message
-              : "OCR upload failed",
         );
       }
     } finally {

@@ -22,22 +22,29 @@ export function TenantSwitcher() {
         </p>
       </div>
 
-      <label className={styles.label} htmlFor="tenant-profile">
-        Active workspace
-      </label>
-      <select
-        id="tenant-profile"
-        className={styles.select}
-        value={active.id}
-        onChange={(e) => setActiveId(e.target.value)}
-      >
-        {profiles.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.kind === "master" ? "Master · " : "Business · "}
-            {p.name}
-          </option>
-        ))}
-      </select>
+      <fieldset className={styles.profileFieldset}>
+        <legend className={styles.label}>Active workspace</legend>
+        <div className={styles.profileList} role="radiogroup" aria-label="Active workspace">
+          {profiles.map((p) => {
+            const selected = p.id === active.id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                className={selected ? styles.profileOptionActive : styles.profileOption}
+                onClick={() => setActiveId(p.id)}
+              >
+                <span className={styles.profileKind}>
+                  {p.kind === "master" ? "Master" : "Business"}
+                </span>
+                <span className={styles.profileName}>{p.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
 
       <dl className={styles.metaList}>
         <div>

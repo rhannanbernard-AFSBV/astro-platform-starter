@@ -100,6 +100,62 @@
   cursor: wait;
 }
 
+.profileFieldset {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.profileList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.profileOption,
+.profileOptionActive {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  text-align: left;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--field);
+  color: var(--ink);
+  padding: 0.7rem 0.85rem;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.profileOption:hover {
+  border-color: var(--lagoon);
+  transform: translateY(-1px);
+}
+
+.profileOptionActive {
+  border-color: var(--lagoon);
+  background: color-mix(in srgb, var(--lagoon) 10%, white);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lagoon) 35%, transparent);
+}
+
+.profileKind {
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--brass);
+  font-weight: 650;
+}
+
+.profileName {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
 .metaList {
   display: grid;
   gap: 0.55rem;
