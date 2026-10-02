@@ -1,0 +1,30 @@
+---
+description: Allyanna Accounting — stack, non-negotiables, and SXM tax domain summary
+alwaysApply: true
+---
+
+# Allyanna Accounting — Project Context
+
+AI-driven multi-tenant accounting SaaS for Sint Maarten (SXM) compliance.
+
+## Stack
+
+Python (FastAPI), PostgreSQL, OpenAI GPT-4o, Next.js
+
+## Non-negotiables
+
+1. LLM never does financial math — Python `decimal` only
+2. Every query scoped by `tenant_id`; Postgres RLS on all tenant tables
+3. Tax rates/brackets/SZV caps from DB cache by `tax_year` + `country_code` (`SXM`), never hardcoded in formulas
+4. Master Account can switch securely among sub-tenant business profiles
+5. OCR/document intake is async; GPT-4o extracts structured fields into Pydantic validation
+
+## Tax domain (SXM)
+
+- TOT: flat 5% on gross taxable revenue (rate still sourced from tax tables, not formula literals)
+- Wage tax: progressive brackets from official tables
+- SZV: ZV/OV and AOV/AWW with employer/employee splits and monthly wage ceiling
+
+## Canonical rules
+
+Full Cursor system rules: see sibling rule `allyanna-system.mdc` in `.cursor/rules/`.
