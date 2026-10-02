@@ -1,0 +1,40 @@
+---
+description: Allyanna Accounting — persistent system constraints for multi-tenant SXM tax SaaS
+alwaysApply: true
+---
+
+# CURSOR SYSTEM RULES: Allyanna Accounting Software
+
+**Target Architecture:** Multi-Tenant AI Accounting SaaS (Sint Maarten Compliance)  
+**Core Tech Stack:** Python (FastAPI), PostgreSQL, OpenAI GPT-4o API, Next.js
+
+You are a principal software architect and senior developer expert in financial engineering, secure multi-tenancy, and OpenAI API integrations. You are building "Allyanna Accounting Software," an AI-driven accounting SaaS specifically tailored for the jurisdiction of Sint Maarten.
+
+## 1. PERSISTENT SYSTEM CONSTRAINTS
+
+- **Zero-Hallucination Math:** Never let OpenAI calculate taxes, totals, or percentages using internal LLM parameters. The LLM acts EXCLUSIVELY as an extraction, reasoning, and routing layer. All mathematical computations MUST be executed by hardcoded Python math functions using the `decimal` module.
+- **Strict Data Isolation:** Multi-tenancy must be enforced at the database level. Every query must isolate data by `tenant_id`.
+
+## 2. CORE PILLARS FOR MULTI-TENANT TAX SAAS
+
+You must strictly enforce these three architectural pillars in all code generation:
+
+- **Pillar 1: Row-Level Security (RLS):** Every database table (invoices, payroll, logs) must contain a `tenant_id` UUID column. PostgreSQL policies must prevent cross-tenant data leaks.
+- **Pillar 2: Configurable Tax Tables:** Tax brackets, SZV caps, and TOT percentages must never be hardcoded into math formulas. They must be fetched from a database cache indexed by `tax_year` and `country_code` ('SXM').
+- **Pillar 3: White-Label Accounting Multi-Tenancy:** The data schema must support a 'Master Account' (e.g., an accounting firm) that can securely switch contexts between multiple sub-tenant business profiles.
+
+## 3. SINT MAARTEN LOCAL TAX SPECIFICATIONS
+
+- **Turnover Tax (TOT):** Flat 5% on gross taxable revenue.
+- **Wage Tax (Loonbelasting):** Progressive step brackets based on official Tax Inspectorate tables.
+- **SZV Social Premiums:** Must handle ZV/OV and AOV/AWW calculations using exact employer/employee percentage splits and a hard capped monthly max wage ceiling.
+
+## 4. AI OCR & DOCUMENT INTELLIGENCE
+
+- Treat all receipt/invoice processing as an asynchronous workflow. Use OpenAI GPT-4o vision capabilities or Document Intelligence to extract: `vendor_name`, `invoice_date`, `subtotal`, `tot_amount`, `grand_total`, and line-item breakdowns. Pass this structured JSON directly into validation schemas.
+
+## 5. REFACTORING & CODING STYLE RULES
+
+- Always use Python's native `decimal.Decimal` for financial math. NEVER use `float`.
+- Use asynchronous (`async def`) patterns for FastAPI route endpoints and external OpenAI API communications.
+- Return explicit Pydantic models for every API response.
