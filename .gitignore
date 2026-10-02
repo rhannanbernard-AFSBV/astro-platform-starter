@@ -22,3 +22,12 @@ pnpm-debug.log*
 
 # Local Netlify folder
 .netlify
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.mypy_cache/
