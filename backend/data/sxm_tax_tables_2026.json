@@ -1,0 +1,18 @@
+{
+  "country_code": "SXM",
+  "tax_year": 2026,
+  "tot_percentage": "0.05",
+  "szv_wage_cap": "5600.00",
+  "szv_aov_employer_pct": "0.0825",
+  "szv_aov_employee_pct": "0.0475",
+  "wage_tax_brackets": [
+    {
+      "up_to": "2000.00",
+      "rate": "0.10"
+    },
+    {
+      "up_to": null,
+      "rate": "0.20"
+    }
+  ]
+}
