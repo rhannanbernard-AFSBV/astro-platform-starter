@@ -1,0 +1,44 @@
+# electron-builder configuration (mirrors package.json "build" for clarity).
+# Prefer: npm run dist  (reads package.json build + this file if present)
+#
+# Artifact: desktop/release/Allyanna_Accounting_Setup.exe
+
+appId: com.allyanna.accounting
+productName: Allyanna Accounting
+copyright: Copyright © Allyanna
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - main.js
+  - package.json
+
+extraResources:
+  - from: bin/allyanna-backend
+    to: backend/allyanna-backend
+    filter:
+      - "**/*"
+  - from: ui-dist
+    to: ui
+    filter:
+      - "**/*"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: Allyanna_Accounting_Setup.${ext}
+  signAndEditExecutable: false
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Allyanna Accounting
+  deleteAppDataOnUninstall: false
+
+asar: true

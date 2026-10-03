@@ -1,0 +1,10 @@
+node_modules/
+release/
+out/
+ui-dist/
+bin/
+dist/
+.vite/
+*.log
+.env
+.env.*
