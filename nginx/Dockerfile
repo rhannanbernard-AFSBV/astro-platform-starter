@@ -2,10 +2,8 @@
 FROM nginx:1.27-alpine
 
 RUN rm -f /etc/nginx/conf.d/default.conf \
-    && mkdir -p /etc/nginx/ssl \
-    && chown -R nginx:nginx /var/cache/nginx /var/log/nginx /etc/nginx/ssl \
-    && touch /tmp/nginx.pid \
-    && chown nginx:nginx /tmp/nginx.pid
+    && mkdir -p /etc/nginx/ssl /var/cache/nginx /var/run \
+    && chown -R nginx:nginx /var/cache/nginx /var/log/nginx /etc/nginx/ssl
 
 COPY nginx.conf /etc/nginx/nginx.conf
 
