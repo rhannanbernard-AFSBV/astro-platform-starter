@@ -3,11 +3,15 @@
 #
 # Prerequisites:
 #   - backend/ and frontend/ application sources (Allyanna FastAPI + Next.js)
+#   - backend/migrations/*.sql + backend/scripts/migrate.sh (applied by migrate)
 #   - cp .env.production.example .env.production  # fill secrets; never commit
 #   - TLS certs in nginx/ssl/ (see nginx/ssl/README.md)
 #
 # Target layout:
 #   backend/Dockerfile  frontend/Dockerfile  nginx/nginx.conf  docker-compose.prod.yml
+#
+# Bring-up order:
+#   postgres (healthy) → migrate (psql SQL, exit 0) → backend → frontend → nginx
 #
 # Start:
 #   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
@@ -41,6 +45,29 @@ services:
       retries: 12
       start_period: 10s
 
+  # One-shot migrator: applies backend/migrations/*.sql before API traffic.
+  # Uses DATABASE_URL (bootstrap/superuser) + ALLYANNA_APP_PASSWORD (app role).
+  migrate:
+    image: postgres:16-alpine
+    container_name: allyanna-migrate
+    restart: "on-failure"
+    env_file:
+      - .env.production
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env.production}
+      ALLYANNA_APP_PASSWORD: ${ALLYANNA_APP_PASSWORD:?set ALLYANNA_APP_PASSWORD in .env.production}
+      MIGRATIONS_DIR: /migrations
+      ALLYANNA_SEED_DEMO_TENANT: ${ALLYANNA_SEED_DEMO_TENANT:-true}
+    volumes:
+      - ./backend/migrations:/migrations:ro
+      - ./backend/scripts/migrate.sh:/migrate.sh:ro
+    entrypoint: ["/bin/sh", "/migrate.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - allyanna_internal
+
   backend:
     build:
       context: ./backend
@@ -52,7 +79,7 @@ services:
       - .env.production
     environment:
       NODE_ENV: production
-      # Prefer least-privilege app role URL inside the compose network.
+      # Runtime uses least-privilege allyanna_app_user (created/rotated by migrate).
       DATABASE_URL: ${ALLYANNA_DATABASE_URL:?set ALLYANNA_DATABASE_URL in .env.production}
       ALLYANNA_DATABASE_URL: ${ALLYANNA_DATABASE_URL:?set ALLYANNA_DATABASE_URL in .env.production}
       OPENAI_API_KEY: ${OPENAI_API_KEY:?set OPENAI_API_KEY in .env.production}
@@ -62,6 +89,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     networks:
       - allyanna_internal
     healthcheck:

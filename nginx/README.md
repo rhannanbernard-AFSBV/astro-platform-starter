@@ -31,3 +31,5 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 30 \
 
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
+
+Bring-up runs the one-shot `migrate` service (`backend/scripts/migrate.sh` + `backend/migrations/*.sql`) after Postgres is healthy and before the FastAPI backend starts.
