@@ -4,7 +4,10 @@
 # Prerequisites:
 #   - backend/ and frontend/ application sources (Allyanna FastAPI + Next.js)
 #   - cp .env.production.example .env.production  # fill secrets; never commit
-#   - TLS certs in deploy/nginx/ssl/ (see deploy/nginx/ssl/README.md)
+#   - TLS certs in nginx/ssl/ (see nginx/ssl/README.md)
+#
+# Target layout:
+#   backend/Dockerfile  frontend/Dockerfile  nginx/nginx.conf  docker-compose.prod.yml
 #
 # Start:
 #   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
@@ -107,7 +110,7 @@ services:
 
   nginx:
     build:
-      context: ./deploy/nginx
+      context: ./nginx
       dockerfile: Dockerfile
     image: allyanna-nginx:prod
     container_name: allyanna-nginx
@@ -116,7 +119,7 @@ services:
       - "${ALLYANNA_HTTP_PORT:-80}:80"
       - "${ALLYANNA_HTTPS_PORT:-443}:443"
     volumes:
-      - ./deploy/nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
     depends_on:
       frontend:
         condition: service_healthy

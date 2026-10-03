@@ -11,9 +11,9 @@ Do **not** commit real certificates or private keys. For local smoke tests only:
 
 ```bash
 openssl req -x509 -nodes -newkey rsa:2048 -days 30 \
-  -keyout deploy/nginx/ssl/privkey.pem \
-  -out deploy/nginx/ssl/fullchain.pem \
+  -keyout nginx/ssl/privkey.pem \
+  -out nginx/ssl/fullchain.pem \
   -subj "/CN=localhost"
 ```
 
-`docker-compose.prod.yml` binds `./deploy/nginx/ssl` → `/etc/nginx/ssl:ro`.
+`docker-compose.prod.yml` binds `./nginx/ssl` → `/etc/nginx/ssl:ro`.
