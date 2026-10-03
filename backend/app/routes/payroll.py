@@ -27,7 +27,7 @@ _INSERT_PAYROLL_PG = """
 """
 
 _INSERT_PAYROLL_SQLITE = """
-    INSERT INTO payroll_records (
+    INSERT INTO local_payroll_records (
         id, tenant_id, employee_name, payroll_month, gross_salary,
         wage_tax_deduction, szv_employee_deduction,
         szv_employer_contribution, net_pay

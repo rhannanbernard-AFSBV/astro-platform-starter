@@ -15,7 +15,7 @@ Output:
 Path notes:
   - Spec uses pathlib / os.path.join so Windows backslashes resolve correctly.
   - Runtime DB path is NOT bundled; it is created under
-    %LOCALAPPDATA%\\Allyanna\\local_database.db by app.paths.
+    %LOCALAPPDATA%\\Allyanna\\allyanna_ledger.db by app.local_ledger.
 """
 
 from __future__ import annotations
@@ -50,6 +50,7 @@ hiddenimports = [
     "app.main",
     "app.paths",
     "app.sqlite_db",
+    "app.local_ledger",
     "app.local_config",
     "app.tax_engine",
     "app.tax_tables",

@@ -19,6 +19,9 @@ INVOICE_ID = UUID("bbbbbbbb-cccc-dddd-eeee-ffffffffffff")
 @pytest.fixture
 def client_with_mocked_db(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     executed: list[tuple[str, tuple[Any, ...]]] = []
+    # Pin Postgres SQL branch (desktop default engine is sqlite / local_* tables).
+    monkeypatch.setenv("ALLYANNA_DB_ENGINE", "postgres")
+    monkeypatch.setenv("ALLYANNA_LOCAL_MODE", "0")
 
     class FakeResult:
         async def fetchone(self) -> tuple[UUID]:
@@ -35,6 +38,7 @@ def client_with_mocked_db(monkeypatch: pytest.MonkeyPatch) -> TestClient:
         yield FakeConn()
 
     monkeypatch.setattr("app.routes.invoices.get_tenant_db_session", fake_session)
+    monkeypatch.setattr("app.routes.invoices.get_db_engine", lambda: "postgres")
     client = TestClient(app)
     client.fake_executed = executed  # type: ignore[attr-defined]
     return client

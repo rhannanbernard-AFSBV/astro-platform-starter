@@ -2,7 +2,7 @@
 Tenant-scoped database sessions — Postgres (RLS) or embedded SQLite.
 
 Desktop / local mode uses SQLite at
-``%LOCALAPPDATA%\\Allyanna\\local_database.db`` with app-enforced
+``%LOCALAPPDATA%\\Allyanna\\allyanna_ledger.db`` with app-enforced
 ``tenant_id`` scoping (SQLite has no Postgres RLS).
 
 Server mode keeps psycopg async + ``SET LOCAL app.current_tenant_id``.

@@ -2,9 +2,13 @@
 -- Allyanna embedded SQLite schema (Windows desktop / local mode)
 -- Migration: 001_local_schema.sql
 --
+-- Ledger file: %LOCALAPPDATA%\Allyanna\allyanna_ledger.db
+-- (Frankie's get_local_db_connection / initialize_local_sxm_tables)
+--
 -- Postgres RLS is not available in SQLite. Tenant isolation is enforced in
 -- application SQL: every ledger query MUST filter / bind ``tenant_id``.
--- Money columns use TEXT so Python ``decimal.Decimal`` round-trips losslessly.
+-- Money columns use TEXT so Python ``decimal.Decimal`` round-trips losslessly
+-- (never REAL/float for money).
 -- Tax rates remain keyed by tax_year + country_code ('SXM') — never formula literals.
 -- ============================================================================
 
@@ -58,7 +62,8 @@ CREATE TABLE IF NOT EXISTS wage_tax_brackets (
 CREATE INDEX IF NOT EXISTS idx_wage_tax_brackets_lookup
     ON wage_tax_brackets (tax_year, country_code, sort_order);
 
-CREATE TABLE IF NOT EXISTS invoices (
+-- Frankie's local invoice ledger (tenant_id kept for SaaS compatibility)
+CREATE TABLE IF NOT EXISTS local_invoices (
     id TEXT PRIMARY KEY NOT NULL,
     tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     vendor_name TEXT NOT NULL,
@@ -69,10 +74,11 @@ CREATE TABLE IF NOT EXISTS invoices (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_invoices_tenant
-    ON invoices (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_local_invoices_tenant
+    ON local_invoices (tenant_id);
 
-CREATE TABLE IF NOT EXISTS payroll_records (
+-- Frankie's local payroll ledger (tenant_id kept for SaaS compatibility)
+CREATE TABLE IF NOT EXISTS local_payroll_records (
     id TEXT PRIMARY KEY NOT NULL,
     tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     employee_name TEXT NOT NULL,
@@ -85,8 +91,8 @@ CREATE TABLE IF NOT EXISTS payroll_records (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_payroll_tenant
-    ON payroll_records (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_local_payroll_tenant
+    ON local_payroll_records (tenant_id);
 
 -- Schema meta
 CREATE TABLE IF NOT EXISTS schema_migrations (

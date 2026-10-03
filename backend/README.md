@@ -5,7 +5,7 @@ Integrated FastAPI package for Sint Maarten multi-tenant compliance:
 - **Tax engine** — Decimal-only TOT / wage tax / SZV (no LLM math)
 - **Pillar 2 tax tables** — JSON cache + DB `tax_rates` / `wage_tax_brackets` (Postgres or SQLite)
 - **RLS schema (server)** — Postgres env password, `FORCE RLS`, `WITH CHECK`
-- **SQLite desktop** — embedded DB at `%LOCALAPPDATA%\Allyanna\local_database.db` with app-enforced `tenant_id`
+- **SQLite desktop** — embedded DB at `%LOCALAPPDATA%\Allyanna\allyanna_ledger.db` (`local_invoices` / `local_payroll_records`) with app-enforced `tenant_id`
 - **Async tenant DB session** — Postgres GUC or SQLite tenant bind + `X-Tenant-ID`
 - **Compliance chat** — GPT-4o routes to local tools (offline keyword router when no key)
 - **OCR extract** — async field extraction (optional local API key; no recalculation)
@@ -19,7 +19,8 @@ backend/
   app/
     main.py              # FastAPI entrypoint (+ optional static UI)
     paths.py             # Windows AppData / resource roots
-    sqlite_db.py         # embedded SQLite + tenant session
+    local_ledger.py      # Frankie: get_local_db_connection + initialize_local_sxm_tables
+    sqlite_db.py         # async tenant session over allyanna_ledger.db
     local_config.py      # AppData config.json / engine selection
     tax_engine.py        # Decimal math
     tax_tables.py        # JSON + DB loaders (tax_year + country_code)

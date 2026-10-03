@@ -9,7 +9,7 @@ Standalone local desktop package: **Electron** shell + **PyInstaller** FastAPI b
 | Electron Forge (alt) | `desktop/forge.config.js` |
 | Backend exe spec | `backend/allyanna-backend.spec` |
 | SQLite schema | `backend/migrations/sqlite/001_local_schema.sql` |
-| Local DB (runtime) | `%LOCALAPPDATA%\Allyanna\local_database.db` |
+| Local DB (runtime) | `%LOCALAPPDATA%\Allyanna\allyanna_ledger.db` |
 
 ## Build on Windows (produces `Allyanna_Accounting_Setup.exe`)
 
@@ -71,9 +71,13 @@ CI: see `.github/workflows/windows-desktop.yml` (runs on `windows-latest`).
 After install, Allyanna writes:
 
 ```text
-%USERPROFILE%\AppData\Local\Allyanna\local_database.db
+%USERPROFILE%\AppData\Local\Allyanna\allyanna_ledger.db
 %USERPROFILE%\AppData\Local\Allyanna\config.json   # optional
 ```
+
+> Migration note: an older desktop revision used `local_database.db`. On first
+> open, Allyanna renames that file to `allyanna_ledger.db` when the new name
+> is not already present.
 
 Example `config.json` (OCR / cloud chat only — never commit secrets):
 

@@ -1,12 +1,14 @@
 """
 Resolve Allyanna local data paths (Windows AppData + portable fallbacks).
 
-Desktop default DB location (Windows):
-  ``%USERPROFILE%\\AppData\\Local\\Allyanna\\local_database.db``
-  (same as ``%LOCALAPPDATA%\\Allyanna\\local_database.db``)
+Desktop default DB location (Windows) — Frankie's ledger path:
+  ``%USERPROFILE%\\AppData\\Local\\Allyanna\\allyanna_ledger.db``
+  (same as ``%LOCALAPPDATA%\\Allyanna\\allyanna_ledger.db``)
 
-Uses ``pathlib`` so Windows backslashes are handled correctly; never hardcode
-forward-slash Absolute AppData paths in callers.
+Legacy filename from the first desktop PR revision: ``local_database.db``
+(auto-renamed once by :func:`app.local_ledger.get_local_db_connection`).
+
+Uses ``pathlib`` so Windows backslashes are handled correctly.
 """
 
 from __future__ import annotations
@@ -17,7 +19,8 @@ from pathlib import Path
 
 
 APP_DIR_NAME = "Allyanna"
-DB_FILENAME = "local_database.db"
+DB_FILENAME = "allyanna_ledger.db"
+LEGACY_DB_FILENAME = "local_database.db"
 CONFIG_FILENAME = "config.json"
 
 
@@ -45,7 +48,8 @@ def get_allyanna_data_dir() -> Path:
         userprofile = os.environ.get("USERPROFILE", "").strip()
         if userprofile:
             return Path(userprofile) / "AppData" / "Local" / APP_DIR_NAME
-        return Path.home() / "AppData" / "Local" / APP_DIR_NAME
+        # Frankie fallback shape: Path.home() / … when LOCALAPPDATA unset
+        return Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / APP_DIR_NAME
 
     xdg = os.environ.get("XDG_DATA_HOME", "").strip()
     if xdg:
@@ -62,7 +66,7 @@ def ensure_allyanna_data_dir() -> Path:
 
 def get_sqlite_db_path() -> Path:
     """
-    Absolute path to the embedded SQLite file.
+    Absolute path to the embedded SQLite ledger (``allyanna_ledger.db``).
 
     Override with ``ALLYANNA_SQLITE_PATH`` when needed (tests / portable builds).
     """

@@ -11,13 +11,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.local_config import get_db_engine, is_local_mode
-from app.paths import ensure_allyanna_data_dir, get_sqlite_db_path, resource_root
+from app.local_ledger import get_local_db_path, initialize_local_sxm_tables
+from app.paths import ensure_allyanna_data_dir, resource_root
 from app.routes.compliance import router as compliance_router
 from app.routes.invoices import router as invoices_router
 from app.routes.payroll import router as payroll_router
 from app.routes.tenant import router as tenant_router
 from app.schemas import HealthResponse
-from app.sqlite_db import apply_sqlite_schema
 
 
 def _resolve_ui_dir() -> Path | None:
@@ -51,7 +51,8 @@ def _resolve_ui_dir() -> Path | None:
 async def lifespan(_app: FastAPI):
     if get_db_engine() == "sqlite":
         ensure_allyanna_data_dir()
-        await apply_sqlite_schema(get_sqlite_db_path())
+        # Frankie: sync init of allyanna_ledger.db + local_* SXM tables
+        initialize_local_sxm_tables()
     yield
 
 
@@ -99,8 +100,9 @@ async def local_info() -> dict:
         "db_engine": get_db_engine(),
     }
     if get_db_engine() == "sqlite":
-        info["sqlite_path"] = str(get_sqlite_db_path())
+        info["sqlite_path"] = str(get_local_db_path())
         info["data_dir"] = str(ensure_allyanna_data_dir())
+        info["ledger_file"] = "allyanna_ledger.db"
     return info
 
 

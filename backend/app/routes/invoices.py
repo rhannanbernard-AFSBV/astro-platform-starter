@@ -24,7 +24,7 @@ _INSERT_INVOICE_PG = """
 """
 
 _INSERT_INVOICE_SQLITE = """
-    INSERT INTO invoices (
+    INSERT INTO local_invoices (
         id, tenant_id, vendor_name, invoice_date,
         subtotal, tot_amount, grand_total
     ) VALUES (%s, %s, %s, %s, %s, %s, %s);

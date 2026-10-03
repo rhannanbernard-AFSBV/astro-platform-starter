@@ -75,4 +75,4 @@ if (-not (Test-Path $Setup)) {
   throw "Installer not found at $Setup"
 }
 Write-Host "==> SUCCESS: $Setup"
-Write-Host "Data directory after install: %LOCALAPPDATA%\Allyanna\local_database.db"
+Write-Host "Data directory after install: %LOCALAPPDATA%\Allyanna\allyanna_ledger.db"

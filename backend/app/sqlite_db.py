@@ -1,10 +1,14 @@
 """
 Embedded SQLite engine for Allyanna desktop / local mode.
 
+Uses Frankie's ledger helpers (:mod:`app.local_ledger`) for path + schema init,
+then exposes async tenant-scoped sessions for FastAPI routes.
+
 Tenant isolation (Pillar 1 without Postgres RLS):
 - Every session is bound to a ``tenant_id``
-- Ledger writes must include that ``tenant_id``
-- Ledger reads should filter ``WHERE tenant_id = ?`` (helpers below)
+- Ledger writes must include that ``tenant_id`` (``local_invoices`` /
+  ``local_payroll_records``)
+- Ledger reads should filter ``WHERE tenant_id = ?``
 
 Money stays as TEXT in SQLite; callers pass ``Decimal`` / str and Python math
 uses ``decimal.Decimal`` exclusively.
@@ -21,7 +25,8 @@ from uuid import UUID
 
 import aiosqlite
 
-from app.paths import bundled_sqlite_migration_path, get_sqlite_db_path
+from app.local_ledger import get_local_db_path, initialize_local_sxm_tables
+from app.paths import get_sqlite_db_path
 
 # Convert psycopg-style ``%s`` placeholders to SQLite ``?``.
 _PCT_PLACEHOLDER = re.compile(r"%s")
@@ -66,19 +71,15 @@ class _SqliteResult:
 
 
 async def apply_sqlite_schema(db_path: Path | None = None) -> Path:
-    """Create parent dirs, open DB, apply bundled SQLite migration idempotently."""
-    path = db_path or get_sqlite_db_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    migration = bundled_sqlite_migration_path()
-    if not migration.is_file():
-        raise FileNotFoundError(f"SQLite migration missing: {migration}")
+    """
+    Create parent dirs and apply Frankie's local SXM schema.
 
-    script = migration.read_text(encoding="utf-8")
-    async with aiosqlite.connect(path.as_posix()) as conn:
-        await conn.execute("PRAGMA foreign_keys = ON;")
-        await conn.executescript(script)
-        await conn.commit()
-    return path
+    ``db_path`` is accepted for call-site compatibility; the sync initializer
+    resolves the canonical ledger path (including legacy rename).
+    """
+    if db_path is not None:
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+    return initialize_local_sxm_tables()
 
 
 @asynccontextmanager
@@ -86,14 +87,15 @@ async def get_tenant_sqlite_session(
     tenant_id: UUID,
 ) -> AsyncIterator[TenantSqliteConnection]:
     """
-    Open a tenant-scoped SQLite transaction.
+    Open a tenant-scoped SQLite transaction against ``allyanna_ledger.db``.
 
-    Ensures the schema exists, then yields a connection bound to ``tenant_id``.
-    Commit on success; rollback on error.
+    Ensures Frankie's schema exists, then yields a connection bound to
+    ``tenant_id``. Commit on success; rollback on error.
     """
-    db_path = get_sqlite_db_path()
+    db_path = get_local_db_path()
     if not db_path.is_file():
-        await apply_sqlite_schema(db_path)
+        initialize_local_sxm_tables()
+        db_path = get_sqlite_db_path()
 
     conn = await aiosqlite.connect(db_path.as_posix())
     await conn.execute("PRAGMA foreign_keys = ON;")

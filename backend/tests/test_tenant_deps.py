@@ -122,10 +122,17 @@ async def test_get_tenant_db_session_sets_local_guc(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Mocked connect: ensures SET LOCAL runs inside an open transaction."""
+    import app.db as db_mod
+
+    if db_mod.psycopg is None:
+        pytest.skip("psycopg not installed (sqlite-only desktop env)")
+
     monkeypatch.setenv(
         "DATABASE_URL",
         "postgresql://allyanna_app_user@localhost:5432/allyanna_db",
     )
+    monkeypatch.setenv("ALLYANNA_DB_ENGINE", "postgres")
+    monkeypatch.setenv("ALLYANNA_LOCAL_MODE", "0")
 
     executed: list[str] = []
 
