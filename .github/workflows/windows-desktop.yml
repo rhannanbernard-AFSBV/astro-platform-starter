@@ -1,0 +1,55 @@
+# Build Allyanna_Accounting_Setup.exe on GitHub-hosted Windows runners.
+# Trigger manually or on desktop/backend packaging changes.
+
+name: Windows Desktop Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "cursor/allyanna-windows-desktop-*"
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "desktop/**"
+      - ".github/workflows/windows-desktop.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "desktop/**"
+      - ".github/workflows/windows-desktop.yml"
+
+jobs:
+  build-setup-exe:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            desktop/package-lock.json
+            frontend/package-lock.json
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          powershell -ExecutionPolicy Bypass -File desktop\scripts\build-windows.ps1
+
+      - name: Upload Allyanna_Accounting_Setup.exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: Allyanna_Accounting_Setup
+          path: desktop/release/Allyanna_Accounting_Setup.exe
+          if-no-files-found: error
