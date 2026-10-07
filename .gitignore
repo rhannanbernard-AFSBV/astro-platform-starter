@@ -15,7 +15,12 @@ pnpm-debug.log*
 
 # environment variables
 .env
+.env.local
 .env.production
+
+# Next.js (frontend/)
+frontend/.next/
+frontend/out/
 
 # macOS-specific files
 .DS_Store
