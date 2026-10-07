@@ -7,9 +7,15 @@ import Footer from '../components/Footer.astro';
 
 interface Props {
     title: string;
+    chrome?: boolean;
+    description?: string;
 }
 
-const { title } = Astro.props;
+const {
+    title,
+    chrome = true,
+    description = 'A fast, friendly restaurant bill generator.',
+} = Astro.props;
 ---
 
 <!doctype html>
@@ -18,17 +24,24 @@ const { title } = Astro.props;
         <meta charset="UTF-8" />
         <title>{title}</title>
         <meta name="viewport" content="width=device-width" />
+        <meta name="description" content={description} />
         <meta name="generator" content={Astro.generator} />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link rel="preload" as="font" type="font/woff2" href={interWoff2} crossorigin />
     </head>
-    <body class="antialiased text-white bg-complementary">
-        <div class="flex flex-col min-h-screen px-6 bg-noise sm:px-12">
-            <div class="flex flex-col w-full max-w-5xl mx-auto grow">
-                <Header />
-                <main class="grow"><slot /></main>
-                <Footer />
-            </div>
-        </div>
+    <body class:list={['antialiased', chrome && 'text-white bg-complementary']}>
+        {
+            chrome ? (
+                <div class="flex flex-col min-h-screen px-6 bg-noise sm:px-12">
+                    <div class="flex flex-col w-full max-w-5xl mx-auto grow">
+                        <Header />
+                        <main class="grow"><slot /></main>
+                        <Footer />
+                    </div>
+                </div>
+            ) : (
+                <main><slot /></main>
+            )
+        }
     </body>
 </html>
