@@ -169,13 +169,31 @@ export default function RestaurantBillGenerator() {
         const initial = loadState();
         setState(initial);
         setActiveXcgRate(initial.settings.xcgPerUsd);
-        const initialStaff =
-            initial.staff.find((entry) => entry.id === initial.activeStaffId) ?? initial.staff[0];
+        let nextState = initial;
         const params = new URLSearchParams(window.location.search);
         const station = parseStationParam(params.get('station'));
-        if (station && canAccessView(initialStaff.role, station)) {
-            setView(station);
+        if (station) {
+            const preferredRole =
+                station === 'kitchen'
+                    ? 'kitchen'
+                    : station === 'admin' || station === 'users' || station === 'reports'
+                      ? 'manager'
+                      : 'server';
+            const stationStaff =
+                initial.staff.find((entry) => entry.role === preferredRole) ??
+                initial.staff.find((entry) => canAccessView(entry.role, station)) ??
+                null;
+            if (stationStaff) {
+                nextState = { ...initial, activeStaffId: stationStaff.id };
+                setState(nextState);
+                setView(station);
+            } else {
+                setView(DEFAULT_VIEW_BY_ROLE[initial.staff[0]?.role ?? 'server']);
+            }
         } else {
+            const initialStaff =
+                initial.staff.find((entry) => entry.id === initial.activeStaffId) ??
+                initial.staff[0];
             setView(DEFAULT_VIEW_BY_ROLE[initialStaff.role]);
         }
         setHydrated(true);
