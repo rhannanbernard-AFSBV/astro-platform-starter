@@ -1,7 +1,7 @@
 import { Icon } from './Icons';
 import Price from './Price';
-import { lineTotalCents, tipLabel, unitPriceCents, type BillResult } from './math';
-import { TIP_PRESETS, type MenuItem, type TableOrder, type TipPreset } from './types';
+import { lineTotalCents, moneyUsd, tipAmountLabel, unitPriceCents, type BillResult } from './math';
+import { TIP_AMOUNT_PRESETS, type MenuItem, type TableOrder, type TipAmountPreset } from './types';
 
 type Props = {
     activeTable: TableOrder;
@@ -16,18 +16,21 @@ type Props = {
     canGenerateBill: boolean;
     canTakePayment: boolean;
     canReopen: boolean;
+    canDeleteTickets: boolean;
     onClear: () => void;
     onAddGuest: () => void;
     onRenameGuest: (guestId: string, name: string) => void;
     onRemoveGuest: (guestId: string) => void;
     onChangeQuantity: (lineId: string, change: number) => void;
+    onDeleteLine: (lineId: string) => void;
     onAssignGuest: (lineId: string, guestId: string) => void;
-    onTipPreset: (preset: TipPreset) => void;
-    onCustomTip: (value: number) => void;
-    onTaxEnabled: (enabled: boolean) => void;
-    onTaxPercent: (value: number) => void;
+    onTipPreset: (preset: TipAmountPreset) => void;
+    onCustomTipDollars: (value: number) => void;
+    onServiceChargeEnabled: (enabled: boolean) => void;
+    onServiceChargePercent: (value: number) => void;
     onSendKitchen: () => void;
     onGenerateBill: () => void;
+    onGuestBill: () => void;
     onTakePayment: () => void;
     onViewPaidReceipt: () => void;
     onReopen: () => void;
@@ -46,22 +49,27 @@ export default function OrderPanel({
     canGenerateBill,
     canTakePayment,
     canReopen,
+    canDeleteTickets,
     onClear,
     onAddGuest,
     onRenameGuest,
     onRemoveGuest,
     onChangeQuantity,
+    onDeleteLine,
     onAssignGuest,
     onTipPreset,
-    onCustomTip,
-    onTaxEnabled,
-    onTaxPercent,
+    onCustomTipDollars,
+    onServiceChargeEnabled,
+    onServiceChargePercent,
     onSendKitchen,
     onGenerateBill,
+    onGuestBill,
     onTakePayment,
     onViewPaidReceipt,
     onReopen,
 }: Props) {
+    const guestApproved = Boolean(activeTable.guestBillApprovedAt);
+
     return (
         <aside className="order-panel">
             <div className="order-title">
@@ -136,6 +144,7 @@ export default function OrderPanel({
                                         <p>
                                             <Price cents={unitPriceCents(item, line)} compact /> each ·{' '}
                                             {line.kitchenStatus}
+                                            {line.orderNumber ? ` · #${line.orderNumber}` : ''}
                                         </p>
                                         {line.modifiers.length > 0 && (
                                             <p className="mod-line">
@@ -144,7 +153,20 @@ export default function OrderPanel({
                                         )}
                                         {line.note && <p className="mod-line">Note: {line.note}</p>}
                                     </div>
-                                    <Price cents={lineTotalCents(item, line)} />
+                                    <div className="order-item-aside">
+                                        <Price cents={lineTotalCents(item, line)} />
+                                        {!isPaid &&
+                                            (line.kitchenStatus === 'draft' || canDeleteTickets) && (
+                                            <button
+                                                type="button"
+                                                className="line-delete"
+                                                aria-label={`Delete ${item.name}`}
+                                                onClick={() => onDeleteLine(line.id)}
+                                            >
+                                                <Icon name="trash" />
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="order-item-controls">
                                     <div className="stepper" aria-label={`${item.name} quantity`}>
@@ -202,57 +224,62 @@ export default function OrderPanel({
             </div>
 
             <div className="billing-controls">
-                <div className="tip-presets" role="group" aria-label="Tip presets">
-                    {TIP_PRESETS.map((preset) => (
+                <p className="billing-label">Tip (USD)</p>
+                <div className="tip-presets" role="group" aria-label="Tip amount presets">
+                    {TIP_AMOUNT_PRESETS.map((preset) => (
                         <button
                             key={preset}
                             type="button"
-                            className={activeTable.tipPreset === preset ? 'active' : ''}
+                            className={activeTable.tipAmountPreset === preset ? 'active' : ''}
                             onClick={() => onTipPreset(preset)}
                             disabled={isPaid}
                         >
-                            {preset}%
+                            {moneyUsd(preset)}
                         </button>
                     ))}
                     <button
                         type="button"
-                        className={activeTable.tipPreset === 'custom' ? 'active' : ''}
+                        className={activeTable.tipAmountPreset === 'custom' ? 'active' : ''}
                         onClick={() => onTipPreset('custom')}
                         disabled={isPaid}
                     >
                         Custom
                     </button>
                 </div>
-                {activeTable.tipPreset === 'custom' && (
+                {activeTable.tipAmountPreset === 'custom' && (
                     <label className="custom-tip">
-                        Custom tip %
+                        Custom tip ($)
                         <input
                             type="number"
                             min="0"
-                            step="0.5"
-                            value={activeTable.tipCustomPercent}
+                            step="0.25"
+                            value={(activeTable.tipCents / 100).toFixed(2)}
                             disabled={isPaid}
-                            onChange={(event) => onCustomTip(Number(event.target.value || 0))}
+                            onChange={(event) =>
+                                onCustomTipDollars(Number(event.target.value || 0))
+                            }
                         />
                     </label>
                 )}
                 <label className="tax-toggle">
                     <input
                         type="checkbox"
-                        checked={activeTable.taxEnabled}
+                        checked={activeTable.serviceChargeEnabled}
                         disabled={isPaid}
-                        onChange={(event) => onTaxEnabled(event.target.checked)}
+                        onChange={(event) => onServiceChargeEnabled(event.target.checked)}
                     />
-                    Apply tax
+                    Service Charge
                     <input
                         className="tax-input"
                         type="number"
                         min="0"
                         step="0.1"
-                        value={activeTable.taxPercent}
-                        disabled={isPaid || !activeTable.taxEnabled}
-                        onChange={(event) => onTaxPercent(Number(event.target.value || 0))}
-                        aria-label="Tax percent"
+                        value={activeTable.serviceChargePercent}
+                        disabled={isPaid || !activeTable.serviceChargeEnabled}
+                        onChange={(event) =>
+                            onServiceChargePercent(Number(event.target.value || 0))
+                        }
+                        aria-label="Service charge percent"
                     />
                     %
                 </label>
@@ -264,12 +291,22 @@ export default function OrderPanel({
                     <Price cents={bill.subtotalCents} />
                 </div>
                 <div>
-                    <span>Tax{activeTable.taxEnabled ? ` (${activeTable.taxPercent}%)` : ''}</span>
-                    {activeTable.taxEnabled ? <Price cents={bill.taxCents} /> : <strong>—</strong>}
+                    <span>
+                        Service Charge
+                        {activeTable.serviceChargeEnabled
+                            ? ` (${activeTable.serviceChargePercent}%)`
+                            : ''}
+                    </span>
+                    {activeTable.serviceChargeEnabled ? (
+                        <Price cents={bill.serviceChargeCents} />
+                    ) : (
+                        <strong>—</strong>
+                    )}
                 </div>
                 <div>
                     <span>
-                        Tip ({tipLabel(activeTable.tipPreset, activeTable.tipCustomPercent)})
+                        Tip (
+                        {tipAmountLabel(activeTable.tipAmountPreset, activeTable.tipCents)})
                     </span>
                     <Price cents={bill.tipCents} />
                 </div>
@@ -310,15 +347,33 @@ export default function OrderPanel({
                         </button>
                     )}
                     {canTakePayment && (
-                        <div className="secondary-actions">
+                        <div className="secondary-actions stacked-actions">
+                            <button
+                                type="button"
+                                className="secondary-button"
+                                disabled={!itemCount}
+                                onClick={onGuestBill}
+                            >
+                                <Icon name="print" /> Guest bill / sign
+                            </button>
                             <button
                                 type="button"
                                 className="secondary-button paid-button"
-                                disabled={!itemCount}
+                                disabled={!itemCount || !guestApproved}
                                 onClick={onTakePayment}
+                                title={
+                                    guestApproved
+                                        ? 'Collect payment'
+                                        : 'Guest must review & sign bill first'
+                                }
                             >
                                 <Icon name="check" /> Take payment
                             </button>
+                            {!guestApproved && itemCount > 0 && (
+                                <p className="pin-help">
+                                    Print guest bill, get signature &amp; payment tick before collecting.
+                                </p>
+                            )}
                         </div>
                     )}
                 </>

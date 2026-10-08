@@ -2,8 +2,9 @@ export const MENU_CATEGORIES = ['Mains', 'Starters', 'Drinks', 'Desserts'] as co
 export type MenuCategory = (typeof MENU_CATEGORIES)[number];
 export type FilterCategory = 'All' | MenuCategory;
 
-export const TIP_PRESETS = [0, 10, 15, 18] as const;
-export type TipPreset = (typeof TIP_PRESETS)[number] | 'custom';
+/** Tip presets in USD cents (not percentages). */
+export const TIP_AMOUNT_PRESETS = [0, 200, 500, 1000, 1500] as const;
+export type TipAmountPreset = (typeof TIP_AMOUNT_PRESETS)[number] | 'custom';
 
 export const STAFF_ROLES = ['kitchen', 'server', 'admin', 'manager'] as const;
 export type StaffRole = (typeof STAFF_ROLES)[number];
@@ -57,6 +58,8 @@ export type OrderLine = {
     modifiers: SelectedModifier[];
     kitchenStatus: KitchenStatus;
     sentToKitchenAt: string | null;
+    orderNumber: string | null;
+    sentByStaffId: string | null;
 };
 
 export type PaymentTender = {
@@ -73,13 +76,16 @@ export type TableOrder = {
     status: TableStatus;
     lines: OrderLine[];
     guests: Guest[];
-    tipPreset: TipPreset;
-    tipCustomPercent: number;
-    taxEnabled: boolean;
-    taxPercent: number;
+    tipAmountPreset: TipAmountPreset;
+    tipCents: number;
+    serviceChargeEnabled: boolean;
+    serviceChargePercent: number;
     billGeneratedAt: string | null;
     paidAt: string | null;
     payment: PaymentTender | null;
+    guestSignatureDataUrl: string | null;
+    guestPreferredPayment: PaymentMethod | null;
+    guestBillApprovedAt: string | null;
 };
 
 export type SaleRecord = {
@@ -88,12 +94,13 @@ export type SaleRecord = {
     tableLabel: string;
     paidAt: string;
     subtotalCents: number;
-    taxCents: number;
+    serviceChargeCents: number;
     tipCents: number;
     totalCents: number;
     payment: PaymentTender;
     serverName: string;
     itemCount: number;
+    orderNumbers: string[];
 };
 
 export type RestaurantProfile = {
@@ -113,8 +120,21 @@ export type StaffUser = {
     initials: string;
 };
 
+export type AppNotification = {
+    id: string;
+    kind: 'kitchen_ticket' | 'server_ack';
+    title: string;
+    message: string;
+    orderNumber: string | null;
+    tableLabel: string | null;
+    audienceRole: StaffRole | 'all';
+    targetStaffId: string | null;
+    createdAt: string;
+    readBy: string[];
+};
+
 export type PersistedState = {
-    version: 3;
+    version: 4;
     menu: MenuItem[];
     tables: TableOrder[];
     activeTableId: string;
@@ -122,6 +142,8 @@ export type PersistedState = {
     restaurant: RestaurantProfile;
     staff: StaffUser[];
     activeStaffId: string;
+    nextOrderSeq: number;
+    notifications: AppNotification[];
 };
 
 export type BillSnapshot = {
@@ -130,6 +152,7 @@ export type BillSnapshot = {
     generatedAt: string;
     status: TableStatus;
     serverName: string;
+    orderNumbers: string[];
     items: Array<{
         name: string;
         quantity: number;
@@ -138,20 +161,22 @@ export type BillSnapshot = {
         guestName: string | null;
         note: string;
         modifiers: string[];
+        orderNumber: string | null;
     }>;
     guests: Array<{
         name: string;
         subtotalCents: number;
-        taxCents: number;
+        serviceChargeCents: number;
         tipCents: number;
         totalCents: number;
     }>;
     subtotalCents: number;
-    taxEnabled: boolean;
-    taxPercent: number;
-    taxCents: number;
-    tipPercent: number;
+    serviceChargeEnabled: boolean;
+    serviceChargePercent: number;
+    serviceChargeCents: number;
     tipCents: number;
     totalCents: number;
     payment: PaymentTender | null;
+    guestSignatureDataUrl: string | null;
+    guestPreferredPayment: PaymentMethod | null;
 };

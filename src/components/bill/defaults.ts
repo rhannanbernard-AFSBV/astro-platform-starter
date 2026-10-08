@@ -7,9 +7,15 @@ import type {
     TableOrder,
 } from './types';
 
-export const STORAGE_KEY = 'savory-bill-generator-v3';
-export const LEGACY_STORAGE_KEYS = ['savory-bill-generator-v2', 'savory-bill-generator-v1'] as const;
-export const DEFAULT_TAX_PERCENT = 5;
+export const STORAGE_KEY = 'savory-bill-generator-v4';
+export const LEGACY_STORAGE_KEYS = [
+    'savory-bill-generator-v3',
+    'savory-bill-generator-v2',
+    'savory-bill-generator-v1',
+] as const;
+export const DEFAULT_SERVICE_CHARGE_PERCENT = 5;
+/** @deprecated use DEFAULT_SERVICE_CHARGE_PERCENT */
+export const DEFAULT_TAX_PERCENT = DEFAULT_SERVICE_CHARGE_PERCENT;
 export const PLACEHOLDER_IMAGE =
     'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=700&q=85';
 
@@ -183,7 +189,10 @@ export function createId(prefix: string) {
     return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
-export function createTable(label: string, taxPercent = DEFAULT_TAX_PERCENT): TableOrder {
+export function createTable(
+    label: string,
+    serviceChargePercent = DEFAULT_SERVICE_CHARGE_PERCENT,
+): TableOrder {
     const guestId = createId('guest');
     return {
         id: createId('table'),
@@ -191,13 +200,16 @@ export function createTable(label: string, taxPercent = DEFAULT_TAX_PERCENT): Ta
         status: 'open',
         lines: [],
         guests: [{ id: guestId, name: 'Guest 1' }],
-        tipPreset: 15,
-        tipCustomPercent: 15,
-        taxEnabled: true,
-        taxPercent,
+        tipAmountPreset: 0,
+        tipCents: 0,
+        serviceChargeEnabled: true,
+        serviceChargePercent,
         billGeneratedAt: null,
         paidAt: null,
         payment: null,
+        guestSignatureDataUrl: null,
+        guestPreferredPayment: null,
+        guestBillApprovedAt: null,
     };
 }
 
@@ -210,9 +222,18 @@ export function createDefaultState(): PersistedState {
             quantity: 1,
             guestId: tables[0].guests[0].id,
             note: '',
-            modifiers: [{ groupId: 'prep', optionId: 'extra-spicy', name: 'Extra spicy', priceDeltaCents: 0 }],
+            modifiers: [
+                {
+                    groupId: 'prep',
+                    optionId: 'extra-spicy',
+                    name: 'Extra spicy',
+                    priceDeltaCents: 0,
+                },
+            ],
             kitchenStatus: 'queued',
             sentToKitchenAt: new Date().toISOString(),
+            orderNumber: 'ORD-DEMO-0001',
+            sentByStaffId: 'staff_server',
         },
         {
             id: createId('line'),
@@ -223,10 +244,12 @@ export function createDefaultState(): PersistedState {
             modifiers: [],
             kitchenStatus: 'draft',
             sentToKitchenAt: null,
+            orderNumber: null,
+            sentByStaffId: null,
         },
     ];
     return {
-        version: 3,
+        version: 4,
         menu: DEFAULT_MENU,
         tables,
         activeTableId: tables[0].id,
@@ -234,5 +257,32 @@ export function createDefaultState(): PersistedState {
         restaurant: DEFAULT_RESTAURANT,
         staff: DEFAULT_STAFF.map((user) => ({ ...user })),
         activeStaffId: DEFAULT_STAFF[0].id,
+        nextOrderSeq: 2,
+        notifications: [
+            {
+                id: createId('notif'),
+                kind: 'kitchen_ticket',
+                title: 'New kitchen ticket',
+                message: 'Table 12 · ORD-DEMO-0001 · 1 item ready for prep',
+                orderNumber: 'ORD-DEMO-0001',
+                tableLabel: 'Table 12',
+                audienceRole: 'kitchen',
+                targetStaffId: null,
+                createdAt: new Date().toISOString(),
+                readBy: [],
+            },
+            {
+                id: createId('notif'),
+                kind: 'server_ack',
+                title: 'Ticket sent',
+                message: 'Your ticket ORD-DEMO-0001 for Table 12 was sent to the kitchen.',
+                orderNumber: 'ORD-DEMO-0001',
+                tableLabel: 'Table 12',
+                audienceRole: 'server',
+                targetStaffId: 'staff_server',
+                createdAt: new Date().toISOString(),
+                readBy: [],
+            },
+        ],
     };
 }

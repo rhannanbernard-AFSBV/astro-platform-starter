@@ -17,12 +17,13 @@ type Props = {
     tenderCurrency: TenderCurrency;
     cashInput: string;
     cardInput: string;
+    preferredMethod: PaymentMethod | null;
     onMethod: (method: PaymentMethod) => void;
     onCurrency: (currency: TenderCurrency) => void;
     onCashInput: (value: string) => void;
     onCardInput: (value: string) => void;
     onComplete: () => void;
-    onClose: () => void;
+    onCancel: () => void;
 };
 
 function toUsdCents(amountInput: string, currency: TenderCurrency): number {
@@ -50,12 +51,13 @@ export default function PaymentModal({
     tenderCurrency,
     cashInput,
     cardInput,
+    preferredMethod,
     onMethod,
     onCurrency,
     onCashInput,
     onCardInput,
     onComplete,
-    onClose,
+    onCancel,
 }: Props) {
     const { cashCents, cardCents } = paymentInputsToUsd(
         payMethod,
@@ -79,8 +81,11 @@ export default function PaymentModal({
                             <Price cents={totalCents} compact />
                         </h2>
                         <p className="fx-note">Pay in USD or XCG · 1.80 XCG = 1 USD</p>
+                        {preferredMethod && (
+                            <p className="pin-help">Guest selected: {preferredMethod}</p>
+                        )}
                     </div>
-                    <button type="button" className="ghost" onClick={onClose} aria-label="Close payment">
+                    <button type="button" className="ghost" onClick={onCancel} aria-label="Cancel payment">
                         <Icon name="close" />
                     </button>
                 </div>
@@ -106,11 +111,13 @@ export default function PaymentModal({
                                 onClick={() => onMethod(method)}
                             >
                                 {method}
+                                {preferredMethod === method ? ' ✓' : ''}
                             </button>
                         ))}
                     </div>
                     <p className="pin-help">
-                        Amount due in {tenderCurrency}: {tenderCurrency === 'XCG' ? moneyXcg(totalCents) : `$${totalInCurrency}`}
+                        Amount due in {tenderCurrency}:{' '}
+                        {tenderCurrency === 'XCG' ? moneyXcg(totalCents) : `$${totalInCurrency}`}
                     </p>
                     {(payMethod === 'cash' || payMethod === 'mixed') && (
                         <label className="custom-tip">
@@ -142,9 +149,14 @@ export default function PaymentModal({
                             <strong>{formatDual(preview.changeDueCents)}</strong>
                         </div>
                     </div>
-                    <button type="button" className="generate-button" onClick={onComplete}>
-                        Complete payment
-                    </button>
+                    <div className="modal-actions">
+                        <button type="button" className="secondary-button" onClick={onCancel}>
+                            Cancel
+                        </button>
+                        <button type="button" className="generate-button" onClick={onComplete}>
+                            Complete payment
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

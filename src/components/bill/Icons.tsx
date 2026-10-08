@@ -16,7 +16,8 @@ export type IconName =
     | 'chef'
     | 'chart'
     | 'lock'
-    | 'wifi';
+    | 'wifi'
+    | 'bell';
 
 export function Icon({ name }: { name: IconName }) {
     const paths: Record<IconName, ReactNode> = {
@@ -93,6 +94,12 @@ export function Icon({ name }: { name: IconName }) {
                 <path d="M5 12.5a9 9 0 0 1 14 0" />
                 <path d="M8.5 16a5 5 0 0 1 7 0" />
                 <circle cx="12" cy="20" r="1" />
+            </>
+        ),
+        bell: (
+            <>
+                <path d="M6 9a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9" />
+                <path d="M10 21a2 2 0 0 0 4 0" />
             </>
         ),
     };

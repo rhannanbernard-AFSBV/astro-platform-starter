@@ -9,7 +9,7 @@ type Props = {
     onToggleMod: (groupId: string, optionId: string, multi: boolean) => void;
     onNote: (value: string) => void;
     onConfirm: () => void;
-    onClose: () => void;
+    onCancel: () => void;
 };
 
 export default function ModifierModal({
@@ -19,7 +19,7 @@ export default function ModifierModal({
     onToggleMod,
     onNote,
     onConfirm,
-    onClose,
+    onCancel,
 }: Props) {
     return (
         <div className="receipt-overlay" role="dialog" aria-modal="true" aria-label="Customize item">
@@ -30,7 +30,7 @@ export default function ModifierModal({
                         <h2>{item.name}</h2>
                         <Price cents={item.priceCents} compact />
                     </div>
-                    <button type="button" className="ghost" onClick={onClose} aria-label="Close customize">
+                    <button type="button" className="ghost" onClick={onCancel} aria-label="Cancel add order">
                         <Icon name="close" />
                     </button>
                 </div>
@@ -76,9 +76,14 @@ export default function ModifierModal({
                             placeholder="No onions, allergy note…"
                         />
                     </label>
-                    <button type="button" className="generate-button" onClick={onConfirm}>
-                        Add to order
-                    </button>
+                    <div className="modal-actions">
+                        <button type="button" className="secondary-button" onClick={onCancel}>
+                            Cancel
+                        </button>
+                        <button type="button" className="generate-button" onClick={onConfirm}>
+                            Add to order
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

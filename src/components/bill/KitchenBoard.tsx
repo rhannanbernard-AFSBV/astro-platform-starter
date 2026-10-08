@@ -12,10 +12,18 @@ type Ticket = {
 type Props = {
     tables: TableOrder[];
     menuById: Map<string, MenuItem>;
+    canDeleteTickets: boolean;
     onStatus: (tableId: string, lineId: string, status: KitchenStatus) => void;
+    onDeleteTicket: (tableId: string, lineId: string) => void;
 };
 
-export default function KitchenBoard({ tables, menuById, onStatus }: Props) {
+export default function KitchenBoard({
+    tables,
+    menuById,
+    canDeleteTickets,
+    onStatus,
+    onDeleteTicket,
+}: Props) {
     const tickets = useMemo<Ticket[]>(() => {
         return tables.flatMap((table) =>
             table.lines
@@ -49,13 +57,15 @@ export default function KitchenBoard({ tables, menuById, onStatus }: Props) {
                 <VirtualList
                     className="ticket-virtual"
                     items={tickets}
-                    itemHeight={190}
+                    itemHeight={210}
                     height={620}
                     getKey={(ticket) => ticket.line.id}
                     renderItem={(ticket) => (
                         <article className={`ticket-card ${ticket.line.kitchenStatus}`}>
                             <header>
-                                <strong>{ticket.table.label}</strong>
+                                <strong>
+                                    {ticket.line.orderNumber ?? 'No order #'} · {ticket.table.label}
+                                </strong>
                                 <span>{ticket.line.kitchenStatus}</span>
                             </header>
                             <h3>
@@ -97,6 +107,17 @@ export default function KitchenBoard({ tables, menuById, onStatus }: Props) {
                                         }
                                     >
                                         Served
+                                    </button>
+                                )}
+                                {canDeleteTickets && (
+                                    <button
+                                        type="button"
+                                        className="danger-ticket"
+                                        onClick={() =>
+                                            onDeleteTicket(ticket.table.id, ticket.line.id)
+                                        }
+                                    >
+                                        Delete
                                     </button>
                                 )}
                             </div>

@@ -66,7 +66,7 @@ export function canRunKitchenBoard(role: StaffRole): boolean {
     return role === 'kitchen' || role === 'admin' || role === 'manager';
 }
 
-/** Destructive / privileged ops */
+/** Destructive / privileged ops — Manager only */
 export function canClearOrder(role: StaffRole): boolean {
     return role === 'manager';
 }
@@ -76,6 +76,16 @@ export function canReopenTable(role: StaffRole): boolean {
 }
 
 export function canVoidKitchenItems(role: StaffRole): boolean {
+    return role === 'manager';
+}
+
+/** Delete kitchen tickets — Manager only */
+export function canDeleteTickets(role: StaffRole): boolean {
+    return role === 'manager';
+}
+
+/** Delete / void payments and sales — Manager only */
+export function canDeletePayments(role: StaffRole): boolean {
     return role === 'manager';
 }
 

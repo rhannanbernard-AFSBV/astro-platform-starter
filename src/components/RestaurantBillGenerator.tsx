@@ -3,21 +3,25 @@ import './restaurant-bill-generator.css';
 import {
     createId,
     createTable,
-    DEFAULT_TAX_PERCENT,
+    DEFAULT_SERVICE_CHARGE_PERCENT,
     PLACEHOLDER_IMAGE,
 } from './bill/defaults';
+import GuestBillModal from './bill/GuestBillModal';
 import { Icon } from './bill/Icons';
 import {
     buildSnapshot,
+    collectOrderNumbers,
     computeBill,
     computePayment,
     decodeSnapshot,
     formatDual,
+    formatOrderNumber,
     salesForDay,
     salesToCsv,
     usdCentsToXcgCents,
 } from './bill/math';
 import ModifierModal from './bill/ModifierModal';
+import NotificationCenter from './bill/NotificationCenter';
 import OrderPanel from './bill/OrderPanel';
 import PaymentModal, {
     paymentInputsToUsd,
@@ -30,6 +34,8 @@ import {
     canClearOrder,
     canCreateOrders,
     canDeleteMenuItems,
+    canDeletePayments,
+    canDeleteTickets,
     canGenerateBill,
     canManageMenu,
     canManageUsers,
@@ -44,9 +50,15 @@ import {
     viewsForRole,
 } from './bill/roles';
 import ServiceMenu from './bill/ServiceMenu';
-import { createStaffUser, findStaffByPin, loadState } from './bill/storage';
+import {
+    createStaffUser,
+    findStaffByPin,
+    loadState,
+    notificationsForStaff,
+} from './bill/storage';
 import { useDebouncedSave } from './bill/useDebouncedSave';
 import {
+    type AppNotification,
     type AppView,
     type BillSnapshot,
     type FilterCategory,
@@ -57,7 +69,7 @@ import {
     type SelectedModifier,
     type StaffRole,
     type TableOrder,
-    type TipPreset,
+    type TipAmountPreset,
 } from './bill/types';
 
 const KitchenBoard = lazy(() => import('./bill/KitchenBoard'));
@@ -97,6 +109,7 @@ export default function RestaurantBillGenerator() {
     const [category, setCategory] = useState<FilterCategory>('All');
     const [search, setSearch] = useState('');
     const [receipt, setReceipt] = useState<BillSnapshot | null>(null);
+    const [guestBillOpen, setGuestBillOpen] = useState(false);
     const [shareFeedback, setShareFeedback] = useState<string | null>(null);
     const [menuForm, setMenuForm] = useState(emptyMenuForm());
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -113,6 +126,7 @@ export default function RestaurantBillGenerator() {
     const [tenderCurrency, setTenderCurrency] = useState<TenderCurrency>('USD');
     const [cashInput, setCashInput] = useState('');
     const [cardInput, setCardInput] = useState('');
+    const [notifOpen, setNotifOpen] = useState(false);
 
     useDebouncedSave(state, hydrated, 400);
 
@@ -142,6 +156,10 @@ export default function RestaurantBillGenerator() {
     const staff =
         state.staff.find((entry) => entry.id === state.activeStaffId) ?? state.staff[0];
     const allowedViews = useMemo(() => viewsForRole(staff.role), [staff.role]);
+    const visibleNotifications = useMemo(
+        () => notificationsForStaff(state.notifications, staff),
+        [state.notifications, staff],
+    );
 
     useEffect(() => {
         if (!canAccessView(staff.role, view)) {
@@ -180,7 +198,9 @@ export default function RestaurantBillGenerator() {
         setView(DEFAULT_VIEW_BY_ROLE[next.role]);
         setReceipt(null);
         setPaymentOpen(false);
+        setGuestBillOpen(false);
         setModifierItem(null);
+        setNotifOpen(false);
         setShareFeedback(`Signed in as ${next.name} (${ROLE_LABELS[next.role]}).`);
     };
 
@@ -226,6 +246,13 @@ export default function RestaurantBillGenerator() {
         setModifierItem(item);
     };
 
+    const cancelAddOrder = () => {
+        setModifierItem(null);
+        setLineNote('');
+        setSelectedMods({});
+        setShareFeedback('Add order cancelled.');
+    };
+
     const toggleMod = (groupId: string, optionId: string, multi: boolean) => {
         setSelectedMods((current) => {
             const existing = current[groupId] ?? [];
@@ -258,6 +285,9 @@ export default function RestaurantBillGenerator() {
         updateActiveTable((table) => ({
             ...table,
             billGeneratedAt: null,
+            guestBillApprovedAt: null,
+            guestSignatureDataUrl: null,
+            guestPreferredPayment: null,
             lines: [
                 ...table.lines,
                 {
@@ -269,6 +299,8 @@ export default function RestaurantBillGenerator() {
                     modifiers,
                     kitchenStatus: 'draft',
                     sentToKitchenAt: null,
+                    orderNumber: null,
+                    sentByStaffId: null,
                 },
             ],
         }));
@@ -282,6 +314,7 @@ export default function RestaurantBillGenerator() {
             updateActiveTable((table) => ({
                 ...table,
                 billGeneratedAt: null,
+                guestBillApprovedAt: null,
                 lines: table.lines
                     .map((entry) =>
                         entry.id === lineId ? { ...entry, quantity: entry.quantity + change } : entry,
@@ -295,6 +328,29 @@ export default function RestaurantBillGenerator() {
             }
         }
         apply();
+    };
+
+    const deleteLine = (lineId: string) => {
+        const line = activeTable.lines.find((entry) => entry.id === lineId);
+        if (!line) return;
+        const apply = () =>
+            updateActiveTable((table) => ({
+                ...table,
+                billGeneratedAt: null,
+                guestBillApprovedAt: null,
+                lines: table.lines.filter((entry) => entry.id !== lineId),
+            }));
+        if (line.kitchenStatus !== 'draft' && !canDeleteTickets(staff.role)) {
+            requireManager(apply);
+            return;
+        }
+        if (line.kitchenStatus !== 'draft' && canDeleteTickets(staff.role)) {
+            apply();
+            return;
+        }
+        if (line.kitchenStatus === 'draft' && canCreateOrders(staff.role)) {
+            apply();
+        }
     };
 
     const setKitchenStatus = (tableId: string, lineId: string, kitchenStatus: KitchenStatus) => {
@@ -317,6 +373,29 @@ export default function RestaurantBillGenerator() {
         }));
     };
 
+    const deleteKitchenTicket = (tableId: string, lineId: string) => {
+        const apply = () =>
+            setState((current) => ({
+                ...current,
+                tables: current.tables.map((table) =>
+                    table.id !== tableId
+                        ? table
+                        : {
+                              ...table,
+                              billGeneratedAt: null,
+                              guestBillApprovedAt: null,
+                              lines: table.lines.filter((line) => line.id !== lineId),
+                          },
+                ),
+            }));
+        if (!canDeleteTickets(staff.role)) {
+            requireManager(apply);
+            return;
+        }
+        apply();
+        setShareFeedback('Kitchen ticket deleted.');
+    };
+
     const fillPaymentDefaults = (currency: TenderCurrency) => {
         if (currency === 'XCG') {
             const xcg = (usdCentsToXcgCents(bill.totalCents) / 100).toFixed(2);
@@ -329,12 +408,32 @@ export default function RestaurantBillGenerator() {
         }
     };
 
+    const openGuestBill = () => {
+        if (!itemCount || isPaid || !canTakePayment(staff.role)) return;
+        const generatedAt = activeTable.billGeneratedAt ?? new Date().toISOString();
+        updateActiveTable((table) => ({
+            ...table,
+            billGeneratedAt: table.billGeneratedAt ?? generatedAt,
+        }));
+        setGuestBillOpen(true);
+    };
+
     const openPayment = () => {
         if (!itemCount || isPaid) return;
-        setPayMethod('card');
+        if (!activeTable.guestBillApprovedAt) {
+            setShareFeedback('Guest must review, sign, and tick a payment option first.');
+            openGuestBill();
+            return;
+        }
+        setPayMethod(activeTable.guestPreferredPayment ?? 'card');
         setTenderCurrency('USD');
         fillPaymentDefaults('USD');
         setPaymentOpen(true);
+    };
+
+    const cancelPayment = () => {
+        setPaymentOpen(false);
+        setShareFeedback('Payment cancelled.');
     };
 
     const completePayment = () => {
@@ -354,6 +453,7 @@ export default function RestaurantBillGenerator() {
             return;
         }
         const paidAt = payment.paidAt;
+        const orderNumbers = collectOrderNumbers(activeTable.lines);
         setState((current) => ({
             ...current,
             tables: current.tables.map((table) =>
@@ -379,20 +479,84 @@ export default function RestaurantBillGenerator() {
                     tableLabel: activeTable.label,
                     paidAt,
                     subtotalCents: bill.subtotalCents,
-                    taxCents: bill.taxCents,
+                    serviceChargeCents: bill.serviceChargeCents,
                     tipCents: bill.tipCents,
                     totalCents: bill.totalCents,
                     payment,
                     serverName: staff.name,
                     itemCount,
+                    orderNumbers,
                 },
                 ...current.sales,
             ],
         }));
         setPaymentOpen(false);
+        setGuestBillOpen(false);
         setShareFeedback(
             `Paid with ${payment.method} (${tenderCurrency}). Change due: ${formatDual(payment.changeDueCents)}.`,
         );
+    };
+
+    const sendToKitchen = () => {
+        if (!draftCount || isPaid || !canSendToKitchen(staff.role)) return;
+        const sentAt = new Date().toISOString();
+        const draftQty = draftCount;
+        setState((current) => {
+            const table = current.tables.find((entry) => entry.id === current.activeTableId);
+            if (!table) return current;
+            const orderNumber = formatOrderNumber(current.nextOrderSeq);
+            const notifications: AppNotification[] = [
+                {
+                    id: createId('notif'),
+                    kind: 'kitchen_ticket',
+                    title: 'New kitchen ticket',
+                    message: `${table.label} · ${orderNumber} · ${draftQty} item(s) ready for prep`,
+                    orderNumber,
+                    tableLabel: table.label,
+                    audienceRole: 'kitchen',
+                    targetStaffId: null,
+                    createdAt: sentAt,
+                    readBy: [],
+                },
+                {
+                    id: createId('notif'),
+                    kind: 'server_ack',
+                    title: 'Ticket sent to kitchen',
+                    message: `Your ticket ${orderNumber} for ${table.label} was sent for prep.`,
+                    orderNumber,
+                    tableLabel: table.label,
+                    audienceRole: 'server',
+                    targetStaffId: current.activeStaffId,
+                    createdAt: sentAt,
+                    readBy: [],
+                },
+            ];
+            return {
+                ...current,
+                nextOrderSeq: current.nextOrderSeq + 1,
+                notifications: [...notifications, ...current.notifications].slice(0, 80),
+                tables: current.tables.map((entry) =>
+                    entry.id !== current.activeTableId
+                        ? entry
+                        : {
+                              ...entry,
+                              lines: entry.lines.map((line) =>
+                                  line.kitchenStatus === 'draft'
+                                      ? {
+                                            ...line,
+                                            kitchenStatus: 'queued' as const,
+                                            sentToKitchenAt: sentAt,
+                                            orderNumber,
+                                            sentByStaffId: current.activeStaffId,
+                                        }
+                                      : line,
+                              ),
+                          },
+                ),
+            };
+        });
+        setShareFeedback(`${draftQty} item(s) sent to kitchen with a new order number.`);
+        setNotifOpen(true);
     };
 
     const generateBill = () => {
@@ -410,6 +574,43 @@ export default function RestaurantBillGenerator() {
         setShareFeedback(null);
     };
 
+    const markNotifRead = (id: string) => {
+        setState((current) => ({
+            ...current,
+            notifications: current.notifications.map((n) =>
+                n.id === id && !n.readBy.includes(staff.id)
+                    ? { ...n, readBy: [...n.readBy, staff.id] }
+                    : n,
+            ),
+        }));
+    };
+
+    const markAllNotifsRead = () => {
+        const visibleIds = new Set(visibleNotifications.map((n) => n.id));
+        setState((current) => ({
+            ...current,
+            notifications: current.notifications.map((n) =>
+                visibleIds.has(n.id) && !n.readBy.includes(staff.id)
+                    ? { ...n, readBy: [...n.readBy, staff.id] }
+                    : n,
+            ),
+        }));
+    };
+
+    const deleteSale = (saleId: string) => {
+        const apply = () =>
+            setState((current) => ({
+                ...current,
+                sales: current.sales.filter((sale) => sale.id !== saleId),
+            }));
+        if (!canDeletePayments(staff.role)) {
+            requireManager(apply);
+            return;
+        }
+        apply();
+        setShareFeedback('Payment / sale deleted.');
+    };
+
     const exportSales = () => {
         const csv = salesToCsv(todaySales);
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -420,6 +621,11 @@ export default function RestaurantBillGenerator() {
         anchor.click();
         URL.revokeObjectURL(url);
     };
+
+    const guestBillSnapshot = useMemo(
+        () => buildSnapshot(activeTable, state.menu, state.restaurant, staff.name),
+        [activeTable, state.menu, state.restaurant, staff.name],
+    );
 
     if (!hydrated) {
         return <div className="bistro-app loading-shell">Loading Savory…</div>;
@@ -457,6 +663,7 @@ export default function RestaurantBillGenerator() {
                                             activeTableId: event.target.value,
                                         }));
                                         setReceipt(null);
+                                        setGuestBillOpen(false);
                                     }}
                                     aria-label="Switch table"
                                 >
@@ -476,6 +683,14 @@ export default function RestaurantBillGenerator() {
                     </span>
                 </div>
                 <div className="top-actions">
+                    <NotificationCenter
+                        notifications={visibleNotifications}
+                        staffId={staff.id}
+                        open={notifOpen}
+                        onToggle={() => setNotifOpen((open) => !open)}
+                        onMarkRead={markNotifRead}
+                        onMarkAllRead={markAllNotifsRead}
+                    />
                     <div className="mode-toggle" role="group" aria-label="Workspace mode">
                         {allowedViews.map((key) => (
                             <button
@@ -532,14 +747,21 @@ export default function RestaurantBillGenerator() {
                         <KitchenBoard
                             tables={state.tables}
                             menuById={menuById}
+                            canDeleteTickets={canDeleteTickets(staff.role)}
                             onStatus={setKitchenStatus}
+                            onDeleteTicket={deleteKitchenTicket}
                         />
                     </Suspense>
                 )}
 
                 {view === 'reports' && canAccessView(staff.role, 'reports') && (
                     <Suspense fallback={<ViewFallback />}>
-                        <SalesReport sales={todaySales} onExport={exportSales} />
+                        <SalesReport
+                            sales={todaySales}
+                            canDeletePayments={canDeletePayments(staff.role)}
+                            onExport={exportSales}
+                            onDeleteSale={deleteSale}
+                        />
                     </Suspense>
                 )}
 
@@ -676,7 +898,7 @@ export default function RestaurantBillGenerator() {
                             onAddTable={() => {
                                 const label =
                                     newTableLabel.trim() || `Table ${state.tables.length + 1}`;
-                                const table = createTable(label, DEFAULT_TAX_PERCENT);
+                                const table = createTable(label, DEFAULT_SERVICE_CHARGE_PERCENT);
                                 setState((current) => ({
                                     ...current,
                                     tables: [...current.tables, table],
@@ -687,6 +909,7 @@ export default function RestaurantBillGenerator() {
                             onSwitchTable={(tableId) => {
                                 setState((current) => ({ ...current, activeTableId: tableId }));
                                 setReceipt(null);
+                                setGuestBillOpen(false);
                             }}
                         />
                     </Suspense>
@@ -706,6 +929,7 @@ export default function RestaurantBillGenerator() {
                         canGenerateBill={canGenerateBill(staff.role)}
                         canTakePayment={canTakePayment(staff.role)}
                         canReopen={canReopenTable(staff.role)}
+                        canDeleteTickets={canDeleteTickets(staff.role)}
                         onClear={() => {
                             if (!canClearOrder(staff.role)) {
                                 requireManager(() =>
@@ -713,6 +937,9 @@ export default function RestaurantBillGenerator() {
                                         ...table,
                                         lines: [],
                                         billGeneratedAt: null,
+                                        guestBillApprovedAt: null,
+                                        guestSignatureDataUrl: null,
+                                        guestPreferredPayment: null,
                                     })),
                                 );
                                 return;
@@ -721,6 +948,9 @@ export default function RestaurantBillGenerator() {
                                 ...table,
                                 lines: [],
                                 billGeneratedAt: null,
+                                guestBillApprovedAt: null,
+                                guestSignatureDataUrl: null,
+                                guestPreferredPayment: null,
                             }));
                         }}
                         onAddGuest={() => {
@@ -763,6 +993,7 @@ export default function RestaurantBillGenerator() {
                             });
                         }}
                         onChangeQuantity={changeQuantity}
+                        onDeleteLine={deleteLine}
                         onAssignGuest={(lineId, guestId) => {
                             if (isPaid) return;
                             updateActiveTable((table) => ({
@@ -773,58 +1004,47 @@ export default function RestaurantBillGenerator() {
                                 ),
                             }));
                         }}
-                        onTipPreset={(preset: TipPreset) => {
+                        onTipPreset={(preset: TipAmountPreset) => {
                             if (isPaid) return;
                             updateActiveTable((table) => ({
                                 ...table,
-                                tipPreset: preset,
-                                tipCustomPercent:
-                                    preset === 'custom' ? table.tipCustomPercent : preset,
+                                tipAmountPreset: preset,
+                                tipCents: preset === 'custom' ? table.tipCents : preset,
                                 billGeneratedAt: null,
+                                guestBillApprovedAt: null,
                             }));
                         }}
-                        onCustomTip={(value) =>
+                        onCustomTipDollars={(value) =>
                             updateActiveTable((table) => ({
                                 ...table,
-                                tipCustomPercent: value,
+                                tipAmountPreset: 'custom',
+                                tipCents: Math.max(0, Math.round(value * 100)),
                                 billGeneratedAt: null,
+                                guestBillApprovedAt: null,
                             }))
                         }
-                        onTaxEnabled={(enabled) =>
+                        onServiceChargeEnabled={(enabled) =>
                             updateActiveTable((table) => ({
                                 ...table,
-                                taxEnabled: enabled,
+                                serviceChargeEnabled: enabled,
                                 billGeneratedAt: null,
+                                guestBillApprovedAt: null,
                             }))
                         }
-                        onTaxPercent={(value) =>
+                        onServiceChargePercent={(value) =>
                             updateActiveTable((table) => ({
                                 ...table,
-                                taxPercent: value,
+                                serviceChargePercent: value,
                                 billGeneratedAt: null,
+                                guestBillApprovedAt: null,
                             }))
                         }
-                        onSendKitchen={() => {
-                            if (!draftCount || isPaid || !canSendToKitchen(staff.role)) return;
-                            const sentAt = new Date().toISOString();
-                            updateActiveTable((table) => ({
-                                ...table,
-                                lines: table.lines.map((line) =>
-                                    line.kitchenStatus === 'draft'
-                                        ? {
-                                              ...line,
-                                              kitchenStatus: 'queued',
-                                              sentToKitchenAt: sentAt,
-                                          }
-                                        : line,
-                                ),
-                            }));
-                            setShareFeedback(`${draftCount} item(s) sent to kitchen.`);
-                        }}
+                        onSendKitchen={sendToKitchen}
                         onGenerateBill={() => {
                             if (!canGenerateBill(staff.role)) return;
                             generateBill();
                         }}
+                        onGuestBill={openGuestBill}
                         onTakePayment={() => {
                             if (!canTakePayment(staff.role)) return;
                             openPayment();
@@ -840,27 +1060,23 @@ export default function RestaurantBillGenerator() {
                             )
                         }
                         onReopen={() => {
+                            const reopen = () =>
+                                updateActiveTable((table) => ({
+                                    ...table,
+                                    status: 'open',
+                                    paidAt: null,
+                                    payment: null,
+                                    billGeneratedAt: null,
+                                    guestBillApprovedAt: null,
+                                    guestSignatureDataUrl: null,
+                                    guestPreferredPayment: null,
+                                    lines: [],
+                                }));
                             if (!canReopenTable(staff.role)) {
-                                requireManager(() =>
-                                    updateActiveTable((table) => ({
-                                        ...table,
-                                        status: 'open',
-                                        paidAt: null,
-                                        payment: null,
-                                        billGeneratedAt: null,
-                                        lines: [],
-                                    })),
-                                );
+                                requireManager(reopen);
                                 return;
                             }
-                            updateActiveTable((table) => ({
-                                ...table,
-                                status: 'open',
-                                paidAt: null,
-                                payment: null,
-                                billGeneratedAt: null,
-                                lines: [],
-                            }));
+                            reopen();
                         }}
                     />
                 )}
@@ -874,7 +1090,48 @@ export default function RestaurantBillGenerator() {
                     onToggleMod={toggleMod}
                     onNote={setLineNote}
                     onConfirm={confirmAddItem}
-                    onClose={() => setModifierItem(null)}
+                    onCancel={cancelAddOrder}
+                />
+            )}
+
+            {guestBillOpen && (
+                <GuestBillModal
+                    snapshot={guestBillSnapshot}
+                    preferredPayment={activeTable.guestPreferredPayment}
+                    signatureDataUrl={activeTable.guestSignatureDataUrl}
+                    onPreferredPayment={(method) =>
+                        updateActiveTable((table) => ({
+                            ...table,
+                            guestPreferredPayment: method,
+                        }))
+                    }
+                    onSignature={(dataUrl) =>
+                        updateActiveTable((table) => ({
+                            ...table,
+                            guestSignatureDataUrl: dataUrl,
+                        }))
+                    }
+                    onApproveAndCollect={() => {
+                        if (!activeTable.guestPreferredPayment || !activeTable.guestSignatureDataUrl) {
+                            setShareFeedback('Tick a payment option and sign before collecting.');
+                            return;
+                        }
+                        updateActiveTable((table) => ({
+                            ...table,
+                            guestBillApprovedAt: new Date().toISOString(),
+                            billGeneratedAt: table.billGeneratedAt ?? new Date().toISOString(),
+                        }));
+                        setGuestBillOpen(false);
+                        setPayMethod(activeTable.guestPreferredPayment);
+                        setTenderCurrency('USD');
+                        fillPaymentDefaults('USD');
+                        setPaymentOpen(true);
+                        setShareFeedback('Guest approved the bill. Collect payment.');
+                    }}
+                    onCancel={() => {
+                        setGuestBillOpen(false);
+                        setShareFeedback('Guest bill review cancelled.');
+                    }}
                 />
             )}
 
@@ -885,6 +1142,7 @@ export default function RestaurantBillGenerator() {
                     tenderCurrency={tenderCurrency}
                     cashInput={cashInput}
                     cardInput={cardInput}
+                    preferredMethod={activeTable.guestPreferredPayment}
                     onMethod={setPayMethod}
                     onCurrency={(currency) => {
                         setTenderCurrency(currency);
@@ -893,7 +1151,7 @@ export default function RestaurantBillGenerator() {
                     onCashInput={setCashInput}
                     onCardInput={setCardInput}
                     onComplete={completePayment}
-                    onClose={() => setPaymentOpen(false)}
+                    onCancel={cancelPayment}
                 />
             )}
 

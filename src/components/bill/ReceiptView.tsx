@@ -27,6 +27,9 @@ export default function ReceiptView({
             `Tax ID: ${snapshot.restaurant.taxId}`,
             snapshot.tableLabel,
             `Server: ${snapshot.serverName}`,
+            snapshot.orderNumbers.length
+                ? `Orders: ${snapshot.orderNumbers.join(', ')}`
+                : null,
             `Generated: ${new Date(snapshot.generatedAt).toLocaleString()}`,
             `Status: ${snapshot.status}`,
             'FX: 1.80 XCG = 1 USD',
@@ -34,16 +37,17 @@ export default function ReceiptView({
             ...snapshot.items.map((item) => {
                 const mods = item.modifiers.length ? ` [${item.modifiers.join(', ')}]` : '';
                 const note = item.note ? ` — ${item.note}` : '';
-                return `${item.quantity}x ${item.name}${mods}${note}${item.guestName ? ` (${item.guestName})` : ''}  ${formatDual(item.lineTotalCents)}`;
+                const ord = item.orderNumber ? ` #${item.orderNumber}` : '';
+                return `${item.quantity}x ${item.name}${ord}${mods}${note}${item.guestName ? ` (${item.guestName})` : ''}  ${formatDual(item.lineTotalCents)}`;
             }),
             '',
             `Subtotal: ${formatDual(snapshot.subtotalCents)}`,
-            snapshot.taxEnabled
-                ? `Tax (${snapshot.taxPercent}%): ${formatDual(snapshot.taxCents)}`
-                : 'Tax: —',
-            `Tip (${snapshot.tipPercent}%): ${formatDual(snapshot.tipCents)}`,
+            snapshot.serviceChargeEnabled
+                ? `Service Charge (${snapshot.serviceChargePercent}%): ${formatDual(snapshot.serviceChargeCents)}`
+                : 'Service Charge: —',
+            `Tip: ${formatDual(snapshot.tipCents)}`,
             `Total: ${formatDual(snapshot.totalCents)}`,
-        ];
+        ].filter((line): line is string => line !== null);
         if (snapshot.payment) {
             lines.push(
                 '',
@@ -52,6 +56,9 @@ export default function ReceiptView({
                 `Card: ${formatDual(snapshot.payment.cardCents)}`,
                 `Change: ${formatDual(snapshot.payment.changeDueCents)}`,
             );
+        }
+        if (snapshot.guestPreferredPayment) {
+            lines.push(`Guest payment preference: ${snapshot.guestPreferredPayment}`);
         }
         const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
@@ -123,6 +130,9 @@ export default function ReceiptView({
                         <span>
                             {snapshot.tableLabel} · Server {snapshot.serverName}
                         </span>
+                        {snapshot.orderNumbers.length > 0 && (
+                            <span>Orders: {snapshot.orderNumbers.join(', ')}</span>
+                        )}
                         <span>{new Date(snapshot.generatedAt).toLocaleString()}</span>
                         <span className={`status-chip ${snapshot.status}`}>{snapshot.status}</span>
                         <span>FX rate: 1.80 XCG = 1 USD</span>
@@ -134,6 +144,7 @@ export default function ReceiptView({
                                     <strong>
                                         {item.quantity}× {item.name}
                                     </strong>
+                                    {item.orderNumber && <small>#{item.orderNumber}</small>}
                                     {item.modifiers.length > 0 && (
                                         <small>{item.modifiers.join(' · ')}</small>
                                     )}
@@ -153,13 +164,19 @@ export default function ReceiptView({
                             <strong>{formatDual(snapshot.subtotalCents)}</strong>
                         </div>
                         <div>
-                            <span>{snapshot.taxEnabled ? `Tax (${snapshot.taxPercent}%)` : 'Tax'}</span>
+                            <span>
+                                {snapshot.serviceChargeEnabled
+                                    ? `Service Charge (${snapshot.serviceChargePercent}%)`
+                                    : 'Service Charge'}
+                            </span>
                             <strong>
-                                {snapshot.taxEnabled ? formatDual(snapshot.taxCents) : '—'}
+                                {snapshot.serviceChargeEnabled
+                                    ? formatDual(snapshot.serviceChargeCents)
+                                    : '—'}
                             </strong>
                         </div>
                         <div>
-                            <span>Tip ({snapshot.tipPercent}%)</span>
+                            <span>Tip</span>
                             <strong>{formatDual(snapshot.tipCents)}</strong>
                         </div>
                         <div className="grand">
@@ -186,6 +203,22 @@ export default function ReceiptView({
                                 <span>Change due</span>
                                 <strong>{formatDual(snapshot.payment.changeDueCents)}</strong>
                             </div>
+                        </div>
+                    )}
+                    {snapshot.guestSignatureDataUrl && (
+                        <div className="split-block">
+                            <p>Guest approval</p>
+                            <img
+                                className="receipt-signature"
+                                src={snapshot.guestSignatureDataUrl}
+                                alt="Guest signature"
+                            />
+                            {snapshot.guestPreferredPayment && (
+                                <div>
+                                    <span>Preferred payment</span>
+                                    <strong>{snapshot.guestPreferredPayment}</strong>
+                                </div>
+                            )}
                         </div>
                     )}
                     {snapshot.guests.filter((guest) => guest.subtotalCents > 0).length > 1 && (
