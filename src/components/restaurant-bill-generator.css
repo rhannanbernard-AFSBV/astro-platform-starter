@@ -2254,6 +2254,202 @@ button.status-tab {
     word-break: break-all;
 }
 
+.table-map {
+    margin-bottom: 14px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--paper);
+}
+
+.table-map-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.table-tile {
+    display: grid;
+    gap: 2px;
+    padding: 10px 8px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: #fff;
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+}
+
+.table-tile strong {
+    font-size: 14px;
+}
+
+.table-tile span,
+.table-tile small {
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.table-tile.active {
+    outline: 2px solid var(--green);
+}
+
+.table-tile.tone-open {
+    box-shadow: inset 0 0 0 1px #d8d2c8;
+}
+
+.table-tile.tone-prep {
+    background: #fff7ed;
+    border-color: #fb923c;
+}
+
+.table-tile.tone-ready {
+    background: #dcfce7;
+    border-color: #4ade80;
+    animation: readyPulse 1.2s ease-in-out infinite;
+}
+
+.table-tile.tone-paid {
+    background: #eef2ff;
+    border-color: #93c5fd;
+}
+
+.favorites-row,
+.bar-strip {
+    margin: 0 0 16px;
+}
+
+.favorites-chips,
+.bar-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.favorite-chip,
+.bar-chip {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: #fff;
+    color: var(--ink);
+    cursor: pointer;
+    text-align: left;
+}
+
+.bar-chip {
+    border-color: #93c5fd;
+    background: #eff6ff;
+}
+
+.bar-strip-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.drink-card {
+    box-shadow: inset 0 0 0 1px #bfdbfe;
+}
+
+.ready-banner {
+    margin: 0 18px;
+    padding: 10px 14px;
+    border: 1px solid #4ade80;
+    border-radius: 12px;
+    background: #dcfce7;
+    color: #166534;
+    font-size: 14px;
+    animation: readyPulse 1s ease-in-out 3;
+}
+
+.order-item.ready-flash,
+.ready-flash-panel {
+    animation: readyPulse 1s ease-in-out 3;
+}
+
+@keyframes readyPulse {
+    0%,
+    100% {
+        box-shadow: inset 3px 0 0 #4ade80;
+    }
+    50% {
+        box-shadow: inset 6px 0 0 #22c55e, 0 0 0 2px rgba(74, 222, 128, 0.35);
+    }
+}
+
+.sync-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: #edf2ee;
+    color: var(--green);
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.admin-settings {
+    margin-bottom: 18px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: #fff;
+}
+
+.admin-settings h2 {
+    margin: 0 0 10px;
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 22px;
+}
+
+.shift-banner {
+    margin: 0 0 16px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 13px;
+}
+
+.shift-banner.open {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.shift-banner.closed {
+    background: #f3f1ec;
+    color: var(--muted);
+}
+
+.report-heading-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.demo-credentials {
+    margin-top: 12px;
+}
+
+.service-sidebar-tools {
+    grid-column: 1 / -1;
+}
+
+@media (min-width: 1100px) {
+    .workspace:not(.wide-main) {
+        grid-template-columns: 220px minmax(0, 1fr) 360px;
+    }
+    .service-sidebar-tools {
+        grid-column: auto;
+    }
+}
+
 @media (max-width: 900px) {
     .report-stats {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2269,6 +2465,10 @@ button.status-tab {
 }
 
 @media print {
+    @page {
+        size: 80mm auto;
+        margin: 4mm;
+    }
     body * {
         visibility: hidden !important;
     }
@@ -2283,17 +2483,26 @@ button.status-tab {
         padding: 0;
         background: #fff;
     }
-    .receipt-sheet {
-        width: 100%;
+    .receipt-sheet,
+    .guest-bill-sheet {
+        width: 72mm;
+        max-width: 72mm;
         max-height: none;
         overflow: visible;
         border-radius: 0;
         box-shadow: none;
+        font-size: 11px;
     }
     .no-print {
         display: none !important;
     }
-    .receipt-body {
+    .receipt-body,
+    .guest-bill-body {
         padding: 0;
+    }
+    .receipt-brand,
+    .receipt-totals,
+    .split-block {
+        break-inside: avoid;
     }
 }

@@ -11,8 +11,19 @@ import type {
     TipAmountPreset,
 } from './types';
 
-/** Official display rate: 1.80 XCG = 1 USD */
+/** Default display rate: 1.80 XCG = 1 USD (override via settings / setActiveXcgRate) */
 export const XCG_PER_USD = 1.8;
+
+let activeXcgPerUsd = XCG_PER_USD;
+
+export function setActiveXcgRate(rate: number) {
+    const next = Number(rate);
+    activeXcgPerUsd = Number.isFinite(next) && next > 0 ? next : XCG_PER_USD;
+}
+
+export function getActiveXcgRate() {
+    return activeXcgPerUsd;
+}
 
 export const moneyUsd = (cents: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
@@ -20,21 +31,21 @@ export const moneyUsd = (cents: number) =>
 /** @deprecated Prefer moneyUsd / formatDual — kept for transitional imports */
 export const money = moneyUsd;
 
-export function usdCentsToXcgCents(usdCents: number): number {
-    return Math.round((usdCents * 180) / 100);
+export function usdCentsToXcgCents(usdCents: number, rate = activeXcgPerUsd): number {
+    return Math.round(usdCents * rate);
 }
 
-export function xcgCentsToUsdCents(xcgCents: number): number {
-    return Math.round((xcgCents * 100) / 180);
+export function xcgCentsToUsdCents(xcgCents: number, rate = activeXcgPerUsd): number {
+    return Math.round(xcgCents / rate);
 }
 
-export const moneyXcg = (usdCents: number) => {
-    const xcgCents = usdCentsToXcgCents(usdCents);
+export const moneyXcg = (usdCents: number, rate = activeXcgPerUsd) => {
+    const xcgCents = usdCentsToXcgCents(usdCents, rate);
     return `XCG ${(xcgCents / 100).toFixed(2)}`;
 };
 
-export function formatDual(usdCents: number): string {
-    return `${moneyUsd(usdCents)} · ${moneyXcg(usdCents)}`;
+export function formatDual(usdCents: number, rate = activeXcgPerUsd): string {
+    return `${moneyUsd(usdCents)} · ${moneyXcg(usdCents, rate)}`;
 }
 
 export function percentOfCents(amountCents: number, percent: number): number {

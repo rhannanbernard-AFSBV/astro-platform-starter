@@ -112,6 +112,13 @@ export type RestaurantProfile = {
     feedbackUrl: string;
 };
 
+export type PosSettings = {
+    xcgPerUsd: number;
+    defaultServiceChargePercent: number;
+    shiftOpenedAt: string | null;
+    shiftClosedAt: string | null;
+};
+
 export type StaffUser = {
     id: string;
     name: string;
@@ -134,7 +141,7 @@ export type AppNotification = {
 };
 
 export type PersistedState = {
-    version: 4;
+    version: 5;
     menu: MenuItem[];
     tables: TableOrder[];
     activeTableId: string;
@@ -144,6 +151,9 @@ export type PersistedState = {
     activeStaffId: string;
     nextOrderSeq: number;
     notifications: AppNotification[];
+    settings: PosSettings;
+    /** Epoch ms for cross-tab last-write-wins sync */
+    updatedAt: number;
 };
 
 export type BillSnapshot = {

@@ -2,18 +2,28 @@ import type {
     MenuItem,
     ModifierGroup,
     PersistedState,
+    PosSettings,
     RestaurantProfile,
     StaffUser,
     TableOrder,
 } from './types';
 
-export const STORAGE_KEY = 'savory-bill-generator-v4';
+export const STORAGE_KEY = 'savory-bill-generator-v5';
 export const LEGACY_STORAGE_KEYS = [
+    'savory-bill-generator-v4',
     'savory-bill-generator-v3',
     'savory-bill-generator-v2',
     'savory-bill-generator-v1',
 ] as const;
 export const DEFAULT_SERVICE_CHARGE_PERCENT = 5;
+export const DEFAULT_XCG_PER_USD = 1.8;
+
+export const DEFAULT_SETTINGS: PosSettings = {
+    xcgPerUsd: DEFAULT_XCG_PER_USD,
+    defaultServiceChargePercent: DEFAULT_SERVICE_CHARGE_PERCENT,
+    shiftOpenedAt: null,
+    shiftClosedAt: null,
+};
 /** @deprecated use DEFAULT_SERVICE_CHARGE_PERCENT */
 export const DEFAULT_TAX_PERCENT = DEFAULT_SERVICE_CHARGE_PERCENT;
 export const PLACEHOLDER_IMAGE =
@@ -249,7 +259,7 @@ export function createDefaultState(): PersistedState {
         },
     ];
     return {
-        version: 4,
+        version: 5,
         menu: DEFAULT_MENU,
         tables,
         activeTableId: tables[0].id,
@@ -258,6 +268,11 @@ export function createDefaultState(): PersistedState {
         staff: DEFAULT_STAFF.map((user) => ({ ...user })),
         activeStaffId: DEFAULT_STAFF[0].id,
         nextOrderSeq: 2,
+        settings: {
+            ...DEFAULT_SETTINGS,
+            shiftOpenedAt: new Date().toISOString(),
+        },
+        updatedAt: Date.now(),
         notifications: [
             {
                 id: createId('notif'),

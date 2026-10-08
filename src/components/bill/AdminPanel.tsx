@@ -1,7 +1,13 @@
 import { Icon } from './Icons';
 import { optimizeImageUrl } from './images';
 import Price from './Price';
-import { MENU_CATEGORIES, type MenuCategory, type MenuItem, type TableOrder } from './types';
+import {
+    MENU_CATEGORIES,
+    type MenuCategory,
+    type MenuItem,
+    type PosSettings,
+    type TableOrder,
+} from './types';
 
 type MenuForm = Omit<MenuItem, 'id'>;
 
@@ -12,6 +18,7 @@ type Props = {
     menuForm: MenuForm;
     editingId: string | null;
     newTableLabel: string;
+    settings: PosSettings;
     onFormChange: (updater: (current: MenuForm) => MenuForm) => void;
     onSaveItem: () => void;
     onCancelEdit: () => void;
@@ -20,6 +27,7 @@ type Props = {
     onNewTableLabel: (value: string) => void;
     onAddTable: () => void;
     onSwitchTable: (id: string) => void;
+    onSettingsChange: (patch: Partial<PosSettings>) => void;
 };
 
 export default function AdminPanel({
@@ -29,6 +37,7 @@ export default function AdminPanel({
     menuForm,
     editingId,
     newTableLabel,
+    settings,
     onFormChange,
     onSaveItem,
     onCancelEdit,
@@ -37,6 +46,7 @@ export default function AdminPanel({
     onNewTableLabel,
     onAddTable,
     onSwitchTable,
+    onSettingsChange,
 }: Props) {
     return (
         <section className="menu-panel admin-panel">
@@ -45,6 +55,45 @@ export default function AdminPanel({
                     <p className="eyebrow">Menu editor</p>
                     <h1>Manage dishes</h1>
                 </div>
+            </div>
+            <div className="admin-settings">
+                <h2>House settings</h2>
+                <div className="admin-row">
+                    <label>
+                        XCG per 1 USD
+                        <input
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            value={settings.xcgPerUsd}
+                            onChange={(event) =>
+                                onSettingsChange({
+                                    xcgPerUsd: Math.max(0.01, Number(event.target.value || 1.8)),
+                                })
+                            }
+                        />
+                    </label>
+                    <label>
+                        Default service charge %
+                        <input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={settings.defaultServiceChargePercent}
+                            onChange={(event) =>
+                                onSettingsChange({
+                                    defaultServiceChargePercent: Math.max(
+                                        0,
+                                        Number(event.target.value || 0),
+                                    ),
+                                })
+                            }
+                        />
+                    </label>
+                </div>
+                <p className="fx-note">
+                    FX and default service charge are stored locally and sync across open tabs.
+                </p>
             </div>
             <div className="admin-grid">
                 <form
@@ -114,7 +163,9 @@ export default function AdminPanel({
                             />
                         </label>
                     </div>
-                    <p className="fx-note">XCG preview: shown on menu at 1.80 × USD</p>
+                    <p className="fx-note">
+                        XCG preview: shown on menu at {settings.xcgPerUsd.toFixed(2)} × USD
+                    </p>
                     <label>
                         Image URL
                         <input

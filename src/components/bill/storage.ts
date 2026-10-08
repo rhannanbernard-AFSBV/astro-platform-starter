@@ -4,7 +4,9 @@ import {
     DEFAULT_MENU,
     DEFAULT_RESTAURANT,
     DEFAULT_SERVICE_CHARGE_PERCENT,
+    DEFAULT_SETTINGS,
     DEFAULT_STAFF,
+    DEFAULT_XCG_PER_USD,
     LEGACY_STORAGE_KEYS,
     STORAGE_KEY,
 } from './defaults';
@@ -13,6 +15,7 @@ import type {
     MenuItem,
     OrderLine,
     PersistedState,
+    PosSettings,
     SaleRecord,
     StaffRole,
     StaffUser,
@@ -233,8 +236,29 @@ function normalizeState(value: unknown): PersistedState | null {
             ? raw.activeStaffId
             : staff[0].id;
 
+    const rawSettings =
+        raw.settings && typeof raw.settings === 'object'
+            ? (raw.settings as Partial<PosSettings>)
+            : {};
+    const settings: PosSettings = {
+        xcgPerUsd: Math.max(
+            0.01,
+            Number(rawSettings.xcgPerUsd ?? DEFAULT_XCG_PER_USD),
+        ),
+        defaultServiceChargePercent: Math.max(
+            0,
+            Number(
+                rawSettings.defaultServiceChargePercent ?? DEFAULT_SERVICE_CHARGE_PERCENT,
+            ),
+        ),
+        shiftOpenedAt:
+            typeof rawSettings.shiftOpenedAt === 'string' ? rawSettings.shiftOpenedAt : null,
+        shiftClosedAt:
+            typeof rawSettings.shiftClosedAt === 'string' ? rawSettings.shiftClosedAt : null,
+    };
+
     return {
-        version: 4,
+        version: 5,
         menu: withModifiers(raw.menu as MenuItem[]),
         tables,
         activeTableId,
@@ -247,6 +271,8 @@ function normalizeState(value: unknown): PersistedState | null {
         activeStaffId,
         nextOrderSeq: Math.max(1, Number(raw.nextOrderSeq ?? 1)),
         notifications: migrateNotifications(raw.notifications),
+        settings: { ...DEFAULT_SETTINGS, ...settings },
+        updatedAt: Math.max(0, Number(raw.updatedAt ?? Date.now())),
     };
 }
 
@@ -273,6 +299,10 @@ export function loadState(): PersistedState {
     } catch {
         return createDefaultState();
     }
+}
+
+export function touchState(state: PersistedState): PersistedState {
+    return { ...state, version: 5, updatedAt: Date.now() };
 }
 
 export function saveState(state: PersistedState) {

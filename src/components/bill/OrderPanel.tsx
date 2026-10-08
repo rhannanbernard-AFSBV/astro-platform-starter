@@ -30,6 +30,7 @@ type Props = {
     canReopen: boolean;
     canDeleteTickets: boolean;
     canUpdateBeverageStatus: boolean;
+    flashLineIds?: string[];
     onClear: () => void;
     onAddGuest: () => void;
     onRenameGuest: (guestId: string, name: string) => void;
@@ -65,6 +66,7 @@ export default function OrderPanel({
     canReopen,
     canDeleteTickets,
     canUpdateBeverageStatus,
+    flashLineIds = [],
     onClear,
     onAddGuest,
     onRenameGuest,
@@ -183,7 +185,7 @@ export default function OrderPanel({
 
                         return (
                             <div
-                                className={`order-item ${beverage ? 'beverage-line' : ''} status-${line.kitchenStatus}`}
+                                className={`order-item ${beverage ? 'beverage-line' : ''} status-${line.kitchenStatus} ${flashLineIds.includes(line.id) ? 'ready-flash' : ''}`}
                                 key={line.id}
                             >
                                 <div className="order-item-top">

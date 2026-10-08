@@ -3,7 +3,6 @@ import './restaurant-bill-generator.css';
 import {
     createId,
     createTable,
-    DEFAULT_SERVICE_CHARGE_PERCENT,
     PLACEHOLDER_IMAGE,
 } from './bill/defaults';
 import GuestBillModal from './bill/GuestBillModal';
@@ -15,9 +14,9 @@ import {
     computePayment,
     decodeSnapshot,
     formatDual,
-    formatOrderNumber,
     salesForDay,
     salesToCsv,
+    setActiveXcgRate,
     usdCentsToXcgCents,
 } from './bill/math';
 import ModifierModal from './bill/ModifierModal';
@@ -28,6 +27,7 @@ import PaymentModal, {
     type TenderCurrency,
 } from './bill/PaymentModal';
 import PinGate from './bill/PinGate';
+import { applySendFoodToKitchen, canGuestTakePayment, queueDraftBeverages } from './bill/posLogic';
 import ReceiptView from './bill/ReceiptView';
 import {
     canAccessView,
@@ -56,11 +56,14 @@ import {
     findStaffByPin,
     loadState,
     notificationsForStaff,
+    touchState,
 } from './bill/storage';
 import { isBeverageItem, isKitchenBoundItem } from './bill/statusUi';
+import TableMap from './bill/TableMap';
 import { useDebouncedSave } from './bill/useDebouncedSave';
+import { usePosSync } from './bill/usePosSync';
+import { useReadyAlerts } from './bill/useReadyAlerts';
 import {
-    type AppNotification,
     type AppView,
     type BillSnapshot,
     type FilterCategory,
@@ -68,6 +71,7 @@ import {
     type MenuItem,
     type PaymentMethod,
     type PersistedState,
+    type PosSettings,
     type SelectedModifier,
     type StaffRole,
     type TableOrder,
@@ -131,10 +135,16 @@ export default function RestaurantBillGenerator() {
     const [notifOpen, setNotifOpen] = useState(false);
 
     useDebouncedSave(state, hydrated, 400);
+    usePosSync(state, setState, hydrated);
+
+    const commit = (updater: (current: PersistedState) => PersistedState) => {
+        setState((current) => touchState(updater(current)));
+    };
 
     useEffect(() => {
         const initial = loadState();
         setState(initial);
+        setActiveXcgRate(initial.settings.xcgPerUsd);
         const initialStaff =
             initial.staff.find((entry) => entry.id === initial.activeStaffId) ?? initial.staff[0];
         setView(DEFAULT_VIEW_BY_ROLE[initialStaff.role]);
@@ -187,27 +197,18 @@ export default function RestaurantBillGenerator() {
         [activeTable.lines, menuById],
     );
     const isPaid = activeTable.status === 'paid';
+    const { flashIds, banner: readyBanner } = useReadyAlerts(
+        state.tables,
+        menuById,
+        hydrated && staff.role !== 'kitchen',
+    );
 
-    const queueDraftBeverages = (table: TableOrder): TableOrder => {
-        let changed = false;
-        const lines = table.lines.map((line) => {
-            if (line.kitchenStatus !== 'draft') return line;
-            const item = menuById.get(line.menuItemId);
-            if (!isBeverageItem(item)) return line;
-            changed = true;
-            return {
-                ...line,
-                kitchenStatus: 'queued' as const,
-                sentToKitchenAt: null,
-                orderNumber: line.orderNumber,
-                sentByStaffId: staff.id,
-            };
-        });
-        return changed ? { ...table, lines } : table;
-    };
+    useEffect(() => {
+        setActiveXcgRate(state.settings.xcgPerUsd);
+    }, [state.settings.xcgPerUsd]);
 
     const updateActiveTable = (updater: (table: TableOrder) => TableOrder) => {
-        setState((current) => ({
+        commit((current) => ({
             ...current,
             tables: current.tables.map((table) =>
                 table.id === current.activeTableId ? updater(table) : table,
@@ -475,7 +476,7 @@ export default function RestaurantBillGenerator() {
                 ...table,
                 billGeneratedAt: table.billGeneratedAt ?? generatedAt,
             };
-            return queueDraftBeverages(withTicket);
+            return queueDraftBeverages(withTicket, menuById, staff.id);
         });
         setGuestBillOpen(true);
         setShareFeedback('Guest ticket generated. Beverages queued for server status updates.');
@@ -483,7 +484,7 @@ export default function RestaurantBillGenerator() {
 
     const openPayment = () => {
         if (!itemCount || isPaid) return;
-        if (!activeTable.guestBillApprovedAt) {
+        if (!canGuestTakePayment(activeTable)) {
             setShareFeedback('Guest must review, sign, and tick a payment option first.');
             openGuestBill();
             return;
@@ -517,7 +518,7 @@ export default function RestaurantBillGenerator() {
         }
         const paidAt = payment.paidAt;
         const orderNumbers = collectOrderNumbers(activeTable.lines);
-        setState((current) => ({
+        commit((current) => ({
             ...current,
             tables: current.tables.map((table) =>
                 table.id === current.activeTableId
@@ -562,75 +563,18 @@ export default function RestaurantBillGenerator() {
 
     const sendToKitchen = () => {
         if (!draftCount || isPaid || !canSendToKitchen(staff.role)) return;
-        const sentAt = new Date().toISOString();
-        const draftQty = draftCount;
-        const menuLookup = menuById;
-        setState((current) => {
-            const table = current.tables.find((entry) => entry.id === current.activeTableId);
-            if (!table) return current;
-            const foodDraftIds = new Set(
-                table.lines
-                    .filter(
-                        (line) =>
-                            line.kitchenStatus === 'draft' &&
-                            isKitchenBoundItem(menuLookup.get(line.menuItemId)),
-                    )
-                    .map((line) => line.id),
-            );
-            if (foodDraftIds.size === 0) return current;
-            const orderNumber = formatOrderNumber(current.nextOrderSeq);
-            const notifications: AppNotification[] = [
-                {
-                    id: createId('notif'),
-                    kind: 'kitchen_ticket',
-                    title: 'New kitchen ticket',
-                    message: `${table.label} · ${orderNumber} · ${foodDraftIds.size} food item(s) ready for prep`,
-                    orderNumber,
-                    tableLabel: table.label,
-                    audienceRole: 'kitchen',
-                    targetStaffId: null,
-                    createdAt: sentAt,
-                    readBy: [],
-                },
-                {
-                    id: createId('notif'),
-                    kind: 'server_ack',
-                    title: 'Ticket sent to kitchen',
-                    message: `Your food ticket ${orderNumber} for ${table.label} was sent for prep. Beverages stay with the server.`,
-                    orderNumber,
-                    tableLabel: table.label,
-                    audienceRole: 'server',
-                    targetStaffId: current.activeStaffId,
-                    createdAt: sentAt,
-                    readBy: [],
-                },
-            ];
-            return {
-                ...current,
-                nextOrderSeq: current.nextOrderSeq + 1,
-                notifications: [...notifications, ...current.notifications].slice(0, 80),
-                tables: current.tables.map((entry) =>
-                    entry.id !== current.activeTableId
-                        ? entry
-                        : {
-                              ...entry,
-                              lines: entry.lines.map((line) =>
-                                  foodDraftIds.has(line.id)
-                                      ? {
-                                            ...line,
-                                            kitchenStatus: 'queued' as const,
-                                            sentToKitchenAt: sentAt,
-                                            orderNumber,
-                                            sentByStaffId: current.activeStaffId,
-                                        }
-                                      : line,
-                              ),
-                          },
-                ),
-            };
+        let sentCount = 0;
+        commit((current) => {
+            const result = applySendFoodToKitchen(current, menuById);
+            sentCount = result.sentCount;
+            return result.state;
         });
+        if (sentCount === 0) {
+            setShareFeedback('No food drafts to send. Beverages stay with the server.');
+            return;
+        }
         setShareFeedback(
-            `${draftQty} food item(s) sent to kitchen. Beverages are not sent — queue them via guest ticket.`,
+            `${sentCount} food item(s) sent to kitchen. Beverages are not sent — queue them via guest ticket.`,
         );
         setNotifOpen(true);
     };
@@ -638,10 +582,14 @@ export default function RestaurantBillGenerator() {
     const generateBill = () => {
         if (!itemCount || isPaid) return;
         const generatedAt = new Date().toISOString();
-        const nextTable = queueDraftBeverages({
-            ...activeTable,
-            billGeneratedAt: generatedAt,
-        });
+        const nextTable = queueDraftBeverages(
+            {
+                ...activeTable,
+                billGeneratedAt: generatedAt,
+            },
+            menuById,
+            staff.id,
+        );
         updateActiveTable(() => nextTable);
         setReceipt(buildSnapshot(nextTable, state.menu, state.restaurant, staff.name));
         setShareFeedback('Guest ticket generated. Beverages queued for server status updates.');
@@ -754,6 +702,10 @@ export default function RestaurantBillGenerator() {
                     <span className={`online-pill ${online ? 'on' : 'off'}`}>
                         <Icon name="wifi" /> {online ? 'Online' : 'Offline'}
                     </span>
+                    <span className="status-divider" />
+                    <span className="sync-pill" title="Open Kitchen in another tab to demo multi-station sync">
+                        Tabs sync
+                    </span>
                 </div>
                 <div className="top-actions">
                     <NotificationCenter
@@ -801,18 +753,38 @@ export default function RestaurantBillGenerator() {
                 </div>
             </header>
 
+            {readyBanner && (
+                <div className="ready-banner" role="status">
+                    <strong>{readyBanner}</strong>
+                </div>
+            )}
+
             <main className={`workspace ${view !== 'service' ? 'wide-main' : ''}`}>
                 {view === 'service' && canAccessView(staff.role, 'service') && (
-                    <ServiceMenu
-                        menu={state.menu}
-                        activeTable={activeTable}
-                        category={category}
-                        search={search}
-                        isPaid={isPaid || !canCreateOrders(staff.role)}
-                        onCategory={setCategory}
-                        onSearch={setSearch}
-                        onAdd={openModifierModal}
-                    />
+                    <>
+                        <div className="service-sidebar-tools">
+                            <TableMap
+                                tables={state.tables}
+                                activeTableId={activeTable.id}
+                                onSelect={(tableId) => {
+                                    commit((current) => ({ ...current, activeTableId: tableId }));
+                                    setReceipt(null);
+                                    setGuestBillOpen(false);
+                                }}
+                            />
+                        </div>
+                        <ServiceMenu
+                            menu={state.menu}
+                            activeTable={activeTable}
+                            category={category}
+                            search={search}
+                            isPaid={isPaid || !canCreateOrders(staff.role)}
+                            flashLineIds={flashIds}
+                            onCategory={setCategory}
+                            onSearch={setSearch}
+                            onAdd={openModifierModal}
+                        />
+                    </>
                 )}
 
                 {view === 'kitchen' && canAccessView(staff.role, 'kitchen') && (
@@ -833,9 +805,29 @@ export default function RestaurantBillGenerator() {
                     <Suspense fallback={<ViewFallback />}>
                         <SalesReport
                             sales={todaySales}
+                            settings={state.settings}
                             canDeletePayments={canDeletePayments(staff.role)}
                             onExport={exportSales}
                             onDeleteSale={deleteSale}
+                            onOpenShift={() =>
+                                commit((current) => ({
+                                    ...current,
+                                    settings: {
+                                        ...current.settings,
+                                        shiftOpenedAt: new Date().toISOString(),
+                                        shiftClosedAt: null,
+                                    },
+                                }))
+                            }
+                            onCloseShift={() =>
+                                commit((current) => ({
+                                    ...current,
+                                    settings: {
+                                        ...current.settings,
+                                        shiftClosedAt: new Date().toISOString(),
+                                    },
+                                }))
+                            }
                         />
                     </Suspense>
                 )}
@@ -899,7 +891,17 @@ export default function RestaurantBillGenerator() {
                             menuForm={menuForm}
                             editingId={editingId}
                             newTableLabel={newTableLabel}
+                            settings={state.settings}
                             onFormChange={setMenuForm}
+                            onSettingsChange={(patch: Partial<PosSettings>) => {
+                                commit((current) => ({
+                                    ...current,
+                                    settings: { ...current.settings, ...patch },
+                                }));
+                                if (typeof patch.xcgPerUsd === 'number') {
+                                    setActiveXcgRate(patch.xcgPerUsd);
+                                }
+                            }}
                             onSaveItem={() => {
                                 if (!menuForm.name.trim() || menuForm.priceCents < 0) return;
                                 if (editingId) {
@@ -973,7 +975,10 @@ export default function RestaurantBillGenerator() {
                             onAddTable={() => {
                                 const label =
                                     newTableLabel.trim() || `Table ${state.tables.length + 1}`;
-                                const table = createTable(label, DEFAULT_SERVICE_CHARGE_PERCENT);
+                                const table = createTable(
+                                    label,
+                                    state.settings.defaultServiceChargePercent,
+                                );
                                 setState((current) => ({
                                     ...current,
                                     tables: [...current.tables, table],
@@ -1006,6 +1011,7 @@ export default function RestaurantBillGenerator() {
                         canReopen={canReopenTable(staff.role)}
                         canDeleteTickets={canDeleteTickets(staff.role)}
                         canUpdateBeverageStatus={canUpdateBeverageStatus(staff.role)}
+                        flashLineIds={flashIds}
                         onClear={() => {
                             if (!canClearOrder(staff.role)) {
                                 requireManager(() =>
@@ -1238,7 +1244,8 @@ export default function RestaurantBillGenerator() {
                 <PinGate
                     pinInput={pinInput}
                     pinError={pinError}
-                    helpText={roleHelpText(state.staff)}
+                    helpText="Enter your staff PIN to switch users or authorize a manager action."
+                    demoCredentials={roleHelpText(state.staff)}
                     onPinInput={setPinInput}
                     onSubmit={submitPin}
                     onClose={() => {

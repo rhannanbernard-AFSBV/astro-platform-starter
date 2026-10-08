@@ -1,17 +1,29 @@
 import { Icon } from './Icons';
 import Price from './Price';
-import type { SaleRecord } from './types';
+import type { PosSettings, SaleRecord } from './types';
 import { summarizeSales } from './math';
 
 type Props = {
     sales: SaleRecord[];
+    settings: PosSettings;
     canDeletePayments: boolean;
     onExport: () => void;
     onDeleteSale: (saleId: string) => void;
+    onOpenShift: () => void;
+    onCloseShift: () => void;
 };
 
-export default function SalesReport({ sales, canDeletePayments, onExport, onDeleteSale }: Props) {
+export default function SalesReport({
+    sales,
+    settings,
+    canDeletePayments,
+    onExport,
+    onDeleteSale,
+    onOpenShift,
+    onCloseShift,
+}: Props) {
     const summary = summarizeSales(sales);
+    const shiftOpen = Boolean(settings.shiftOpenedAt && !settings.shiftClosedAt);
 
     return (
         <section className="menu-panel reports-panel">
@@ -20,9 +32,35 @@ export default function SalesReport({ sales, canDeletePayments, onExport, onDele
                     <p className="eyebrow">End of day</p>
                     <h1>Daily sales</h1>
                 </div>
-                <button type="button" className="secondary-button" onClick={onExport}>
-                    <Icon name="download" /> Export CSV
-                </button>
+                <div className="report-heading-actions">
+                    {shiftOpen ? (
+                        <button type="button" className="secondary-button" onClick={onCloseShift}>
+                            Close shift
+                        </button>
+                    ) : (
+                        <button type="button" className="secondary-button" onClick={onOpenShift}>
+                            Open shift
+                        </button>
+                    )}
+                    <button type="button" className="secondary-button" onClick={onExport}>
+                        <Icon name="download" /> Export CSV
+                    </button>
+                </div>
+            </div>
+            <div className={`shift-banner ${shiftOpen ? 'open' : 'closed'}`}>
+                {shiftOpen ? (
+                    <p>
+                        Shift open since{' '}
+                        {new Date(settings.shiftOpenedAt as string).toLocaleString()}
+                    </p>
+                ) : (
+                    <p>
+                        Shift closed
+                        {settings.shiftClosedAt
+                            ? ` · ${new Date(settings.shiftClosedAt).toLocaleString()}`
+                            : ''}
+                    </p>
+                )}
             </div>
             <div className="report-stats">
                 <div>
@@ -109,7 +147,7 @@ export default function SalesReport({ sales, canDeletePayments, onExport, onDele
                 <p className="pin-help">Only a Manager can delete payments.</p>
             )}
             <p className="fx-note">
-                FX: 1.80 XCG = 1 USD · amounts stored in USD, shown in both currencies
+                FX: {settings.xcgPerUsd.toFixed(2)} XCG = 1 USD · amounts stored in USD
             </p>
         </section>
     );
