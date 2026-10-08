@@ -54,7 +54,26 @@ function migrateLegacyLines(lines: Array<Record<string, unknown>>): OrderLine[] 
         sentToKitchenAt: typeof line.sentToKitchenAt === 'string' ? line.sentToKitchenAt : null,
         orderNumber: typeof line.orderNumber === 'string' ? line.orderNumber : null,
         sentByStaffId: typeof line.sentByStaffId === 'string' ? line.sentByStaffId : null,
+        courseFire:
+            line.courseFire === 'hold' || line.courseFire === 'all_day' || line.courseFire === 'fire'
+                ? line.courseFire
+                : 'fire',
+        bumpedAt: typeof line.bumpedAt === 'string' ? line.bumpedAt : null,
+        bumpCount: Math.max(0, Number(line.bumpCount ?? 0)),
     }));
+}
+
+function migrateGuests(guests: unknown): TableOrder['guests'] {
+    if (!Array.isArray(guests)) return [];
+    return guests.map((entry, index) => {
+        const guest = (entry ?? {}) as Record<string, unknown>;
+        return {
+            id: typeof guest.id === 'string' ? guest.id : createId('guest'),
+            name: String(guest.name ?? `Guest ${index + 1}`),
+            paidAt: typeof guest.paidAt === 'string' ? guest.paidAt : null,
+            payment: (guest.payment as TableOrder['guests'][number]['payment']) ?? null,
+        };
+    });
 }
 
 function migrateTipFields(table: Record<string, unknown>): {
@@ -95,11 +114,12 @@ function migrateTables(tables: Array<Record<string, unknown>>): TableOrder[] {
         return {
             id: String(table.id),
             label: String(table.label ?? 'Table'),
-            status: table.status === 'paid' ? 'paid' : 'open',
+            status:
+                table.status === 'paid' ? 'paid' : table.status === 'partial' ? 'partial' : 'open',
             lines: migrateLegacyLines(
                 Array.isArray(table.lines) ? (table.lines as Array<Record<string, unknown>>) : [],
             ),
-            guests: Array.isArray(table.guests) ? (table.guests as TableOrder['guests']) : [],
+            guests: migrateGuests(table.guests),
             tipAmountPreset: tip.tipAmountPreset,
             tipCents: tip.tipCents,
             serviceChargeEnabled:
@@ -145,8 +165,34 @@ function migrateSales(rawSales: unknown): SaleRecord[] {
             orderNumbers: Array.isArray(sale.orderNumbers)
                 ? (sale.orderNumbers as string[])
                 : [],
+            guestName: typeof sale.guestName === 'string' ? sale.guestName : null,
+            guestId: typeof sale.guestId === 'string' ? sale.guestId : null,
         };
     });
+}
+
+function migrateAuditLog(raw: unknown): PersistedState['auditLog'] {
+    if (!Array.isArray(raw)) return [];
+    return raw
+        .map((entry) => {
+            if (!entry || typeof entry !== 'object') return null;
+            const a = entry as Record<string, unknown>;
+            const kind =
+                a.kind === 'void_payment' || a.kind === 'void_line' || a.kind === 'void_ticket'
+                    ? a.kind
+                    : 'void_ticket';
+            return {
+                id: typeof a.id === 'string' ? a.id : createId('audit'),
+                kind,
+                reason: String(a.reason ?? ''),
+                staffId: String(a.staffId ?? ''),
+                staffName: String(a.staffName ?? 'Staff'),
+                createdAt: typeof a.createdAt === 'string' ? a.createdAt : new Date().toISOString(),
+                details: String(a.details ?? ''),
+                tableLabel: typeof a.tableLabel === 'string' ? a.tableLabel : null,
+            };
+        })
+        .filter((entry): entry is PersistedState['auditLog'][number] => Boolean(entry));
 }
 
 function migrateNotifications(raw: unknown): AppNotification[] {
@@ -157,7 +203,12 @@ function migrateNotifications(raw: unknown): AppNotification[] {
             const n = entry as Record<string, unknown>;
             return {
                 id: typeof n.id === 'string' ? n.id : createId('notif'),
-                kind: n.kind === 'server_ack' ? 'server_ack' : 'kitchen_ticket',
+                kind:
+                    n.kind === 'server_ack'
+                        ? 'server_ack'
+                        : n.kind === 'bump_alert'
+                          ? 'bump_alert'
+                          : 'kitchen_ticket',
                 title: String(n.title ?? 'Notification'),
                 message: String(n.message ?? ''),
                 orderNumber: typeof n.orderNumber === 'string' ? n.orderNumber : null,
@@ -255,10 +306,14 @@ function normalizeState(value: unknown): PersistedState | null {
             typeof rawSettings.shiftOpenedAt === 'string' ? rawSettings.shiftOpenedAt : null,
         shiftClosedAt:
             typeof rawSettings.shiftClosedAt === 'string' ? rawSettings.shiftClosedAt : null,
+        bumpAfterMinutes: Math.max(
+            1,
+            Number(rawSettings.bumpAfterMinutes ?? DEFAULT_SETTINGS.bumpAfterMinutes),
+        ),
     };
 
     return {
-        version: 5,
+        version: 6,
         menu: withModifiers(raw.menu as MenuItem[]),
         tables,
         activeTableId,
@@ -272,6 +327,7 @@ function normalizeState(value: unknown): PersistedState | null {
         nextOrderSeq: Math.max(1, Number(raw.nextOrderSeq ?? 1)),
         notifications: migrateNotifications(raw.notifications),
         settings: { ...DEFAULT_SETTINGS, ...settings },
+        auditLog: migrateAuditLog(raw.auditLog),
         updatedAt: Math.max(0, Number(raw.updatedAt ?? Date.now())),
     };
 }
@@ -302,7 +358,7 @@ export function loadState(): PersistedState {
 }
 
 export function touchState(state: PersistedState): PersistedState {
-    return { ...state, version: 5, updatedAt: Date.now() };
+    return { ...state, version: 6, updatedAt: Date.now() };
 }
 
 export function saveState(state: PersistedState) {

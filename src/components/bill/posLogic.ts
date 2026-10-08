@@ -3,9 +3,12 @@ import { formatOrderNumber } from './math';
 import { isBeverageItem, isKitchenBoundItem } from './statusUi';
 import type {
     AppNotification,
+    AuditEntry,
+    CourseFire,
     KitchenStatus,
     MenuItem,
     PersistedState,
+    StaffUser,
     TableOrder,
 } from './types';
 
@@ -122,8 +125,9 @@ export function nextBeverageStatus(status: KitchenStatus): KitchenStatus | null 
     return null;
 }
 
-export function tableStatusTone(table: TableOrder): 'paid' | 'ready' | 'prep' | 'open' {
+export function tableStatusTone(table: TableOrder): 'paid' | 'partial' | 'ready' | 'prep' | 'open' {
     if (table.status === 'paid') return 'paid';
+    if (table.status === 'partial') return 'partial';
     const active = table.lines.filter((line) => line.kitchenStatus !== 'draft');
     if (active.some((line) => line.kitchenStatus === 'ready')) return 'ready';
     if (active.some((line) => line.kitchenStatus === 'preparing' || line.kitchenStatus === 'queued')) {
@@ -150,4 +154,184 @@ export function collectReadyFoodLines(
         }
     }
     return ready;
+}
+
+/** Minutes a ticket has been waiting in queued/preparing since send (or last bump). */
+export function ticketWaitMinutes(
+    line: TableOrder['lines'][number],
+    now = Date.now(),
+): number {
+    const anchor = line.bumpedAt ?? line.sentToKitchenAt;
+    if (!anchor) return 0;
+    return Math.max(0, Math.floor((now - new Date(anchor).getTime()) / 60_000));
+}
+
+export function isTicketLate(
+    line: TableOrder['lines'][number],
+    bumpAfterMinutes: number,
+    now = Date.now(),
+): boolean {
+    if (line.kitchenStatus !== 'queued' && line.kitchenStatus !== 'preparing') return false;
+    if (line.courseFire === 'hold') return false;
+    return ticketWaitMinutes(line, now) >= bumpAfterMinutes;
+}
+
+export function bumpKitchenLine(
+    state: PersistedState,
+    tableId: string,
+    lineId: string,
+    staff: StaffUser,
+    at = new Date().toISOString(),
+): PersistedState {
+    const table = state.tables.find((entry) => entry.id === tableId);
+    const line = table?.lines.find((entry) => entry.id === lineId);
+    if (!table || !line) return state;
+
+    const notification: AppNotification = {
+        id: createId('notif'),
+        kind: 'bump_alert',
+        title: 'Ticket bumped',
+        message: `${table.label} · ${line.orderNumber ?? 'ticket'} bumped by ${staff.name}`,
+        orderNumber: line.orderNumber,
+        tableLabel: table.label,
+        audienceRole: 'kitchen',
+        targetStaffId: null,
+        createdAt: at,
+        readBy: [],
+    };
+
+    return {
+        ...state,
+        updatedAt: Date.now(),
+        notifications: [notification, ...state.notifications].slice(0, 80),
+        tables: state.tables.map((entry) =>
+            entry.id !== tableId
+                ? entry
+                : {
+                      ...entry,
+                      lines: entry.lines.map((row) =>
+                          row.id === lineId
+                              ? {
+                                    ...row,
+                                    bumpedAt: at,
+                                    bumpCount: row.bumpCount + 1,
+                                    courseFire: row.courseFire === 'hold' ? 'fire' : row.courseFire,
+                                }
+                              : row,
+                      ),
+                  },
+        ),
+    };
+}
+
+export function recallKitchenLine(
+    state: PersistedState,
+    tableId: string,
+    lineId: string,
+): PersistedState {
+    return {
+        ...state,
+        updatedAt: Date.now(),
+        tables: state.tables.map((entry) =>
+            entry.id !== tableId
+                ? entry
+                : {
+                      ...entry,
+                      lines: entry.lines.map((row) =>
+                          row.id === lineId && row.kitchenStatus === 'served'
+                              ? { ...row, kitchenStatus: 'ready' as const }
+                              : row,
+                      ),
+                  },
+        ),
+    };
+}
+
+export function setLineCourseFire(
+    table: TableOrder,
+    lineId: string,
+    courseFire: CourseFire,
+): TableOrder {
+    return {
+        ...table,
+        lines: table.lines.map((line) =>
+            line.id === lineId ? { ...line, courseFire } : line,
+        ),
+    };
+}
+
+export function fireHeldLines(table: TableOrder, lineIds?: string[]): TableOrder {
+    const ids = lineIds ? new Set(lineIds) : null;
+    return {
+        ...table,
+        lines: table.lines.map((line) => {
+            if (line.courseFire !== 'hold') return line;
+            if (ids && !ids.has(line.id)) return line;
+            if (line.kitchenStatus === 'draft') return line;
+            return { ...line, courseFire: 'fire' as const };
+        }),
+    };
+}
+
+export function appendAudit(
+    state: PersistedState,
+    entry: Omit<AuditEntry, 'id' | 'createdAt'> & { createdAt?: string },
+): PersistedState {
+    const audit: AuditEntry = {
+        id: createId('audit'),
+        createdAt: entry.createdAt ?? new Date().toISOString(),
+        kind: entry.kind,
+        reason: entry.reason,
+        staffId: entry.staffId,
+        staffName: entry.staffName,
+        details: entry.details,
+        tableLabel: entry.tableLabel,
+    };
+    return {
+        ...state,
+        auditLog: [audit, ...state.auditLog].slice(0, 200),
+        updatedAt: Date.now(),
+    };
+}
+
+export function unpaidGuests(table: TableOrder) {
+    return table.guests.filter((guest) => !guest.paidAt);
+}
+
+export function allGuestsPaid(table: TableOrder): boolean {
+    const spenders = table.guests.filter((guest) =>
+        table.lines.some((line) => line.guestId === guest.id),
+    );
+    if (spenders.length === 0) return Boolean(table.payment);
+    return spenders.every((guest) => Boolean(guest.paidAt));
+}
+
+export type StationKey = 'service' | 'kitchen' | 'reports' | 'admin' | 'users';
+
+export function parseStationParam(value: string | null | undefined): StationKey | null {
+    if (!value) return null;
+    const key = value.trim().toLowerCase();
+    if (
+        key === 'service' ||
+        key === 'kitchen' ||
+        key === 'reports' ||
+        key === 'admin' ||
+        key === 'users'
+    ) {
+        return key;
+    }
+    if (key === 'floor' || key === 'pos') return 'service';
+    if (key === 'expo' || key === 'kds') return 'kitchen';
+    if (key === 'sales') return 'reports';
+    if (key === 'menu') return 'admin';
+    return null;
+}
+
+export function stationDeepLink(station: StationKey, origin?: string): string {
+    const base =
+        origin ??
+        (typeof window !== 'undefined'
+            ? `${window.location.origin}${window.location.pathname}`
+            : '/');
+    return `${base}?station=${station}`;
 }

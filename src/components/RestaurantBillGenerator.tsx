@@ -27,7 +27,18 @@ import PaymentModal, {
     type TenderCurrency,
 } from './bill/PaymentModal';
 import PinGate from './bill/PinGate';
-import { applySendFoodToKitchen, canGuestTakePayment, queueDraftBeverages } from './bill/posLogic';
+import {
+    allGuestsPaid,
+    appendAudit,
+    applySendFoodToKitchen,
+    bumpKitchenLine,
+    canGuestTakePayment,
+    fireHeldLines,
+    parseStationParam,
+    queueDraftBeverages,
+    recallKitchenLine,
+    setLineCourseFire,
+} from './bill/posLogic';
 import ReceiptView from './bill/ReceiptView';
 import {
     canAccessView,
@@ -63,15 +74,19 @@ import TableMap from './bill/TableMap';
 import { useDebouncedSave } from './bill/useDebouncedSave';
 import { usePosSync } from './bill/usePosSync';
 import { useReadyAlerts } from './bill/useReadyAlerts';
+import VoidReasonModal from './bill/VoidReasonModal';
 import {
     type AppView,
+    type AuditEntry,
     type BillSnapshot,
+    type CourseFire,
     type FilterCategory,
     type KitchenStatus,
     type MenuItem,
     type PaymentMethod,
     type PersistedState,
     type PosSettings,
+    type ReceiptTemplate,
     type SelectedModifier,
     type StaffRole,
     type TableOrder,
@@ -132,7 +147,16 @@ export default function RestaurantBillGenerator() {
     const [tenderCurrency, setTenderCurrency] = useState<TenderCurrency>('USD');
     const [cashInput, setCashInput] = useState('');
     const [cardInput, setCardInput] = useState('');
+    const [payGuestId, setPayGuestId] = useState<string | null>(null);
     const [notifOpen, setNotifOpen] = useState(false);
+    const [receiptTemplate, setReceiptTemplate] = useState<ReceiptTemplate>('guest');
+    const [voidPending, setVoidPending] = useState<null | {
+        kind: AuditEntry['kind'];
+        title: string;
+        details: string;
+        tableLabel: string | null;
+        apply: () => void;
+    }>(null);
 
     useDebouncedSave(state, hydrated, 400);
     usePosSync(state, setState, hydrated);
@@ -147,7 +171,13 @@ export default function RestaurantBillGenerator() {
         setActiveXcgRate(initial.settings.xcgPerUsd);
         const initialStaff =
             initial.staff.find((entry) => entry.id === initial.activeStaffId) ?? initial.staff[0];
-        setView(DEFAULT_VIEW_BY_ROLE[initialStaff.role]);
+        const params = new URLSearchParams(window.location.search);
+        const station = parseStationParam(params.get('station'));
+        if (station && canAccessView(initialStaff.role, station)) {
+            setView(station);
+        } else {
+            setView(DEFAULT_VIEW_BY_ROLE[initialStaff.role]);
+        }
         setHydrated(true);
         setOnline(navigator.onLine);
         const onOnline = () => setOnline(true);
@@ -157,7 +187,10 @@ export default function RestaurantBillGenerator() {
         const hash = window.location.hash;
         if (hash.startsWith('#bill=')) {
             const snapshot = decodeSnapshot(hash.slice(6));
-            if (snapshot) setReceipt(snapshot);
+            if (snapshot) {
+                setReceipt(snapshot);
+                setReceiptTemplate(snapshot.template ?? 'guest');
+            }
         }
         return () => {
             window.removeEventListener('online', onOnline);
@@ -197,6 +230,7 @@ export default function RestaurantBillGenerator() {
         [activeTable.lines, menuById],
     );
     const isPaid = activeTable.status === 'paid';
+    const isPartial = activeTable.status === 'partial';
     const { flashIds, banner: readyBanner } = useReadyAlerts(
         state.tables,
         menuById,
@@ -307,34 +341,77 @@ export default function RestaurantBillGenerator() {
                     priceDeltaCents: option.priceDeltaCents,
                 }));
         });
-        updateActiveTable((table) => ({
-            ...table,
-            billGeneratedAt: null,
-            guestBillApprovedAt: null,
-            guestSignatureDataUrl: null,
-            guestPreferredPayment: null,
-            lines: [
-                ...table.lines,
-                {
-                    id: createId('line'),
-                    menuItemId: modifierItem.id,
-                    quantity: 1,
-                    guestId: table.guests[0]?.id ?? null,
-                    note: lineNote.trim(),
-                    modifiers,
-                    kitchenStatus: 'draft',
-                    sentToKitchenAt: null,
-                    orderNumber: null,
-                    sentByStaffId: null,
-                },
-            ],
-        }));
+        updateActiveTable((table) => {
+            const unpaidGuest =
+                table.guests.find((guest) => !guest.paidAt) ?? table.guests[0] ?? null;
+            return {
+                ...table,
+                billGeneratedAt: null,
+                guestBillApprovedAt: null,
+                guestSignatureDataUrl: null,
+                guestPreferredPayment: null,
+                lines: [
+                    ...table.lines,
+                    {
+                        id: createId('line'),
+                        menuItemId: modifierItem.id,
+                        quantity: 1,
+                        guestId: unpaidGuest?.id ?? null,
+                        note: lineNote.trim(),
+                        modifiers,
+                        kitchenStatus: 'draft',
+                        sentToKitchenAt: null,
+                        orderNumber: null,
+                        sentByStaffId: null,
+                        courseFire: 'fire',
+                        bumpedAt: null,
+                        bumpCount: 0,
+                    },
+                ],
+            };
+        });
         setModifierItem(null);
+    };
+
+    const requestVoid = (
+        kind: AuditEntry['kind'],
+        title: string,
+        details: string,
+        tableLabel: string | null,
+        apply: () => void,
+        needsManager: boolean,
+    ) => {
+        const openVoid = () =>
+            setVoidPending({ kind, title, details, tableLabel, apply });
+        if (needsManager) {
+            requireManager(openVoid);
+            return;
+        }
+        openVoid();
+    };
+
+    const confirmVoid = (reason: string) => {
+        if (!voidPending) return;
+        const pending = voidPending;
+        setVoidPending(null);
+        pending.apply();
+        commit((current) =>
+            appendAudit(current, {
+                kind: pending.kind,
+                reason,
+                staffId: staff.id,
+                staffName: staff.name,
+                details: pending.details,
+                tableLabel: pending.tableLabel,
+            }),
+        );
+        setShareFeedback(`Void recorded: ${reason}`);
     };
 
     const changeQuantity = (lineId: string, change: number) => {
         if (isPaid || !canCreateOrders(staff.role)) return;
         const line = activeTable.lines.find((entry) => entry.id === lineId);
+        const item = line ? menuById.get(line.menuItemId) : null;
         const apply = () =>
             updateActiveTable((table) => ({
                 ...table,
@@ -347,10 +424,15 @@ export default function RestaurantBillGenerator() {
                     .filter((entry) => entry.quantity > 0),
             }));
         if (line && line.kitchenStatus !== 'draft' && change < 0) {
-            if (!canVoidKitchenItems(staff.role)) {
-                requireManager(apply);
-                return;
-            }
+            requestVoid(
+                'void_line',
+                'Void line quantity',
+                `${item?.name ?? 'Item'} on ${activeTable.label}`,
+                activeTable.label,
+                apply,
+                !canVoidKitchenItems(staff.role),
+            );
+            return;
         }
         apply();
     };
@@ -358,6 +440,7 @@ export default function RestaurantBillGenerator() {
     const deleteLine = (lineId: string) => {
         const line = activeTable.lines.find((entry) => entry.id === lineId);
         if (!line) return;
+        const item = menuById.get(line.menuItemId);
         const apply = () =>
             updateActiveTable((table) => ({
                 ...table,
@@ -365,17 +448,18 @@ export default function RestaurantBillGenerator() {
                 guestBillApprovedAt: null,
                 lines: table.lines.filter((entry) => entry.id !== lineId),
             }));
-        if (line.kitchenStatus !== 'draft' && !canDeleteTickets(staff.role)) {
-            requireManager(apply);
+        if (line.kitchenStatus !== 'draft') {
+            requestVoid(
+                'void_ticket',
+                'Void kitchen ticket',
+                `${item?.name ?? 'Item'} · ${line.orderNumber ?? 'no order #'}`,
+                activeTable.label,
+                apply,
+                !canDeleteTickets(staff.role),
+            );
             return;
         }
-        if (line.kitchenStatus !== 'draft' && canDeleteTickets(staff.role)) {
-            apply();
-            return;
-        }
-        if (line.kitchenStatus === 'draft' && canCreateOrders(staff.role)) {
-            apply();
-        }
+        if (canCreateOrders(staff.role)) apply();
     };
 
     const setKitchenStatus = (tableId: string, lineId: string, kitchenStatus: KitchenStatus) => {
@@ -434,35 +518,79 @@ export default function RestaurantBillGenerator() {
             setShareFeedback('Kitchen staff cannot delete tickets. Ask a Manager.');
             return;
         }
+        const targetTable = state.tables.find((table) => table.id === tableId);
+        const targetLine = targetTable?.lines.find((line) => line.id === lineId);
+        const item = targetLine ? menuById.get(targetLine.menuItemId) : null;
         const apply = () =>
-            setState((current) => ({
-                ...current,
-                tables: current.tables.map((table) =>
-                    table.id !== tableId
-                        ? table
-                        : {
-                              ...table,
-                              billGeneratedAt: null,
-                              guestBillApprovedAt: null,
-                              lines: table.lines.filter((line) => line.id !== lineId),
-                          },
-                ),
-            }));
-        if (!canDeleteTickets(staff.role)) {
-            requireManager(apply);
-            return;
-        }
-        apply();
-        setShareFeedback('Kitchen ticket deleted.');
+            setState((current) =>
+                touchState({
+                    ...current,
+                    tables: current.tables.map((table) =>
+                        table.id !== tableId
+                            ? table
+                            : {
+                                  ...table,
+                                  billGeneratedAt: null,
+                                  guestBillApprovedAt: null,
+                                  lines: table.lines.filter((line) => line.id !== lineId),
+                              },
+                    ),
+                }),
+            );
+        requestVoid(
+            'void_ticket',
+            'Void kitchen ticket',
+            `${item?.name ?? 'Item'} · ${targetLine?.orderNumber ?? 'no order #'}`,
+            targetTable?.label ?? null,
+            apply,
+            !canDeleteTickets(staff.role),
+        );
     };
 
-    const fillPaymentDefaults = (currency: TenderCurrency) => {
+    const bumpTicket = (tableId: string, lineId: string) => {
+        if (!canRunKitchenBoard(staff.role)) return;
+        commit((current) => bumpKitchenLine(current, tableId, lineId, staff));
+        setShareFeedback('Ticket bumped — wait timer reset and kitchen notified.');
+    };
+
+    const recallTicket = (tableId: string, lineId: string) => {
+        if (!canRunKitchenBoard(staff.role)) return;
+        commit((current) => recallKitchenLine(current, tableId, lineId));
+        setShareFeedback('Ticket recalled to Ready.');
+    };
+
+    const setCourseFireOnLine = (tableId: string, lineId: string, courseFire: CourseFire) => {
+        commit((current) => ({
+            ...current,
+            tables: current.tables.map((table) =>
+                table.id !== tableId ? table : setLineCourseFire(table, lineId, courseFire),
+            ),
+        }));
+    };
+
+    const fireAllHeld = (tableId: string) => {
+        commit((current) => ({
+            ...current,
+            tables: current.tables.map((table) =>
+                table.id !== tableId ? table : fireHeldLines(table),
+            ),
+        }));
+        setShareFeedback('Held courses fired.');
+    };
+
+    const paymentTotalCents = useMemo(() => {
+        if (!payGuestId) return bill.totalCents;
+        const guest = bill.guestBreakdown.find((entry) => entry.id === payGuestId);
+        return guest?.totalCents ?? bill.totalCents;
+    }, [bill, payGuestId]);
+
+    const fillPaymentDefaults = (currency: TenderCurrency, total = paymentTotalCents) => {
         if (currency === 'XCG') {
-            const xcg = (usdCentsToXcgCents(bill.totalCents) / 100).toFixed(2);
+            const xcg = (usdCentsToXcgCents(total) / 100).toFixed(2);
             setCashInput(xcg);
             setCardInput(xcg);
         } else {
-            const usd = (bill.totalCents / 100).toFixed(2);
+            const usd = (total / 100).toFixed(2);
             setCashInput(usd);
             setCardInput(usd);
         }
@@ -489,76 +617,137 @@ export default function RestaurantBillGenerator() {
             openGuestBill();
             return;
         }
+        const unpaid = bill.guestBreakdown.filter(
+            (guest) => guest.totalCents > 0 && !guest.paidAt,
+        );
+        const defaultGuest = unpaid.length > 1 ? unpaid[0].id : null;
+        setPayGuestId(defaultGuest);
         setPayMethod(activeTable.guestPreferredPayment ?? 'card');
         setTenderCurrency('USD');
-        fillPaymentDefaults('USD');
+        const due =
+            defaultGuest == null
+                ? bill.totalCents
+                : unpaid.find((guest) => guest.id === defaultGuest)?.totalCents ?? bill.totalCents;
+        fillPaymentDefaults('USD', due);
         setPaymentOpen(true);
     };
 
     const cancelPayment = () => {
         setPaymentOpen(false);
+        setPayGuestId(null);
         setShareFeedback('Payment cancelled.');
     };
 
     const completePayment = () => {
+        const dueCents = paymentTotalCents;
         const { cashCents, cardCents } = paymentInputsToUsd(
             payMethod,
             tenderCurrency,
             cashInput,
             cardInput,
         );
-        const payment = computePayment(bill.totalCents, payMethod, cashCents, cardCents);
-        if (payMethod === 'cash' && cashCents < bill.totalCents) {
-            setShareFeedback(`Cash tendered is less than the total (${formatDual(bill.totalCents)}).`);
+        const payment = computePayment(dueCents, payMethod, cashCents, cardCents);
+        if (payMethod === 'cash' && cashCents < dueCents) {
+            setShareFeedback(`Cash tendered is less than the total (${formatDual(dueCents)}).`);
             return;
         }
-        if (payMethod === 'mixed' && cardCents + Math.max(cashCents, 0) < bill.totalCents) {
+        if (payMethod === 'mixed' && cardCents + Math.max(cashCents, 0) < dueCents) {
             setShareFeedback('Mixed tender does not cover the total.');
             return;
         }
         const paidAt = payment.paidAt;
         const orderNumbers = collectOrderNumbers(activeTable.lines);
-        commit((current) => ({
-            ...current,
-            tables: current.tables.map((table) =>
-                table.id === current.activeTableId
-                    ? {
-                          ...table,
-                          status: 'paid' as const,
-                          paidAt,
-                          payment,
-                          billGeneratedAt: table.billGeneratedAt ?? paidAt,
-                          lines: table.lines.map((line) =>
-                              line.kitchenStatus === 'draft'
-                                  ? line
-                                  : { ...line, kitchenStatus: 'served' as const },
-                          ),
-                      }
-                    : table,
-            ),
-            sales: [
-                {
-                    id: createId('sale'),
-                    tableId: activeTable.id,
-                    tableLabel: activeTable.label,
+        const guestMeta = payGuestId
+            ? bill.guestBreakdown.find((guest) => guest.id === payGuestId)
+            : null;
+
+        commit((current) => {
+            const tables = current.tables.map((table) => {
+                if (table.id !== current.activeTableId) return table;
+
+                if (payGuestId) {
+                    const guests = table.guests.map((guest) =>
+                        guest.id === payGuestId
+                            ? { ...guest, paidAt, payment }
+                            : guest,
+                    );
+                    const nextTable = { ...table, guests, billGeneratedAt: table.billGeneratedAt ?? paidAt };
+                    const fullyPaid = allGuestsPaid(nextTable);
+                    if (fullyPaid) {
+                        return {
+                            ...nextTable,
+                            status: 'paid' as const,
+                            paidAt,
+                            payment,
+                            lines: nextTable.lines.map((line) =>
+                                line.kitchenStatus === 'draft'
+                                    ? line
+                                    : { ...line, kitchenStatus: 'served' as const },
+                            ),
+                        };
+                    }
+                    return {
+                        ...nextTable,
+                        status: 'partial' as const,
+                        paidAt: null,
+                        payment: null,
+                    };
+                }
+
+                return {
+                    ...table,
+                    status: 'paid' as const,
                     paidAt,
-                    subtotalCents: bill.subtotalCents,
-                    serviceChargeCents: bill.serviceChargeCents,
-                    tipCents: bill.tipCents,
-                    totalCents: bill.totalCents,
                     payment,
-                    serverName: staff.name,
-                    itemCount,
-                    orderNumbers,
-                },
-                ...current.sales,
-            ],
-        }));
+                    billGeneratedAt: table.billGeneratedAt ?? paidAt,
+                    guests: table.guests.map((guest) =>
+                        guest.paidAt ? guest : { ...guest, paidAt, payment },
+                    ),
+                    lines: table.lines.map((line) =>
+                        line.kitchenStatus === 'draft'
+                            ? line
+                            : { ...line, kitchenStatus: 'served' as const },
+                    ),
+                };
+            });
+
+            const saleGuest = guestMeta;
+            return {
+                ...current,
+                tables,
+                sales: [
+                    {
+                        id: createId('sale'),
+                        tableId: activeTable.id,
+                        tableLabel: activeTable.label,
+                        paidAt,
+                        subtotalCents: saleGuest?.subtotalCents ?? bill.subtotalCents,
+                        serviceChargeCents:
+                            saleGuest?.serviceChargeCents ?? bill.serviceChargeCents,
+                        tipCents: saleGuest?.tipCents ?? bill.tipCents,
+                        totalCents: dueCents,
+                        payment,
+                        serverName: staff.name,
+                        itemCount: saleGuest
+                            ? activeTable.lines
+                                  .filter((line) => line.guestId === saleGuest.id)
+                                  .reduce((sum, line) => sum + line.quantity, 0)
+                            : itemCount,
+                        orderNumbers,
+                        guestName: saleGuest?.name ?? null,
+                        guestId: saleGuest?.id ?? null,
+                    },
+                    ...current.sales,
+                ],
+            };
+        });
         setPaymentOpen(false);
         setGuestBillOpen(false);
+        const label = guestMeta ? guestMeta.name : 'table';
         setShareFeedback(
-            `Paid with ${payment.method} (${tenderCurrency}). Change due: ${formatDual(payment.changeDueCents)}.`,
+            `Paid ${label} with ${payment.method} (${tenderCurrency}). Change due: ${formatDual(payment.changeDueCents)}.`,
         );
+        setPayGuestId(null);
     };
 
     const sendToKitchen = () => {
@@ -591,7 +780,10 @@ export default function RestaurantBillGenerator() {
             staff.id,
         );
         updateActiveTable(() => nextTable);
-        setReceipt(buildSnapshot(nextTable, state.menu, state.restaurant, staff.name));
+        const template: ReceiptTemplate =
+            activeTable.status === 'paid' ? 'paid' : 'guest';
+        setReceiptTemplate(template);
+        setReceipt(buildSnapshot(nextTable, state.menu, state.restaurant, staff.name, template));
         setShareFeedback('Guest ticket generated. Beverages queued for server status updates.');
     };
 
@@ -619,17 +811,20 @@ export default function RestaurantBillGenerator() {
     };
 
     const deleteSale = (saleId: string) => {
+        const sale = state.sales.find((entry) => entry.id === saleId);
         const apply = () =>
             setState((current) => ({
                 ...current,
-                sales: current.sales.filter((sale) => sale.id !== saleId),
+                sales: current.sales.filter((entry) => entry.id !== saleId),
             }));
-        if (!canDeletePayments(staff.role)) {
-            requireManager(apply);
-            return;
-        }
-        apply();
-        setShareFeedback('Payment / sale deleted.');
+        requestVoid(
+            'void_payment',
+            'Void payment / sale',
+            `${sale?.tableLabel ?? 'Sale'} · ${formatDual(sale?.totalCents ?? 0)}`,
+            sale?.tableLabel ?? null,
+            apply,
+            !canDeletePayments(staff.role),
+        );
     };
 
     const exportSales = () => {
@@ -644,7 +839,7 @@ export default function RestaurantBillGenerator() {
     };
 
     const guestBillSnapshot = useMemo(
-        () => buildSnapshot(activeTable, state.menu, state.restaurant, staff.name),
+        () => buildSnapshot(activeTable, state.menu, state.restaurant, staff.name, 'guest'),
         [activeTable, state.menu, state.restaurant, staff.name],
     );
 
@@ -691,7 +886,11 @@ export default function RestaurantBillGenerator() {
                                     {state.tables.map((table) => (
                                         <option key={table.id} value={table.id}>
                                             {table.label}
-                                            {table.status === 'paid' ? ' · paid' : ''}
+                                            {table.status === 'paid'
+                                                ? ' · paid'
+                                                : table.status === 'partial'
+                                                  ? ' · partial'
+                                                  : ''}
                                         </option>
                                     ))}
                                 </select>
@@ -792,11 +991,16 @@ export default function RestaurantBillGenerator() {
                         <KitchenBoard
                             tables={state.tables}
                             menuById={menuById}
+                            bumpAfterMinutes={state.settings.bumpAfterMinutes}
                             canDeleteTickets={
                                 canDeleteTickets(staff.role) && staff.role !== 'kitchen'
                             }
                             onStatus={setKitchenStatus}
                             onDeleteTicket={deleteKitchenTicket}
+                            onBump={bumpTicket}
+                            onRecall={recallTicket}
+                            onCourseFire={setCourseFireOnLine}
+                            onFireAllHeld={fireAllHeld}
                         />
                     </Suspense>
                 )}
@@ -892,6 +1096,7 @@ export default function RestaurantBillGenerator() {
                             editingId={editingId}
                             newTableLabel={newTableLabel}
                             settings={state.settings}
+                            auditLog={state.auditLog}
                             onFormChange={setMenuForm}
                             onSettingsChange={(patch: Partial<PosSettings>) => {
                                 commit((current) => ({
@@ -1003,6 +1208,7 @@ export default function RestaurantBillGenerator() {
                         itemCount={itemCount}
                         draftCount={draftCount}
                         isPaid={isPaid}
+                        isPartial={isPartial}
                         shareFeedback={shareFeedback}
                         canClear={canClearOrder(staff.role)}
                         canSendKitchen={canSendToKitchen(staff.role)}
@@ -1018,10 +1224,16 @@ export default function RestaurantBillGenerator() {
                                     updateActiveTable((table) => ({
                                         ...table,
                                         lines: [],
+                                        status: 'open',
                                         billGeneratedAt: null,
                                         guestBillApprovedAt: null,
                                         guestSignatureDataUrl: null,
                                         guestPreferredPayment: null,
+                                        guests: table.guests.map((guest) => ({
+                                            ...guest,
+                                            paidAt: null,
+                                            payment: null,
+                                        })),
                                     })),
                                 );
                                 return;
@@ -1029,10 +1241,16 @@ export default function RestaurantBillGenerator() {
                             updateActiveTable((table) => ({
                                 ...table,
                                 lines: [],
+                                status: 'open',
                                 billGeneratedAt: null,
                                 guestBillApprovedAt: null,
                                 guestSignatureDataUrl: null,
                                 guestPreferredPayment: null,
+                                guests: table.guests.map((guest) => ({
+                                    ...guest,
+                                    paidAt: null,
+                                    payment: null,
+                                })),
                             }));
                         }}
                         onAddGuest={() => {
@@ -1044,6 +1262,8 @@ export default function RestaurantBillGenerator() {
                                     {
                                         id: createId('guest'),
                                         name: `Guest ${table.guests.length + 1}`,
+                                        paidAt: null,
+                                        payment: null,
                                     },
                                 ],
                             }));
@@ -1060,6 +1280,8 @@ export default function RestaurantBillGenerator() {
                             if (isPaid) return;
                             updateActiveTable((table) => {
                                 if (table.guests.length <= 1) return table;
+                                const target = table.guests.find((guest) => guest.id === guestId);
+                                if (target?.paidAt) return table;
                                 const fallback =
                                     table.guests.find((guest) => guest.id !== guestId)?.id ?? null;
                                 return {
@@ -1086,6 +1308,10 @@ export default function RestaurantBillGenerator() {
                                     line.id === lineId ? { ...line, guestId } : line,
                                 ),
                             }));
+                        }}
+                        onCourseFire={(lineId, courseFire) => {
+                            if (isPaid) return;
+                            updateActiveTable((table) => setLineCourseFire(table, lineId, courseFire));
                         }}
                         onTipPreset={(preset: TipAmountPreset) => {
                             if (isPaid) return;
@@ -1132,16 +1358,18 @@ export default function RestaurantBillGenerator() {
                             if (!canTakePayment(staff.role)) return;
                             openPayment();
                         }}
-                        onViewPaidReceipt={() =>
+                        onViewPaidReceipt={() => {
+                            setReceiptTemplate('paid');
                             setReceipt(
                                 buildSnapshot(
                                     activeTable,
                                     state.menu,
                                     state.restaurant,
                                     staff.name,
+                                    'paid',
                                 ),
-                            )
-                        }
+                            );
+                        }}
                         onReopen={() => {
                             const reopen = () =>
                                 updateActiveTable((table) => ({
@@ -1153,6 +1381,11 @@ export default function RestaurantBillGenerator() {
                                     guestBillApprovedAt: null,
                                     guestSignatureDataUrl: null,
                                     guestPreferredPayment: null,
+                                    guests: table.guests.map((guest) => ({
+                                        ...guest,
+                                        paidAt: null,
+                                        payment: null,
+                                    })),
                                     lines: [],
                                 }));
                             if (!canReopenTable(staff.role)) {
@@ -1207,9 +1440,19 @@ export default function RestaurantBillGenerator() {
                             billGeneratedAt: table.billGeneratedAt ?? new Date().toISOString(),
                         }));
                         setGuestBillOpen(false);
+                        const unpaid = bill.guestBreakdown.filter(
+                            (guest) => guest.totalCents > 0 && !guest.paidAt,
+                        );
+                        const defaultGuest = unpaid.length > 1 ? unpaid[0].id : null;
+                        setPayGuestId(defaultGuest);
                         setPayMethod(method);
                         setTenderCurrency('USD');
-                        fillPaymentDefaults('USD');
+                        const due =
+                            defaultGuest == null
+                                ? bill.totalCents
+                                : unpaid.find((guest) => guest.id === defaultGuest)?.totalCents ??
+                                  bill.totalCents;
+                        fillPaymentDefaults('USD', due);
                         setPaymentOpen(true);
                         setShareFeedback('Guest approved the bill. Collect payment.');
                     }}
@@ -1222,21 +1465,46 @@ export default function RestaurantBillGenerator() {
 
             {paymentOpen && (
                 <PaymentModal
-                    totalCents={bill.totalCents}
+                    totalCents={paymentTotalCents}
                     payMethod={payMethod}
                     tenderCurrency={tenderCurrency}
                     cashInput={cashInput}
                     cardInput={cardInput}
                     preferredMethod={activeTable.guestPreferredPayment}
+                    guests={bill.guestBreakdown.map((guest) => ({
+                        id: guest.id,
+                        name: guest.name,
+                        totalCents: guest.totalCents,
+                        paidAt: guest.paidAt,
+                    }))}
+                    selectedGuestId={payGuestId}
+                    onSelectGuest={(guestId) => {
+                        setPayGuestId(guestId);
+                        const due =
+                            guestId == null
+                                ? bill.totalCents
+                                : bill.guestBreakdown.find((guest) => guest.id === guestId)
+                                      ?.totalCents ?? bill.totalCents;
+                        fillPaymentDefaults(tenderCurrency, due);
+                    }}
                     onMethod={setPayMethod}
                     onCurrency={(currency) => {
                         setTenderCurrency(currency);
-                        fillPaymentDefaults(currency);
+                        fillPaymentDefaults(currency, paymentTotalCents);
                     }}
                     onCashInput={setCashInput}
                     onCardInput={setCardInput}
                     onComplete={completePayment}
                     onCancel={cancelPayment}
+                />
+            )}
+
+            {voidPending && (
+                <VoidReasonModal
+                    title={voidPending.title}
+                    details={voidPending.details}
+                    onConfirm={confirmVoid}
+                    onCancel={() => setVoidPending(null)}
                 />
             )}
 
@@ -1260,11 +1528,27 @@ export default function RestaurantBillGenerator() {
                     snapshot={receipt}
                     shareFeedback={shareFeedback}
                     onShareFeedback={setShareFeedback}
+                    onTemplateChange={(template) => {
+                        setReceiptTemplate(template);
+                        setReceipt(
+                            buildSnapshot(
+                                activeTable,
+                                state.menu,
+                                state.restaurant,
+                                staff.name,
+                                template,
+                            ),
+                        );
+                    }}
                     onClose={() => {
                         setReceipt(null);
                         setShareFeedback(null);
                         if (window.location.hash.startsWith('#bill=')) {
-                            history.replaceState(null, '', window.location.pathname);
+                            history.replaceState(
+                                null,
+                                '',
+                                `${window.location.pathname}${window.location.search}`,
+                            );
                         }
                     }}
                 />

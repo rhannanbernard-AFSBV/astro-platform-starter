@@ -1,12 +1,19 @@
 import { Icon } from './Icons';
 import { encodeSnapshot, formatDual, moneyUsd, moneyXcg } from './math';
-import type { BillSnapshot } from './types';
+import { COURSE_FIRE_LABELS, type BillSnapshot, type ReceiptTemplate } from './types';
 
 type Props = {
     snapshot: BillSnapshot;
     onClose: () => void;
     shareFeedback: string | null;
     onShareFeedback: (message: string) => void;
+    onTemplateChange?: (template: ReceiptTemplate) => void;
+};
+
+const TEMPLATE_LABELS: Record<ReceiptTemplate, string> = {
+    guest: 'Guest',
+    kitchen: 'Kitchen',
+    paid: 'Paid',
 };
 
 export default function ReceiptView({
@@ -14,8 +21,11 @@ export default function ReceiptView({
     onClose,
     shareFeedback,
     onShareFeedback,
+    onTemplateChange,
 }: Props) {
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(snapshot.restaurant.feedbackUrl)}`;
+    const template = snapshot.template ?? 'guest';
+    const isKitchen = template === 'kitchen';
 
     const printReceipt = () => window.print();
 
@@ -27,27 +37,39 @@ export default function ReceiptView({
             `Tax ID: ${snapshot.restaurant.taxId}`,
             snapshot.tableLabel,
             `Server: ${snapshot.serverName}`,
+            `Template: ${TEMPLATE_LABELS[template]}`,
             snapshot.orderNumbers.length
                 ? `Orders: ${snapshot.orderNumbers.join(', ')}`
                 : null,
             `Generated: ${new Date(snapshot.generatedAt).toLocaleString()}`,
             `Status: ${snapshot.status}`,
-            'FX: 1.80 XCG = 1 USD',
+            isKitchen ? null : 'FX: 1.80 XCG = 1 USD',
             '',
             ...snapshot.items.map((item) => {
                 const mods = item.modifiers.length ? ` [${item.modifiers.join(', ')}]` : '';
                 const note = item.note ? ` — ${item.note}` : '';
                 const ord = item.orderNumber ? ` #${item.orderNumber}` : '';
-                return `${item.quantity}x ${item.name}${ord}${mods}${note}${item.guestName ? ` (${item.guestName})` : ''}  ${formatDual(item.lineTotalCents)}`;
+                const course =
+                    item.courseFire && isKitchen
+                        ? ` (${COURSE_FIRE_LABELS[item.courseFire]})`
+                        : '';
+                const status = item.kitchenStatus && isKitchen ? ` [${item.kitchenStatus}]` : '';
+                const price = isKitchen ? '' : `  ${formatDual(item.lineTotalCents)}`;
+                return `${item.quantity}x ${item.name}${ord}${course}${status}${mods}${note}${item.guestName ? ` (${item.guestName})` : ''}${price}`;
             }),
-            '',
-            `Subtotal: ${formatDual(snapshot.subtotalCents)}`,
-            snapshot.serviceChargeEnabled
-                ? `Service Charge (${snapshot.serviceChargePercent}%): ${formatDual(snapshot.serviceChargeCents)}`
-                : 'Service Charge: —',
-            `Tip: ${formatDual(snapshot.tipCents)}`,
-            `Total: ${formatDual(snapshot.totalCents)}`,
         ].filter((line): line is string => line !== null);
+
+        if (!isKitchen) {
+            lines.push(
+                '',
+                `Subtotal: ${formatDual(snapshot.subtotalCents)}`,
+                snapshot.serviceChargeEnabled
+                    ? `Service Charge (${snapshot.serviceChargePercent}%): ${formatDual(snapshot.serviceChargeCents)}`
+                    : 'Service Charge: —',
+                `Tip: ${formatDual(snapshot.tipCents)}`,
+                `Total: ${formatDual(snapshot.totalCents)}`,
+            );
+        }
         if (snapshot.payment) {
             lines.push(
                 '',
@@ -64,7 +86,7 @@ export default function ReceiptView({
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
         anchor.href = url;
-        anchor.download = `${snapshot.tableLabel.replace(/\s+/g, '-').toLowerCase()}-receipt.txt`;
+        anchor.download = `${snapshot.tableLabel.replace(/\s+/g, '-').toLowerCase()}-${template}-receipt.txt`;
         anchor.click();
         URL.revokeObjectURL(url);
         onShareFeedback('Receipt downloaded. Use Print / PDF for a PDF copy.');
@@ -76,7 +98,9 @@ export default function ReceiptView({
             if (navigator.share) {
                 await navigator.share({
                     title: `${snapshot.restaurant.name} — ${snapshot.tableLabel}`,
-                    text: `Bill total ${formatDual(snapshot.totalCents)}`,
+                    text: isKitchen
+                        ? `Kitchen ticket ${snapshot.tableLabel}`
+                        : `Bill total ${formatDual(snapshot.totalCents)}`,
                     url,
                 });
                 onShareFeedback('Share sheet opened.');
@@ -96,13 +120,27 @@ export default function ReceiptView({
 
     return (
         <div className="receipt-overlay" role="dialog" aria-modal="true" aria-label="Receipt">
-            <div className="receipt-sheet">
+            <div className={`receipt-sheet template-${template}`}>
                 <div className="receipt-toolbar no-print">
                     <div>
-                        <p className="eyebrow">Guest receipt</p>
+                        <p className="eyebrow">{TEMPLATE_LABELS[template]} receipt</p>
                         <h2>{snapshot.tableLabel}</h2>
                     </div>
                     <div className="receipt-actions">
+                        {onTemplateChange && (
+                            <div className="tip-presets receipt-template-toggle" role="group">
+                                {(['guest', 'kitchen', 'paid'] as ReceiptTemplate[]).map((key) => (
+                                    <button
+                                        key={key}
+                                        type="button"
+                                        className={template === key ? 'active' : ''}
+                                        onClick={() => onTemplateChange(key)}
+                                    >
+                                        {TEMPLATE_LABELS[key]}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                         <button type="button" onClick={printReceipt}>
                             <Icon name="print" /> Print / PDF
                         </button>
@@ -123,10 +161,14 @@ export default function ReceiptView({
                         <div className="receipt-logo">S</div>
                         <strong>{snapshot.restaurant.name}</strong>
                         <span>{snapshot.restaurant.tagline}</span>
-                        <span>{snapshot.restaurant.address}</span>
-                        <span>
-                            {snapshot.restaurant.phone} · Tax ID {snapshot.restaurant.taxId}
-                        </span>
+                        {!isKitchen && (
+                            <>
+                                <span>{snapshot.restaurant.address}</span>
+                                <span>
+                                    {snapshot.restaurant.phone} · Tax ID {snapshot.restaurant.taxId}
+                                </span>
+                            </>
+                        )}
                         <span>
                             {snapshot.tableLabel} · Server {snapshot.serverName}
                         </span>
@@ -135,7 +177,8 @@ export default function ReceiptView({
                         )}
                         <span>{new Date(snapshot.generatedAt).toLocaleString()}</span>
                         <span className={`status-chip ${snapshot.status}`}>{snapshot.status}</span>
-                        <span>FX rate: 1.80 XCG = 1 USD</span>
+                        {!isKitchen && <span>FX rate: 1.80 XCG = 1 USD</span>}
+                        {isKitchen && <span className="kitchen-chit-label">Kitchen chit — no prices</span>}
                     </header>
                     <ul>
                         {snapshot.items.map((item, index) => (
@@ -145,45 +188,55 @@ export default function ReceiptView({
                                         {item.quantity}× {item.name}
                                     </strong>
                                     {item.orderNumber && <small>#{item.orderNumber}</small>}
+                                    {isKitchen && item.courseFire && (
+                                        <small>{COURSE_FIRE_LABELS[item.courseFire]}</small>
+                                    )}
+                                    {isKitchen && item.kitchenStatus && (
+                                        <small>{item.kitchenStatus}</small>
+                                    )}
                                     {item.modifiers.length > 0 && (
                                         <small>{item.modifiers.join(' · ')}</small>
                                     )}
                                     {item.note && <small>Note: {item.note}</small>}
                                     {item.guestName && <small>{item.guestName}</small>}
                                 </div>
-                                <span className="price-dual compact">
-                                    <strong>{moneyUsd(item.lineTotalCents)}</strong>
-                                    <small>{moneyXcg(item.lineTotalCents)}</small>
-                                </span>
+                                {!isKitchen && (
+                                    <span className="price-dual compact">
+                                        <strong>{moneyUsd(item.lineTotalCents)}</strong>
+                                        <small>{moneyXcg(item.lineTotalCents)}</small>
+                                    </span>
+                                )}
                             </li>
                         ))}
                     </ul>
-                    <div className="receipt-totals">
-                        <div>
-                            <span>Subtotal</span>
-                            <strong>{formatDual(snapshot.subtotalCents)}</strong>
+                    {!isKitchen && (
+                        <div className="receipt-totals">
+                            <div>
+                                <span>Subtotal</span>
+                                <strong>{formatDual(snapshot.subtotalCents)}</strong>
+                            </div>
+                            <div>
+                                <span>
+                                    {snapshot.serviceChargeEnabled
+                                        ? `Service Charge (${snapshot.serviceChargePercent}%)`
+                                        : 'Service Charge'}
+                                </span>
+                                <strong>
+                                    {snapshot.serviceChargeEnabled
+                                        ? formatDual(snapshot.serviceChargeCents)
+                                        : '—'}
+                                </strong>
+                            </div>
+                            <div>
+                                <span>Tip</span>
+                                <strong>{formatDual(snapshot.tipCents)}</strong>
+                            </div>
+                            <div className="grand">
+                                <span>Total</span>
+                                <strong>{formatDual(snapshot.totalCents)}</strong>
+                            </div>
                         </div>
-                        <div>
-                            <span>
-                                {snapshot.serviceChargeEnabled
-                                    ? `Service Charge (${snapshot.serviceChargePercent}%)`
-                                    : 'Service Charge'}
-                            </span>
-                            <strong>
-                                {snapshot.serviceChargeEnabled
-                                    ? formatDual(snapshot.serviceChargeCents)
-                                    : '—'}
-                            </strong>
-                        </div>
-                        <div>
-                            <span>Tip</span>
-                            <strong>{formatDual(snapshot.tipCents)}</strong>
-                        </div>
-                        <div className="grand">
-                            <span>Total</span>
-                            <strong>{formatDual(snapshot.totalCents)}</strong>
-                        </div>
-                    </div>
+                    )}
                     {snapshot.payment && (
                         <div className="split-block">
                             <p>Payment</p>
@@ -205,7 +258,7 @@ export default function ReceiptView({
                             </div>
                         </div>
                     )}
-                    {snapshot.guestSignatureDataUrl && (
+                    {snapshot.guestSignatureDataUrl && !isKitchen && (
                         <div className="split-block">
                             <p>Guest approval</p>
                             <img
@@ -221,27 +274,37 @@ export default function ReceiptView({
                             )}
                         </div>
                     )}
-                    {snapshot.guests.filter((guest) => guest.subtotalCents > 0).length > 1 && (
-                        <div className="split-block">
-                            <p>Split check</p>
-                            {snapshot.guests
-                                .filter((guest) => guest.subtotalCents > 0)
-                                .map((guest) => (
-                                    <div key={guest.name}>
-                                        <span>{guest.name}</span>
-                                        <strong>{formatDual(guest.totalCents)}</strong>
-                                    </div>
-                                ))}
+                    {snapshot.guests.filter((guest) => guest.subtotalCents > 0).length > 1 &&
+                        !isKitchen && (
+                            <div className="split-block">
+                                <p>Split check</p>
+                                {snapshot.guests
+                                    .filter((guest) => guest.subtotalCents > 0)
+                                    .map((guest) => (
+                                        <div key={guest.id}>
+                                            <span>
+                                                {guest.name}
+                                                {guest.paidAt ? ' · paid' : ''}
+                                            </span>
+                                            <strong>{formatDual(guest.totalCents)}</strong>
+                                        </div>
+                                    ))}
+                            </div>
+                        )}
+                    {!isKitchen && (
+                        <div className="receipt-qr">
+                            <img src={qrUrl} alt="Feedback QR code" width={140} height={140} />
+                            <div>
+                                <strong>Scan for feedback</strong>
+                                <span>{snapshot.restaurant.feedbackUrl}</span>
+                            </div>
                         </div>
                     )}
-                    <div className="receipt-qr">
-                        <img src={qrUrl} alt="Feedback QR code" width={140} height={140} />
-                        <div>
-                            <strong>Scan for feedback</strong>
-                            <span>{snapshot.restaurant.feedbackUrl}</span>
-                        </div>
-                    </div>
-                    <footer>Thank you for dining with us.</footer>
+                    <footer>
+                        {isKitchen
+                            ? 'Expo copy — fire when ready.'
+                            : 'Thank you for dining with us.'}
+                    </footer>
                 </div>
             </div>
         </div>

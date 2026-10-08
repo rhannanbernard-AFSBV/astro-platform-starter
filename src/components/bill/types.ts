@@ -11,7 +11,16 @@ export type StaffRole = (typeof STAFF_ROLES)[number];
 export type AppView = 'service' | 'kitchen' | 'reports' | 'admin' | 'users';
 export type PaymentMethod = 'cash' | 'card' | 'mixed';
 export type KitchenStatus = 'draft' | 'queued' | 'preparing' | 'ready' | 'served';
-export type TableStatus = 'open' | 'paid';
+export type TableStatus = 'open' | 'paid' | 'partial';
+export type CourseFire = 'hold' | 'fire' | 'all_day';
+export type ReceiptTemplate = 'guest' | 'kitchen' | 'paid';
+
+export const COURSE_FIRE_OPTIONS = ['hold', 'fire', 'all_day'] as const;
+export const COURSE_FIRE_LABELS: Record<CourseFire, string> = {
+    hold: 'Hold',
+    fire: 'Fire',
+    all_day: 'All-day',
+};
 
 export type ModifierOption = {
     id: string;
@@ -47,6 +56,8 @@ export type SelectedModifier = {
 export type Guest = {
     id: string;
     name: string;
+    paidAt: string | null;
+    payment: PaymentTender | null;
 };
 
 export type OrderLine = {
@@ -60,6 +71,9 @@ export type OrderLine = {
     sentToKitchenAt: string | null;
     orderNumber: string | null;
     sentByStaffId: string | null;
+    courseFire: CourseFire;
+    bumpedAt: string | null;
+    bumpCount: number;
 };
 
 export type PaymentTender = {
@@ -101,6 +115,8 @@ export type SaleRecord = {
     serverName: string;
     itemCount: number;
     orderNumbers: string[];
+    guestName: string | null;
+    guestId: string | null;
 };
 
 export type RestaurantProfile = {
@@ -117,6 +133,8 @@ export type PosSettings = {
     defaultServiceChargePercent: number;
     shiftOpenedAt: string | null;
     shiftClosedAt: string | null;
+    /** Minutes in Queued before visual bump escalation */
+    bumpAfterMinutes: number;
 };
 
 export type StaffUser = {
@@ -129,7 +147,7 @@ export type StaffUser = {
 
 export type AppNotification = {
     id: string;
-    kind: 'kitchen_ticket' | 'server_ack';
+    kind: 'kitchen_ticket' | 'server_ack' | 'bump_alert';
     title: string;
     message: string;
     orderNumber: string | null;
@@ -140,8 +158,19 @@ export type AppNotification = {
     readBy: string[];
 };
 
+export type AuditEntry = {
+    id: string;
+    kind: 'void_ticket' | 'void_payment' | 'void_line';
+    reason: string;
+    staffId: string;
+    staffName: string;
+    createdAt: string;
+    details: string;
+    tableLabel: string | null;
+};
+
 export type PersistedState = {
-    version: 5;
+    version: 6;
     menu: MenuItem[];
     tables: TableOrder[];
     activeTableId: string;
@@ -152,6 +181,7 @@ export type PersistedState = {
     nextOrderSeq: number;
     notifications: AppNotification[];
     settings: PosSettings;
+    auditLog: AuditEntry[];
     /** Epoch ms for cross-tab last-write-wins sync */
     updatedAt: number;
 };
@@ -163,6 +193,7 @@ export type BillSnapshot = {
     status: TableStatus;
     serverName: string;
     orderNumbers: string[];
+    template: ReceiptTemplate;
     items: Array<{
         name: string;
         quantity: number;
@@ -172,13 +203,18 @@ export type BillSnapshot = {
         note: string;
         modifiers: string[];
         orderNumber: string | null;
+        kitchenStatus?: KitchenStatus;
+        courseFire?: CourseFire;
+        category?: MenuCategory;
     }>;
     guests: Array<{
+        id: string;
         name: string;
         subtotalCents: number;
         serviceChargeCents: number;
         tipCents: number;
         totalCents: number;
+        paidAt: string | null;
     }>;
     subtotalCents: number;
     serviceChargeEnabled: boolean;

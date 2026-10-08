@@ -11,6 +11,7 @@ const TONE_LABEL = {
     open: 'Open',
     prep: 'In prep',
     ready: 'Ready',
+    partial: 'Partial',
     paid: 'Paid',
 } as const;
 

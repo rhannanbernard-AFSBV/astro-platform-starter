@@ -8,7 +8,10 @@ import {
     type ActiveKitchenStatus,
 } from './statusUi';
 import {
+    COURSE_FIRE_LABELS,
+    COURSE_FIRE_OPTIONS,
     TIP_AMOUNT_PRESETS,
+    type CourseFire,
     type KitchenStatus,
     type MenuItem,
     type TableOrder,
@@ -22,6 +25,7 @@ type Props = {
     itemCount: number;
     draftCount: number;
     isPaid: boolean;
+    isPartial: boolean;
     shareFeedback: string | null;
     canClear: boolean;
     canSendKitchen: boolean;
@@ -38,6 +42,7 @@ type Props = {
     onChangeQuantity: (lineId: string, change: number) => void;
     onDeleteLine: (lineId: string) => void;
     onAssignGuest: (lineId: string, guestId: string) => void;
+    onCourseFire: (lineId: string, courseFire: CourseFire) => void;
     onTipPreset: (preset: TipAmountPreset) => void;
     onCustomTipDollars: (value: number) => void;
     onServiceChargeEnabled: (enabled: boolean) => void;
@@ -58,6 +63,7 @@ export default function OrderPanel({
     itemCount,
     draftCount,
     isPaid,
+    isPartial,
     shareFeedback,
     canClear,
     canSendKitchen,
@@ -74,6 +80,7 @@ export default function OrderPanel({
     onChangeQuantity,
     onDeleteLine,
     onAssignGuest,
+    onCourseFire,
     onTipPreset,
     onCustomTipDollars,
     onServiceChargeEnabled,
@@ -88,6 +95,7 @@ export default function OrderPanel({
 }: Props) {
     const guestApproved = Boolean(activeTable.guestBillApprovedAt);
     const guestTicketReady = Boolean(activeTable.billGeneratedAt);
+    const locked = isPaid;
 
     const statusCounts = activeTable.lines.reduce(
         (acc, line) => {
@@ -126,7 +134,8 @@ export default function OrderPanel({
             </div>
             <div className="order-meta">
                 <span>
-                    <Icon name="clock" /> {isPaid ? 'Paid' : 'Dine in'}
+                    <Icon name="clock" />{' '}
+                    {isPaid ? 'Paid' : isPartial ? 'Partial pay' : 'Dine in'}
                 </span>
                 <span>
                     {itemCount} {itemCount === 1 ? 'item' : 'items'}
@@ -141,26 +150,41 @@ export default function OrderPanel({
                     <span>Split check</span>
                 </div>
                 <div className="guest-chips">
-                    {activeTable.guests.map((guest) => (
-                        <div className="guest-chip" key={guest.id}>
-                            <input
-                                value={guest.name}
-                                onChange={(event) => onRenameGuest(guest.id, event.target.value)}
-                                aria-label="Guest name"
-                                disabled={isPaid}
-                            />
-                            {activeTable.guests.length > 1 && !isPaid && (
-                                <button
-                                    type="button"
-                                    onClick={() => onRemoveGuest(guest.id)}
-                                    aria-label={`Remove ${guest.name}`}
-                                >
-                                    ×
-                                </button>
-                            )}
-                        </div>
-                    ))}
-                    {!isPaid && (
+                    {activeTable.guests.map((guest) => {
+                        const guestBill = bill.guestBreakdown.find((entry) => entry.id === guest.id);
+                        return (
+                            <div
+                                className={`guest-chip${guest.paidAt ? ' guest-paid' : ''}`}
+                                key={guest.id}
+                            >
+                                <input
+                                    value={guest.name}
+                                    onChange={(event) =>
+                                        onRenameGuest(guest.id, event.target.value)
+                                    }
+                                    aria-label="Guest name"
+                                    disabled={locked || Boolean(guest.paidAt)}
+                                />
+                                {guest.paidAt ? (
+                                    <span className="guest-paid-tag">Paid</span>
+                                ) : guestBill && guestBill.totalCents > 0 ? (
+                                    <span className="guest-due-tag">
+                                        ${(guestBill.totalCents / 100).toFixed(2)}
+                                    </span>
+                                ) : null}
+                                {activeTable.guests.length > 1 && !locked && !guest.paidAt && (
+                                    <button
+                                        type="button"
+                                        onClick={() => onRemoveGuest(guest.id)}
+                                        aria-label={`Remove ${guest.name}`}
+                                    >
+                                        ×
+                                    </button>
+                                )}
+                            </div>
+                        );
+                    })}
+                    {!locked && (
                         <button type="button" className="add-guest" onClick={onAddGuest}>
                             <Icon name="plus" /> Guest
                         </button>
@@ -253,16 +277,38 @@ export default function OrderPanel({
                                             onChange={(event) =>
                                                 onAssignGuest(line.id, event.target.value)
                                             }
-                                            disabled={isPaid}
+                                            disabled={locked}
                                         >
                                             {activeTable.guests.map((guest) => (
                                                 <option key={guest.id} value={guest.id}>
                                                     {guest.name}
+                                                    {guest.paidAt ? ' · paid' : ''}
                                                 </option>
                                             ))}
                                         </select>
                                     </label>
                                 </div>
+                                {!beverage && !locked && (
+                                    <div
+                                        className="course-filter compact"
+                                        role="group"
+                                        aria-label="Course fire"
+                                    >
+                                        {COURSE_FIRE_OPTIONS.map((course) => (
+                                            <button
+                                                key={course}
+                                                type="button"
+                                                className={
+                                                    line.courseFire === course ? 'active' : ''
+                                                }
+                                                onClick={() => onCourseFire(line.id, course)}
+                                                disabled={line.kitchenStatus === 'served'}
+                                            >
+                                                {COURSE_FIRE_LABELS[course]}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                                 {canAdvanceBeverage && next && (
                                     <div className="beverage-status-actions">
                                         <button
@@ -441,12 +487,13 @@ export default function OrderPanel({
                                         : 'Guest must review & sign bill first'
                                 }
                             >
-                                <Icon name="check" /> Take payment
+                                <Icon name="check" />{' '}
+                                {isPartial ? 'Pay remaining guests' : 'Take payment'}
                             </button>
                             {!guestApproved && itemCount > 0 && (
                                 <p className="pin-help">
                                     Print guest bill, get signature &amp; payment tick before
-                                    collecting. Guest ticket also queues beverages for the server.
+                                    collecting. Then pay per guest or settle the full table.
                                 </p>
                             )}
                         </div>

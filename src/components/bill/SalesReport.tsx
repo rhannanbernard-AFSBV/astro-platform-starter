@@ -120,6 +120,7 @@ export default function SalesReport({
                         <span>{new Date(sale.paidAt).toLocaleTimeString()}</span>
                         <span>
                             {sale.tableLabel}
+                            {sale.guestName ? ` · ${sale.guestName}` : ''}
                             {sale.orderNumbers?.length
                                 ? ` · ${sale.orderNumbers.join(', ')}`
                                 : ''}

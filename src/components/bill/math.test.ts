@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+    buildSnapshot,
     computeBill,
     computePayment,
     getActiveXcgRate,
@@ -18,6 +19,15 @@ const menu: MenuItem[] = [
         description: '',
         category: 'Mains',
         priceCents: 2000,
+        image: '',
+        modifierGroups: [],
+    },
+    {
+        id: 'd1',
+        name: 'Cola',
+        description: '',
+        category: 'Drinks',
+        priceCents: 300,
         image: '',
         modifierGroups: [],
     },
@@ -40,9 +50,12 @@ function table(overrides: Partial<TableOrder> = {}): TableOrder {
                 sentToKitchenAt: null,
                 orderNumber: null,
                 sentByStaffId: null,
+                courseFire: 'fire',
+                bumpedAt: null,
+                bumpCount: 0,
             },
         ],
-        guests: [{ id: 'g1', name: 'Guest 1' }],
+        guests: [{ id: 'g1', name: 'Guest 1', paidAt: null, payment: null }],
         tipAmountPreset: 500,
         tipCents: 500,
         serviceChargeEnabled: true,
@@ -78,11 +91,54 @@ describe('money math', () => {
         expect(bill.tipCents).toBe(500);
         expect(tipCentsOf(table({ tipAmountPreset: 'custom', tipCents: 123 }))).toBe(123);
         expect(bill.totalCents).toBe(4000 + 200 + 500);
+        expect(bill.guestBreakdown[0].id).toBe('g1');
     });
 
     it('computes cash change due', () => {
         const tender = computePayment(1000, 'cash', 1500, 0);
         expect(tender.changeDueCents).toBe(500);
         expect(tender.cashCents).toBe(1500);
+    });
+
+    it('builds kitchen receipt template without drinks or prices payload fields for guest', () => {
+        const order = table({
+            lines: [
+                {
+                    id: 'l1',
+                    menuItemId: 'm1',
+                    quantity: 1,
+                    guestId: 'g1',
+                    note: '',
+                    modifiers: [],
+                    kitchenStatus: 'queued',
+                    sentToKitchenAt: new Date().toISOString(),
+                    orderNumber: 'ORD-1',
+                    sentByStaffId: 'staff_server',
+                    courseFire: 'hold',
+                    bumpedAt: null,
+                    bumpCount: 0,
+                },
+                {
+                    id: 'l2',
+                    menuItemId: 'd1',
+                    quantity: 1,
+                    guestId: 'g1',
+                    note: '',
+                    modifiers: [],
+                    kitchenStatus: 'queued',
+                    sentToKitchenAt: null,
+                    orderNumber: null,
+                    sentByStaffId: 'staff_server',
+                    courseFire: 'fire',
+                    bumpedAt: null,
+                    bumpCount: 0,
+                },
+            ],
+        });
+        const kitchen = buildSnapshot(order, menu, undefined, 'Server', 'kitchen');
+        expect(kitchen.template).toBe('kitchen');
+        expect(kitchen.items).toHaveLength(1);
+        expect(kitchen.items[0].name).toBe('Pasta');
+        expect(kitchen.payment).toBeNull();
     });
 });

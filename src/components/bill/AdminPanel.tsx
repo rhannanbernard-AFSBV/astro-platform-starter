@@ -1,8 +1,10 @@
 import { Icon } from './Icons';
 import { optimizeImageUrl } from './images';
 import Price from './Price';
+import { stationDeepLink, type StationKey } from './posLogic';
 import {
     MENU_CATEGORIES,
+    type AuditEntry,
     type MenuCategory,
     type MenuItem,
     type PosSettings,
@@ -19,6 +21,7 @@ type Props = {
     editingId: string | null;
     newTableLabel: string;
     settings: PosSettings;
+    auditLog: AuditEntry[];
     onFormChange: (updater: (current: MenuForm) => MenuForm) => void;
     onSaveItem: () => void;
     onCancelEdit: () => void;
@@ -30,6 +33,13 @@ type Props = {
     onSettingsChange: (patch: Partial<PosSettings>) => void;
 };
 
+const STATION_LINKS: Array<{ key: StationKey; label: string }> = [
+    { key: 'service', label: 'Service / floor' },
+    { key: 'kitchen', label: 'Kitchen expo' },
+    { key: 'reports', label: 'Sales' },
+    { key: 'admin', label: 'Menu admin' },
+];
+
 export default function AdminPanel({
     menu,
     tables,
@@ -38,6 +48,7 @@ export default function AdminPanel({
     editingId,
     newTableLabel,
     settings,
+    auditLog,
     onFormChange,
     onSaveItem,
     onCancelEdit,
@@ -48,6 +59,15 @@ export default function AdminPanel({
     onSwitchTable,
     onSettingsChange,
 }: Props) {
+    const copyStation = async (station: StationKey) => {
+        const url = stationDeepLink(station);
+        try {
+            await navigator.clipboard.writeText(url);
+        } catch {
+            /* ignore */
+        }
+    };
+
     return (
         <section className="menu-panel admin-panel">
             <div className="menu-heading">
@@ -90,10 +110,65 @@ export default function AdminPanel({
                             }
                         />
                     </label>
+                    <label>
+                        Kitchen bump after (minutes)
+                        <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={settings.bumpAfterMinutes}
+                            onChange={(event) =>
+                                onSettingsChange({
+                                    bumpAfterMinutes: Math.max(
+                                        1,
+                                        Number(event.target.value || 8),
+                                    ),
+                                })
+                            }
+                        />
+                    </label>
                 </div>
                 <p className="fx-note">
-                    FX and default service charge are stored locally and sync across open tabs.
+                    FX, service charge, and bump timer sync across open tabs.
                 </p>
+                <h2>Station deep-links</h2>
+                <p className="fx-note">
+                    Open each station on a tablet or second screen. Links set{' '}
+                    <code>?station=</code> so the view opens ready for that role.
+                </p>
+                <div className="station-link-list">
+                    {STATION_LINKS.map((entry) => (
+                        <div key={entry.key} className="station-link-row">
+                            <a href={stationDeepLink(entry.key)}>{entry.label}</a>
+                            <code>?station={entry.key}</code>
+                            <button type="button" onClick={() => void copyStation(entry.key)}>
+                                Copy
+                            </button>
+                        </div>
+                    ))}
+                </div>
+                <h2>Void audit log</h2>
+                {auditLog.length === 0 ? (
+                    <p className="fx-note">No voids recorded yet.</p>
+                ) : (
+                    <ul className="audit-log-list">
+                        {auditLog.slice(0, 12).map((entry) => (
+                            <li key={entry.id}>
+                                <strong>
+                                    {entry.kind.replace('_', ' ')} · {entry.staffName}
+                                </strong>
+                                <span>
+                                    {entry.tableLabel ?? '—'} ·{' '}
+                                    {new Date(entry.createdAt).toLocaleString()}
+                                </span>
+                                <span>
+                                    {entry.reason}
+                                    {entry.details ? ` — ${entry.details}` : ''}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                )}
             </div>
             <div className="admin-grid">
                 <form

@@ -11,6 +11,13 @@ import type { PaymentMethod } from './types';
 
 export type TenderCurrency = 'USD' | 'XCG';
 
+export type PayGuestOption = {
+    id: string;
+    name: string;
+    totalCents: number;
+    paidAt: string | null;
+};
+
 type Props = {
     totalCents: number;
     payMethod: PaymentMethod;
@@ -18,6 +25,9 @@ type Props = {
     cashInput: string;
     cardInput: string;
     preferredMethod: PaymentMethod | null;
+    guests: PayGuestOption[];
+    selectedGuestId: string | null;
+    onSelectGuest: (guestId: string | null) => void;
     onMethod: (method: PaymentMethod) => void;
     onCurrency: (currency: TenderCurrency) => void;
     onCashInput: (value: string) => void;
@@ -52,6 +62,9 @@ export default function PaymentModal({
     cashInput,
     cardInput,
     preferredMethod,
+    guests,
+    selectedGuestId,
+    onSelectGuest,
     onMethod,
     onCurrency,
     onCashInput,
@@ -70,6 +83,8 @@ export default function PaymentModal({
         tenderCurrency === 'XCG'
             ? (usdCentsToXcgCents(totalCents) / 100).toFixed(2)
             : (totalCents / 100).toFixed(2);
+    const unpaid = guests.filter((guest) => !guest.paidAt && guest.totalCents > 0);
+    const showGuestSplit = unpaid.length > 0;
 
     return (
         <div className="receipt-overlay" role="dialog" aria-modal="true" aria-label="Take payment">
@@ -90,6 +105,39 @@ export default function PaymentModal({
                     </button>
                 </div>
                 <div className="modifier-body">
+                    {showGuestSplit && (
+                        <div className="pay-guest-block">
+                            <p className="eyebrow">Pay per guest</p>
+                            <div className="tip-presets" role="group" aria-label="Pay for guest">
+                                <button
+                                    type="button"
+                                    className={selectedGuestId === null ? 'active' : ''}
+                                    onClick={() => onSelectGuest(null)}
+                                >
+                                    Full table
+                                </button>
+                                {unpaid.map((guest) => (
+                                    <button
+                                        key={guest.id}
+                                        type="button"
+                                        className={selectedGuestId === guest.id ? 'active' : ''}
+                                        onClick={() => onSelectGuest(guest.id)}
+                                    >
+                                        {guest.name} · ${(guest.totalCents / 100).toFixed(2)}
+                                    </button>
+                                ))}
+                            </div>
+                            {guests.some((guest) => guest.paidAt) && (
+                                <p className="pin-help">
+                                    Already paid:{' '}
+                                    {guests
+                                        .filter((guest) => guest.paidAt)
+                                        .map((guest) => guest.name)
+                                        .join(', ')}
+                                </p>
+                            )}
+                        </div>
+                    )}
                     <div className="tip-presets" role="group" aria-label="Tender currency">
                         {(['USD', 'XCG'] as TenderCurrency[]).map((currency) => (
                             <button
@@ -118,6 +166,9 @@ export default function PaymentModal({
                     <p className="pin-help">
                         Amount due in {tenderCurrency}:{' '}
                         {tenderCurrency === 'XCG' ? moneyXcg(totalCents) : `$${totalInCurrency}`}
+                        {selectedGuestId
+                            ? ` · ${unpaid.find((g) => g.id === selectedGuestId)?.name ?? 'Guest'}`
+                            : ''}
                     </p>
                     {(payMethod === 'cash' || payMethod === 'mixed') && (
                         <label className="custom-tip">
@@ -154,7 +205,7 @@ export default function PaymentModal({
                             Cancel
                         </button>
                         <button type="button" className="generate-button" onClick={onComplete}>
-                            Complete payment
+                            {selectedGuestId ? 'Pay guest' : 'Complete payment'}
                         </button>
                     </div>
                 </div>

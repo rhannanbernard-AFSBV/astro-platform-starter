@@ -5,11 +5,13 @@ import type {
     OrderLine,
     PaymentMethod,
     PaymentTender,
+    ReceiptTemplate,
     RestaurantProfile,
     SaleRecord,
     TableOrder,
     TipAmountPreset,
 } from './types';
+import { isKitchenBoundItem } from './statusUi';
 
 /** Default display rate: 1.80 XCG = 1 USD (override via settings / setActiveXcgRate) */
 export const XCG_PER_USD = 1.8;
@@ -123,6 +125,9 @@ export function computeBill(table: TableOrder, menu: MenuItem[]): BillResult {
                 note: line.note,
                 modifiers: line.modifiers.map((mod) => mod.name),
                 orderNumber: line.orderNumber,
+                kitchenStatus: line.kitchenStatus,
+                courseFire: line.courseFire,
+                category: item.category,
             };
         })
         .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
@@ -140,11 +145,13 @@ export function computeBill(table: TableOrder, menu: MenuItem[]): BillResult {
         const guestService = Math.round(serviceChargeCents * share);
         const guestTip = Math.round(tipCents * share);
         return {
+            id: guest.id,
             name: guest.name,
             subtotalCents: guestSubtotal,
             serviceChargeCents: guestService,
             tipCents: guestTip,
             totalCents: guestSubtotal + guestService + guestTip,
+            paidAt: guest.paidAt,
         };
     });
 
@@ -169,8 +176,13 @@ export function buildSnapshot(
     menu: MenuItem[],
     restaurant: RestaurantProfile = DEFAULT_RESTAURANT,
     serverName = 'Server',
+    template: ReceiptTemplate = 'guest',
 ): BillSnapshot {
     const bill = computeBill(table, menu);
+    const kitchenItems =
+        template === 'kitchen'
+            ? bill.items.filter((item) => item.category !== 'Drinks')
+            : bill.items;
     return {
         restaurant,
         tableLabel: table.label,
@@ -178,7 +190,8 @@ export function buildSnapshot(
         status: table.status,
         serverName,
         orderNumbers: collectOrderNumbers(table.lines),
-        items: bill.items,
+        template,
+        items: kitchenItems,
         guests: bill.guestBreakdown,
         subtotalCents: bill.subtotalCents,
         serviceChargeEnabled: table.serviceChargeEnabled,
@@ -186,9 +199,9 @@ export function buildSnapshot(
         serviceChargeCents: bill.serviceChargeCents,
         tipCents: bill.tipCents,
         totalCents: bill.totalCents,
-        payment: table.payment,
-        guestSignatureDataUrl: table.guestSignatureDataUrl,
-        guestPreferredPayment: table.guestPreferredPayment,
+        payment: template === 'paid' ? table.payment : template === 'kitchen' ? null : table.payment,
+        guestSignatureDataUrl: template === 'kitchen' ? null : table.guestSignatureDataUrl,
+        guestPreferredPayment: template === 'kitchen' ? null : table.guestPreferredPayment,
     };
 }
 
@@ -271,6 +284,7 @@ export function salesToCsv(sales: SaleRecord[]): string {
     const header = [
         'paid_at',
         'table',
+        'guest',
         'server',
         'items',
         'subtotal',
@@ -287,6 +301,7 @@ export function salesToCsv(sales: SaleRecord[]): string {
         [
             sale.paidAt,
             sale.tableLabel,
+            sale.guestName ?? '',
             sale.serverName,
             sale.itemCount,
             (sale.subtotalCents / 100).toFixed(2),
