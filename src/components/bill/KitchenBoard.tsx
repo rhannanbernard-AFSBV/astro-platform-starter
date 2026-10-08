@@ -1,0 +1,410 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Icon } from './Icons';
+import { isTicketLate, ticketWaitMinutes } from './posLogic';
+import StatusTabs, { StatusChip } from './StatusTabs';
+import {
+    isKitchenBoundItem,
+    type ActiveKitchenStatus,
+} from './statusUi';
+import {
+    COURSE_FIRE_LABELS,
+    COURSE_FIRE_OPTIONS,
+    type CourseFire,
+    type KitchenStatus,
+    type MenuItem,
+    type TableOrder,
+} from './types';
+
+type Ticket = {
+    table: TableOrder;
+    line: TableOrder['lines'][number];
+    item: MenuItem;
+};
+
+type Props = {
+    tables: TableOrder[];
+    menuById: Map<string, MenuItem>;
+    bumpAfterMinutes: number;
+    canDeleteTickets: boolean;
+    onStatus: (tableId: string, lineId: string, status: KitchenStatus) => void;
+    onDeleteTicket: (tableId: string, lineId: string) => void;
+    onBump: (tableId: string, lineId: string) => void;
+    onRecall: (tableId: string, lineId: string) => void;
+    onCourseFire: (tableId: string, lineId: string, courseFire: CourseFire) => void;
+    onFireAllHeld: (tableId: string) => void;
+};
+
+export default function KitchenBoard({
+    tables,
+    menuById,
+    bumpAfterMinutes,
+    canDeleteTickets,
+    onStatus,
+    onDeleteTicket,
+    onBump,
+    onRecall,
+    onCourseFire,
+    onFireAllHeld,
+}: Props) {
+    const [statusFilter, setStatusFilter] = useState<ActiveKitchenStatus | 'all'>('all');
+    const [courseFilter, setCourseFilter] = useState<CourseFire | 'all'>('all');
+    const [activeTableId, setActiveTableId] = useState<string>('');
+    const [now, setNow] = useState(() => Date.now());
+
+    useEffect(() => {
+        const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+        return () => window.clearInterval(timer);
+    }, []);
+
+    const tableGroups = useMemo(() => {
+        return tables
+            .map((table) => {
+                const tickets = table.lines
+                    .filter((line) => {
+                        if (line.kitchenStatus === 'draft') return false;
+                        const item = menuById.get(line.menuItemId);
+                        return isKitchenBoundItem(item);
+                    })
+                    .map((line) => {
+                        const item = menuById.get(line.menuItemId);
+                        return item ? ({ table, line, item } satisfies Ticket) : null;
+                    })
+                    .filter((entry): entry is Ticket => Boolean(entry));
+                return { table, tickets };
+            })
+            .filter((group) => group.tickets.some((t) => t.line.kitchenStatus !== 'served'));
+    }, [tables, menuById]);
+
+    useEffect(() => {
+        if (tableGroups.length === 0) {
+            setActiveTableId('');
+            return;
+        }
+        if (!tableGroups.some((group) => group.table.id === activeTableId)) {
+            setActiveTableId(tableGroups[0].table.id);
+        }
+    }, [tableGroups, activeTableId]);
+
+    const activeGroup =
+        tableGroups.find((group) => group.table.id === activeTableId) ?? tableGroups[0] ?? null;
+
+    const filteredTickets = useMemo(() => {
+        if (!activeGroup) return [];
+        return activeGroup.tickets.filter((ticket) => {
+            if (statusFilter !== 'all' && ticket.line.kitchenStatus !== statusFilter) return false;
+            if (courseFilter !== 'all' && ticket.line.courseFire !== courseFilter) return false;
+            if (statusFilter === 'all' && ticket.line.kitchenStatus === 'served') return false;
+            return true;
+        });
+    }, [activeGroup, statusFilter, courseFilter]);
+
+    const statusCounts = useMemo(() => {
+        const counts: Partial<Record<ActiveKitchenStatus, number>> = {
+            queued: 0,
+            preparing: 0,
+            ready: 0,
+            served: 0,
+        };
+        for (const ticket of activeGroup?.tickets ?? []) {
+            const status = ticket.line.kitchenStatus;
+            if (
+                status === 'queued' ||
+                status === 'preparing' ||
+                status === 'ready' ||
+                status === 'served'
+            ) {
+                counts[status] = (counts[status] ?? 0) + 1;
+            }
+        }
+        return counts;
+    }, [activeGroup]);
+
+    const heldCount =
+        activeGroup?.tickets.filter(
+            (t) => t.line.courseFire === 'hold' && t.line.kitchenStatus !== 'served',
+        ).length ?? 0;
+
+    const totalActive = tableGroups.reduce(
+        (sum, group) =>
+            sum + group.tickets.filter((t) => t.line.kitchenStatus !== 'served').length,
+        0,
+    );
+
+    return (
+        <section className="menu-panel kitchen-panel">
+            <div className="menu-heading">
+                <div>
+                    <p className="eyebrow">Expo</p>
+                    <h1>Kitchen tickets</h1>
+                </div>
+                <p className="ticket-count">{totalActive} active</p>
+            </div>
+
+            <StatusTabs
+                active={statusFilter}
+                counts={statusCounts}
+                onSelect={setStatusFilter}
+            />
+
+            <div className="course-filter" role="group" aria-label="Course fire">
+                <button
+                    type="button"
+                    className={courseFilter === 'all' ? 'active' : ''}
+                    onClick={() => setCourseFilter('all')}
+                >
+                    All courses
+                </button>
+                {COURSE_FIRE_OPTIONS.map((course) => (
+                    <button
+                        key={course}
+                        type="button"
+                        className={courseFilter === course ? 'active' : ''}
+                        onClick={() => setCourseFilter(course)}
+                    >
+                        {COURSE_FIRE_LABELS[course]}
+                    </button>
+                ))}
+            </div>
+
+            {tableGroups.length === 0 ? (
+                <div className="empty-order">
+                    <span>
+                        <Icon name="chef" />
+                    </span>
+                    <h3>No active kitchen tickets</h3>
+                    <p>Food tickets appear here after Service sends them. Beverages stay with the server.</p>
+                </div>
+            ) : (
+                <>
+                    <div className="kitchen-table-tabs" role="tablist" aria-label="Tables">
+                        {tableGroups.map((group) => (
+                            <button
+                                key={group.table.id}
+                                type="button"
+                                role="tab"
+                                aria-selected={group.table.id === activeGroup?.table.id}
+                                className={
+                                    group.table.id === activeGroup?.table.id
+                                        ? 'kitchen-table-tab active'
+                                        : 'kitchen-table-tab'
+                                }
+                                onClick={() => setActiveTableId(group.table.id)}
+                            >
+                                <strong>{group.table.label}</strong>
+                                <span>
+                                    {
+                                        group.tickets.filter((t) => t.line.kitchenStatus !== 'served')
+                                            .length
+                                    }
+                                </span>
+                            </button>
+                        ))}
+                    </div>
+
+                    {activeGroup && (
+                        <div className="kitchen-table-section">
+                            <header className="kitchen-table-header">
+                                <div>
+                                    <p className="eyebrow">Table</p>
+                                    <h2>{activeGroup.table.label}</h2>
+                                </div>
+                                <div className="kitchen-header-actions">
+                                    {heldCount > 0 && (
+                                        <button
+                                            type="button"
+                                            className="secondary-button"
+                                            onClick={() => onFireAllHeld(activeGroup.table.id)}
+                                        >
+                                            Fire held ({heldCount})
+                                        </button>
+                                    )}
+                                    <p className="ticket-count">
+                                        {filteredTickets.length} ticket
+                                        {filteredTickets.length === 1 ? '' : 's'}
+                                    </p>
+                                </div>
+                            </header>
+
+                            {filteredTickets.length === 0 ? (
+                                <div className="empty-order compact-empty">
+                                    <h3>No tickets in this status</h3>
+                                    <p>Choose another color-coded status tab, course, or table.</p>
+                                </div>
+                            ) : (
+                                <div className="ticket-grid">
+                                    {filteredTickets.map((ticket) => {
+                                        const late = isTicketLate(
+                                            ticket.line,
+                                            bumpAfterMinutes,
+                                            now,
+                                        );
+                                        const wait = ticketWaitMinutes(ticket.line, now);
+                                        return (
+                                            <article
+                                                key={ticket.line.id}
+                                                className={`ticket-card ${ticket.line.kitchenStatus} course-${ticket.line.courseFire}${late ? ' late' : ''}${ticket.line.bumpCount > 0 ? ' bumped' : ''}`}
+                                            >
+                                                <header>
+                                                    <strong>
+                                                        {ticket.line.orderNumber ?? 'No order #'}
+                                                    </strong>
+                                                    <StatusChip status={ticket.line.kitchenStatus} />
+                                                </header>
+                                                <div className="ticket-meta-row">
+                                                    <span
+                                                        className={`course-chip course-${ticket.line.courseFire}`}
+                                                    >
+                                                        {COURSE_FIRE_LABELS[ticket.line.courseFire]}
+                                                    </span>
+                                                    {ticket.line.kitchenStatus !== 'served' && (
+                                                        <span className={`wait-chip${late ? ' late' : ''}`}>
+                                                            {wait}m
+                                                            {late ? ' · late' : ''}
+                                                        </span>
+                                                    )}
+                                                    {ticket.line.bumpCount > 0 && (
+                                                        <span className="bump-chip">
+                                                            Bump ×{ticket.line.bumpCount}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <h3>
+                                                    {ticket.line.quantity}× {ticket.item.name}
+                                                </h3>
+                                                {ticket.line.modifiers.length > 0 && (
+                                                    <p>
+                                                        {ticket.line.modifiers
+                                                            .map((mod) => mod.name)
+                                                            .join(' · ')}
+                                                    </p>
+                                                )}
+                                                {ticket.line.note && (
+                                                    <p className="ticket-note">
+                                                        Note: {ticket.line.note}
+                                                    </p>
+                                                )}
+                                                <div className="course-filter compact" role="group">
+                                                    {COURSE_FIRE_OPTIONS.map((course) => (
+                                                        <button
+                                                            key={course}
+                                                            type="button"
+                                                            className={
+                                                                ticket.line.courseFire === course
+                                                                    ? 'active'
+                                                                    : ''
+                                                            }
+                                                            onClick={() =>
+                                                                onCourseFire(
+                                                                    ticket.table.id,
+                                                                    ticket.line.id,
+                                                                    course,
+                                                                )
+                                                            }
+                                                        >
+                                                            {COURSE_FIRE_LABELS[course]}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                <div className="ticket-actions">
+                                                    {ticket.line.kitchenStatus === 'queued' &&
+                                                        ticket.line.courseFire !== 'hold' && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    onStatus(
+                                                                        ticket.table.id,
+                                                                        ticket.line.id,
+                                                                        'preparing',
+                                                                    )
+                                                                }
+                                                            >
+                                                                Start
+                                                            </button>
+                                                        )}
+                                                    {(ticket.line.kitchenStatus === 'queued' ||
+                                                        ticket.line.kitchenStatus ===
+                                                            'preparing') &&
+                                                        ticket.line.courseFire !== 'hold' && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    onStatus(
+                                                                        ticket.table.id,
+                                                                        ticket.line.id,
+                                                                        'ready',
+                                                                    )
+                                                                }
+                                                            >
+                                                                Ready
+                                                            </button>
+                                                        )}
+                                                    {ticket.line.kitchenStatus === 'ready' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                onStatus(
+                                                                    ticket.table.id,
+                                                                    ticket.line.id,
+                                                                    'served',
+                                                                )
+                                                            }
+                                                        >
+                                                            Served
+                                                        </button>
+                                                    )}
+                                                    {ticket.line.kitchenStatus === 'served' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                onRecall(
+                                                                    ticket.table.id,
+                                                                    ticket.line.id,
+                                                                )
+                                                            }
+                                                        >
+                                                            Recall
+                                                        </button>
+                                                    )}
+                                                    {(ticket.line.kitchenStatus === 'queued' ||
+                                                        ticket.line.kitchenStatus ===
+                                                            'preparing') && (
+                                                        <button
+                                                            type="button"
+                                                            className="bump-button"
+                                                            onClick={() =>
+                                                                onBump(
+                                                                    ticket.table.id,
+                                                                    ticket.line.id,
+                                                                )
+                                                            }
+                                                        >
+                                                            Bump
+                                                        </button>
+                                                    )}
+                                                    {canDeleteTickets && (
+                                                        <button
+                                                            type="button"
+                                                            className="danger-ticket"
+                                                            onClick={() =>
+                                                                onDeleteTicket(
+                                                                    ticket.table.id,
+                                                                    ticket.line.id,
+                                                                )
+                                                            }
+                                                        >
+                                                            Void
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </article>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </>
+            )}
+        </section>
+    );
+}
