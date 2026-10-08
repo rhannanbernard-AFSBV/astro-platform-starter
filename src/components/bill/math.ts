@@ -11,8 +11,31 @@ import type {
     TipPreset,
 } from './types';
 
-export const money = (cents: number) =>
+/** Official display rate: 1.80 XCG = 1 USD */
+export const XCG_PER_USD = 1.8;
+
+export const moneyUsd = (cents: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
+
+/** @deprecated Prefer moneyUsd / formatDual — kept for transitional imports */
+export const money = moneyUsd;
+
+export function usdCentsToXcgCents(usdCents: number): number {
+    return Math.round((usdCents * 180) / 100);
+}
+
+export function xcgCentsToUsdCents(xcgCents: number): number {
+    return Math.round((xcgCents * 100) / 180);
+}
+
+export const moneyXcg = (usdCents: number) => {
+    const xcgCents = usdCentsToXcgCents(usdCents);
+    return `XCG ${(xcgCents / 100).toFixed(2)}`;
+};
+
+export function formatDual(usdCents: number): string {
+    return `${moneyUsd(usdCents)} · ${moneyXcg(usdCents)}`;
+}
 
 export function tipPercentOf(table: Pick<TableOrder, 'tipPreset' | 'tipCustomPercent'>): number {
     return table.tipPreset === 'custom' ? Math.max(0, table.tipCustomPercent) : table.tipPreset;
@@ -39,10 +62,7 @@ export function lineSubtotalCents(lines: OrderLine[], menuById: Map<string, Menu
     }, 0);
 }
 
-export function computeBill(
-    table: TableOrder,
-    menu: MenuItem[],
-): {
+export type BillResult = {
     subtotalCents: number;
     taxCents: number;
     tipCents: number;
@@ -50,7 +70,9 @@ export function computeBill(
     tipPercent: number;
     guestBreakdown: BillSnapshot['guests'];
     items: BillSnapshot['items'];
-} {
+};
+
+export function computeBill(table: TableOrder, menu: MenuItem[]): BillResult {
     const menuById = new Map(menu.map((item) => [item.id, item]));
     const tipPercent = tipPercentOf(table);
     const items = table.lines

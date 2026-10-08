@@ -1342,6 +1342,73 @@ button {
     }
 }
 
+.price-dual {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    line-height: 1.15;
+}
+
+.price-dual strong {
+    color: var(--green);
+    font-size: 16px;
+}
+
+.price-dual small,
+.price-dual.compact small {
+    color: #8a7b68;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.price-dual.compact {
+    display: inline-flex;
+    flex-direction: column;
+}
+
+.card-footer .price-dual strong,
+.order-item-top .price-dual strong,
+.bill-summary .price-dual strong {
+    color: var(--green);
+}
+
+.bill-summary .total .price-dual strong {
+    font-size: 22px;
+}
+
+.fx-note {
+    margin: 8px 0 0;
+    color: #aaa49a;
+    font-size: 11px;
+    text-align: center;
+}
+
+.view-fallback {
+    padding: 80px 24px;
+    color: var(--muted);
+    text-align: center;
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 22px;
+}
+
+.ticket-count {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.ticket-virtual {
+    margin-top: 24px;
+    display: grid;
+    gap: 12px;
+}
+
+.ticket-virtual .ticket-card {
+    margin-bottom: 12px;
+}
+
 .online-pill {
     display: inline-flex;
     align-items: center;
