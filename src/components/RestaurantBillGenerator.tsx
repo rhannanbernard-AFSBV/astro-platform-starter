@@ -1112,17 +1112,19 @@ export default function RestaurantBillGenerator() {
                         }))
                     }
                     onApproveAndCollect={() => {
-                        if (!activeTable.guestPreferredPayment || !activeTable.guestSignatureDataUrl) {
+                        const method = activeTable.guestPreferredPayment;
+                        if (!method) {
                             setShareFeedback('Tick a payment option and sign before collecting.');
                             return;
                         }
                         updateActiveTable((table) => ({
                             ...table,
                             guestBillApprovedAt: new Date().toISOString(),
+                            guestPreferredPayment: method,
                             billGeneratedAt: table.billGeneratedAt ?? new Date().toISOString(),
                         }));
                         setGuestBillOpen(false);
-                        setPayMethod(activeTable.guestPreferredPayment);
+                        setPayMethod(method);
                         setTenderCurrency('USD');
                         fillPaymentDefaults('USD');
                         setPaymentOpen(true);

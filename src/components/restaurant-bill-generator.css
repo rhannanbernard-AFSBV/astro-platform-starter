@@ -1889,6 +1889,7 @@ button {
 }
 
 .signature-pad {
+    display: block;
     width: 100%;
     height: 140px;
     border: 1px dashed #b9b2a6;
@@ -1896,6 +1897,15 @@ button {
     background: #fff;
     touch-action: none;
     cursor: crosshair;
+}
+
+.signature-confirm {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 13px;
+    cursor: pointer;
 }
 
 .receipt-signature {
