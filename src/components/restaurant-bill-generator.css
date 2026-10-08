@@ -1570,18 +1570,239 @@ button {
     font-weight: 700;
 }
 
+.status-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 12px 0 16px;
+}
+
+.status-tabs-legend {
+    margin-top: 4px;
+    margin-bottom: 12px;
+}
+
+.status-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--ink);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    text-transform: none;
+    cursor: default;
+}
+
+button.status-tab {
+    cursor: pointer;
+}
+
+.status-tab.active {
+    box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.status-dot-swatch {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.status-tab-all {
+    color: var(--muted);
+}
+
+.status-tab-queued,
+.status-chip-line.status-tab-queued {
+    color: #8a5a12;
+    background: #fff4d6;
+    border-color: #e2c16a;
+}
+
+.status-tab-preparing,
+.status-chip-line.status-tab-preparing {
+    color: #9a3412;
+    background: #ffedd5;
+    border-color: #fb923c;
+}
+
+.status-tab-ready,
+.status-chip-line.status-tab-ready {
+    color: #166534;
+    background: #dcfce7;
+    border-color: #4ade80;
+}
+
+.status-tab-served,
+.status-chip-line.status-tab-served {
+    color: #1e3a8a;
+    background: #dbeafe;
+    border-color: #60a5fa;
+}
+
+.status-chip-line {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 6px;
+    padding: 3px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.status-chip-draft {
+    color: var(--muted);
+    background: #f3f1ec;
+}
+
+.bev-tag {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: #e8f1ff;
+    color: #1d4ed8;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    vertical-align: middle;
+}
+
+.beverage-line {
+    border-left: 3px solid #60a5fa;
+    padding-left: 10px;
+}
+
+.beverage-status-actions {
+    margin-top: 8px;
+}
+
+.bev-advance {
+    border: 1px solid currentColor;
+    border-radius: 10px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.bev-help {
+    margin-top: 6px !important;
+}
+
+.kitchen-table-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 8px 0 18px;
+}
+
+.kitchen-table-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: #fff;
+    color: var(--ink);
+    cursor: pointer;
+}
+
+.kitchen-table-tab strong {
+    font-size: 14px;
+}
+
+.kitchen-table-tab span {
+    min-width: 22px;
+    height: 22px;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    background: #f1eee7;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.kitchen-table-tab.active {
+    border-color: var(--green);
+    background: #edf2ee;
+}
+
+.kitchen-table-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+}
+
+.kitchen-table-header h2 {
+    margin: 0;
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 28px;
+}
+
+.ticket-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 14px;
+}
+
+.compact-empty {
+    margin-top: 12px;
+}
+
 .ticket-card.queued {
-    border-color: #d8c3a5;
+    border-color: #e2c16a;
+    background: #fffaf0;
+    box-shadow: inset 4px 0 0 #e2c16a;
 }
 
 .ticket-card.preparing {
-    border-color: #c9a36a;
-    background: #fffaf2;
+    border-color: #fb923c;
+    background: #fff7ed;
+    box-shadow: inset 4px 0 0 #fb923c;
 }
 
 .ticket-card.ready {
-    border-color: #8fb39a;
+    border-color: #4ade80;
     background: #f3faf5;
+    box-shadow: inset 4px 0 0 #4ade80;
+}
+
+.ticket-card.served {
+    border-color: #60a5fa;
+    background: #eff6ff;
+    box-shadow: inset 4px 0 0 #60a5fa;
+}
+
+.order-item.status-queued {
+    box-shadow: inset 3px 0 0 #e2c16a;
+}
+
+.order-item.status-preparing {
+    box-shadow: inset 3px 0 0 #fb923c;
+}
+
+.order-item.status-ready {
+    box-shadow: inset 3px 0 0 #4ade80;
+}
+
+.order-item.status-served {
+    box-shadow: inset 3px 0 0 #60a5fa;
 }
 
 .report-stats {

@@ -43,6 +43,7 @@ import {
     canRunKitchenBoard,
     canSendToKitchen,
     canTakePayment,
+    canUpdateBeverageStatus,
     canVoidKitchenItems,
     DEFAULT_VIEW_BY_ROLE,
     ROLE_LABELS,
@@ -56,6 +57,7 @@ import {
     loadState,
     notificationsForStaff,
 } from './bill/storage';
+import { isBeverageItem, isKitchenBoundItem } from './bill/statusUi';
 import { useDebouncedSave } from './bill/useDebouncedSave';
 import {
     type AppNotification,
@@ -177,10 +179,32 @@ export default function RestaurantBillGenerator() {
         [activeTable.lines],
     );
     const draftCount = useMemo(
-        () => activeTable.lines.filter((line) => line.kitchenStatus === 'draft').length,
-        [activeTable.lines],
+        () =>
+            activeTable.lines.filter((line) => {
+                if (line.kitchenStatus !== 'draft') return false;
+                return isKitchenBoundItem(menuById.get(line.menuItemId));
+            }).length,
+        [activeTable.lines, menuById],
     );
     const isPaid = activeTable.status === 'paid';
+
+    const queueDraftBeverages = (table: TableOrder): TableOrder => {
+        let changed = false;
+        const lines = table.lines.map((line) => {
+            if (line.kitchenStatus !== 'draft') return line;
+            const item = menuById.get(line.menuItemId);
+            if (!isBeverageItem(item)) return line;
+            changed = true;
+            return {
+                ...line,
+                kitchenStatus: 'queued' as const,
+                sentToKitchenAt: null,
+                orderNumber: line.orderNumber,
+                sentByStaffId: staff.id,
+            };
+        });
+        return changed ? { ...table, lines } : table;
+    };
 
     const updateActiveTable = (updater: (table: TableOrder) => TableOrder) => {
         setState((current) => ({
@@ -358,6 +382,13 @@ export default function RestaurantBillGenerator() {
             setShareFeedback('Kitchen role required to update ticket status.');
             return;
         }
+        const targetTable = state.tables.find((table) => table.id === tableId);
+        const targetLine = targetTable?.lines.find((line) => line.id === lineId);
+        const targetItem = targetLine ? menuById.get(targetLine.menuItemId) : null;
+        if (isBeverageItem(targetItem)) {
+            setShareFeedback('Beverages are managed by the server, not the kitchen board.');
+            return;
+        }
         setState((current) => ({
             ...current,
             tables: current.tables.map((table) =>
@@ -373,7 +404,35 @@ export default function RestaurantBillGenerator() {
         }));
     };
 
+    const setBeverageStatus = (lineId: string, kitchenStatus: KitchenStatus) => {
+        if (!canUpdateBeverageStatus(staff.role)) {
+            setShareFeedback('Server role required to update beverage status.');
+            return;
+        }
+        if (!activeTable.billGeneratedAt) {
+            setShareFeedback('Generate a guest ticket before updating beverage status.');
+            return;
+        }
+        const line = activeTable.lines.find((entry) => entry.id === lineId);
+        const item = line ? menuById.get(line.menuItemId) : null;
+        if (!isBeverageItem(item)) {
+            setShareFeedback('Only beverages can be updated this way.');
+            return;
+        }
+        updateActiveTable((table) => ({
+            ...table,
+            lines: table.lines.map((entry) =>
+                entry.id === lineId ? { ...entry, kitchenStatus } : entry,
+            ),
+        }));
+        setShareFeedback(`Beverage marked ${kitchenStatus}.`);
+    };
+
     const deleteKitchenTicket = (tableId: string, lineId: string) => {
+        if (staff.role === 'kitchen') {
+            setShareFeedback('Kitchen staff cannot delete tickets. Ask a Manager.');
+            return;
+        }
         const apply = () =>
             setState((current) => ({
                 ...current,
@@ -411,11 +470,15 @@ export default function RestaurantBillGenerator() {
     const openGuestBill = () => {
         if (!itemCount || isPaid || !canTakePayment(staff.role)) return;
         const generatedAt = activeTable.billGeneratedAt ?? new Date().toISOString();
-        updateActiveTable((table) => ({
-            ...table,
-            billGeneratedAt: table.billGeneratedAt ?? generatedAt,
-        }));
+        updateActiveTable((table) => {
+            const withTicket = {
+                ...table,
+                billGeneratedAt: table.billGeneratedAt ?? generatedAt,
+            };
+            return queueDraftBeverages(withTicket);
+        });
         setGuestBillOpen(true);
+        setShareFeedback('Guest ticket generated. Beverages queued for server status updates.');
     };
 
     const openPayment = () => {
@@ -501,16 +564,27 @@ export default function RestaurantBillGenerator() {
         if (!draftCount || isPaid || !canSendToKitchen(staff.role)) return;
         const sentAt = new Date().toISOString();
         const draftQty = draftCount;
+        const menuLookup = menuById;
         setState((current) => {
             const table = current.tables.find((entry) => entry.id === current.activeTableId);
             if (!table) return current;
+            const foodDraftIds = new Set(
+                table.lines
+                    .filter(
+                        (line) =>
+                            line.kitchenStatus === 'draft' &&
+                            isKitchenBoundItem(menuLookup.get(line.menuItemId)),
+                    )
+                    .map((line) => line.id),
+            );
+            if (foodDraftIds.size === 0) return current;
             const orderNumber = formatOrderNumber(current.nextOrderSeq);
             const notifications: AppNotification[] = [
                 {
                     id: createId('notif'),
                     kind: 'kitchen_ticket',
                     title: 'New kitchen ticket',
-                    message: `${table.label} · ${orderNumber} · ${draftQty} item(s) ready for prep`,
+                    message: `${table.label} · ${orderNumber} · ${foodDraftIds.size} food item(s) ready for prep`,
                     orderNumber,
                     tableLabel: table.label,
                     audienceRole: 'kitchen',
@@ -522,7 +596,7 @@ export default function RestaurantBillGenerator() {
                     id: createId('notif'),
                     kind: 'server_ack',
                     title: 'Ticket sent to kitchen',
-                    message: `Your ticket ${orderNumber} for ${table.label} was sent for prep.`,
+                    message: `Your food ticket ${orderNumber} for ${table.label} was sent for prep. Beverages stay with the server.`,
                     orderNumber,
                     tableLabel: table.label,
                     audienceRole: 'server',
@@ -541,7 +615,7 @@ export default function RestaurantBillGenerator() {
                         : {
                               ...entry,
                               lines: entry.lines.map((line) =>
-                                  line.kitchenStatus === 'draft'
+                                  foodDraftIds.has(line.id)
                                       ? {
                                             ...line,
                                             kitchenStatus: 'queued' as const,
@@ -555,23 +629,22 @@ export default function RestaurantBillGenerator() {
                 ),
             };
         });
-        setShareFeedback(`${draftQty} item(s) sent to kitchen with a new order number.`);
+        setShareFeedback(
+            `${draftQty} food item(s) sent to kitchen. Beverages are not sent — queue them via guest ticket.`,
+        );
         setNotifOpen(true);
     };
 
     const generateBill = () => {
         if (!itemCount || isPaid) return;
         const generatedAt = new Date().toISOString();
-        updateActiveTable((table) => ({ ...table, billGeneratedAt: generatedAt }));
-        setReceipt(
-            buildSnapshot(
-                { ...activeTable, billGeneratedAt: generatedAt },
-                state.menu,
-                state.restaurant,
-                staff.name,
-            ),
-        );
-        setShareFeedback(null);
+        const nextTable = queueDraftBeverages({
+            ...activeTable,
+            billGeneratedAt: generatedAt,
+        });
+        updateActiveTable(() => nextTable);
+        setReceipt(buildSnapshot(nextTable, state.menu, state.restaurant, staff.name));
+        setShareFeedback('Guest ticket generated. Beverages queued for server status updates.');
     };
 
     const markNotifRead = (id: string) => {
@@ -747,7 +820,9 @@ export default function RestaurantBillGenerator() {
                         <KitchenBoard
                             tables={state.tables}
                             menuById={menuById}
-                            canDeleteTickets={canDeleteTickets(staff.role)}
+                            canDeleteTickets={
+                                canDeleteTickets(staff.role) && staff.role !== 'kitchen'
+                            }
                             onStatus={setKitchenStatus}
                             onDeleteTicket={deleteKitchenTicket}
                         />
@@ -930,6 +1005,7 @@ export default function RestaurantBillGenerator() {
                         canTakePayment={canTakePayment(staff.role)}
                         canReopen={canReopenTable(staff.role)}
                         canDeleteTickets={canDeleteTickets(staff.role)}
+                        canUpdateBeverageStatus={canUpdateBeverageStatus(staff.role)}
                         onClear={() => {
                             if (!canClearOrder(staff.role)) {
                                 requireManager(() =>
@@ -994,6 +1070,7 @@ export default function RestaurantBillGenerator() {
                         }}
                         onChangeQuantity={changeQuantity}
                         onDeleteLine={deleteLine}
+                        onBeverageStatus={setBeverageStatus}
                         onAssignGuest={(lineId, guestId) => {
                             if (isPaid) return;
                             updateActiveTable((table) => ({

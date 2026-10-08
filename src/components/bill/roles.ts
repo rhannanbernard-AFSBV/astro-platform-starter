@@ -79,9 +79,14 @@ export function canVoidKitchenItems(role: StaffRole): boolean {
     return role === 'manager';
 }
 
-/** Delete kitchen tickets — Manager only */
+/** Delete kitchen tickets — Manager only (kitchen staff never) */
 export function canDeleteTickets(role: StaffRole): boolean {
     return role === 'manager';
+}
+
+/** Server-managed beverage status after guest ticket is generated */
+export function canUpdateBeverageStatus(role: StaffRole): boolean {
+    return role === 'server' || role === 'admin' || role === 'manager';
 }
 
 /** Delete / void payments and sales — Manager only */

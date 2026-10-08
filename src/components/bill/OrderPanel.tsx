@@ -1,7 +1,19 @@
 import { Icon } from './Icons';
 import Price from './Price';
 import { lineTotalCents, moneyUsd, tipAmountLabel, unitPriceCents, type BillResult } from './math';
-import { TIP_AMOUNT_PRESETS, type MenuItem, type TableOrder, type TipAmountPreset } from './types';
+import StatusTabs, { StatusChip } from './StatusTabs';
+import {
+    isBeverageItem,
+    nextServiceStatus,
+    type ActiveKitchenStatus,
+} from './statusUi';
+import {
+    TIP_AMOUNT_PRESETS,
+    type KitchenStatus,
+    type MenuItem,
+    type TableOrder,
+    type TipAmountPreset,
+} from './types';
 
 type Props = {
     activeTable: TableOrder;
@@ -17,6 +29,7 @@ type Props = {
     canTakePayment: boolean;
     canReopen: boolean;
     canDeleteTickets: boolean;
+    canUpdateBeverageStatus: boolean;
     onClear: () => void;
     onAddGuest: () => void;
     onRenameGuest: (guestId: string, name: string) => void;
@@ -28,6 +41,7 @@ type Props = {
     onCustomTipDollars: (value: number) => void;
     onServiceChargeEnabled: (enabled: boolean) => void;
     onServiceChargePercent: (value: number) => void;
+    onBeverageStatus: (lineId: string, status: KitchenStatus) => void;
     onSendKitchen: () => void;
     onGenerateBill: () => void;
     onGuestBill: () => void;
@@ -50,6 +64,7 @@ export default function OrderPanel({
     canTakePayment,
     canReopen,
     canDeleteTickets,
+    canUpdateBeverageStatus,
     onClear,
     onAddGuest,
     onRenameGuest,
@@ -61,6 +76,7 @@ export default function OrderPanel({
     onCustomTipDollars,
     onServiceChargeEnabled,
     onServiceChargePercent,
+    onBeverageStatus,
     onSendKitchen,
     onGenerateBill,
     onGuestBill,
@@ -69,6 +85,23 @@ export default function OrderPanel({
     onReopen,
 }: Props) {
     const guestApproved = Boolean(activeTable.guestBillApprovedAt);
+    const guestTicketReady = Boolean(activeTable.billGeneratedAt);
+
+    const statusCounts = activeTable.lines.reduce(
+        (acc, line) => {
+            const status = line.kitchenStatus;
+            if (
+                status === 'queued' ||
+                status === 'preparing' ||
+                status === 'ready' ||
+                status === 'served'
+            ) {
+                acc[status] = (acc[status] ?? 0) + 1;
+            }
+            return acc;
+        },
+        {} as Partial<Record<ActiveKitchenStatus, number>>,
+    );
 
     return (
         <aside className="order-panel">
@@ -97,6 +130,8 @@ export default function OrderPanel({
                     {itemCount} {itemCount === 1 ? 'item' : 'items'}
                 </span>
             </div>
+
+            <StatusTabs active="all" counts={statusCounts} showAll={false} />
 
             <div className="guest-bar">
                 <div className="guest-bar-title">
@@ -136,16 +171,37 @@ export default function OrderPanel({
                     activeTable.lines.map((line) => {
                         const item = menuById.get(line.menuItemId);
                         if (!item) return null;
+                        const beverage = isBeverageItem(item);
+                        const next = nextServiceStatus(line.kitchenStatus);
+                        const canAdvanceBeverage =
+                            beverage &&
+                            canUpdateBeverageStatus &&
+                            guestTicketReady &&
+                            !isPaid &&
+                            line.kitchenStatus !== 'draft' &&
+                            Boolean(next);
+
                         return (
-                            <div className="order-item" key={line.id}>
+                            <div
+                                className={`order-item ${beverage ? 'beverage-line' : ''} status-${line.kitchenStatus}`}
+                                key={line.id}
+                            >
                                 <div className="order-item-top">
                                     <div>
-                                        <h3>{item.name}</h3>
+                                        <h3>
+                                            {item.name}
+                                            {beverage && (
+                                                <span className="bev-tag">Beverage</span>
+                                            )}
+                                        </h3>
                                         <p>
-                                            <Price cents={unitPriceCents(item, line)} compact /> each ·{' '}
-                                            {line.kitchenStatus}
+                                            <Price cents={unitPriceCents(item, line)} compact /> each
                                             {line.orderNumber ? ` · #${line.orderNumber}` : ''}
+                                            {beverage && line.kitchenStatus === 'draft'
+                                                ? ' · held for guest ticket'
+                                                : ''}
                                         </p>
+                                        <StatusChip status={line.kitchenStatus} />
                                         {line.modifiers.length > 0 && (
                                             <p className="mod-line">
                                                 {line.modifiers.map((mod) => mod.name).join(' · ')}
@@ -157,15 +213,15 @@ export default function OrderPanel({
                                         <Price cents={lineTotalCents(item, line)} />
                                         {!isPaid &&
                                             (line.kitchenStatus === 'draft' || canDeleteTickets) && (
-                                            <button
-                                                type="button"
-                                                className="line-delete"
-                                                aria-label={`Delete ${item.name}`}
-                                                onClick={() => onDeleteLine(line.id)}
-                                            >
-                                                <Icon name="trash" />
-                                            </button>
-                                        )}
+                                                <button
+                                                    type="button"
+                                                    className="line-delete"
+                                                    aria-label={`Delete ${item.name}`}
+                                                    onClick={() => onDeleteLine(line.id)}
+                                                >
+                                                    <Icon name="trash" />
+                                                </button>
+                                            )}
                                     </div>
                                 </div>
                                 <div className="order-item-controls">
@@ -205,6 +261,23 @@ export default function OrderPanel({
                                         </select>
                                     </label>
                                 </div>
+                                {canAdvanceBeverage && next && (
+                                    <div className="beverage-status-actions">
+                                        <button
+                                            type="button"
+                                            className={`bev-advance status-tab-${next}`}
+                                            onClick={() => onBeverageStatus(line.id, next)}
+                                        >
+                                            Mark {next}
+                                        </button>
+                                    </div>
+                                )}
+                                {beverage && !guestTicketReady && line.kitchenStatus === 'draft' && (
+                                    <p className="pin-help bev-help">
+                                        Beverages stay with the server — generate a guest ticket to
+                                        queue and update status.
+                                    </p>
+                                )}
                             </div>
                         );
                     })
@@ -305,8 +378,7 @@ export default function OrderPanel({
                 </div>
                 <div>
                     <span>
-                        Tip (
-                        {tipAmountLabel(activeTable.tipAmountPreset, activeTable.tipCents)})
+                        Tip ({tipAmountLabel(activeTable.tipAmountPreset, activeTable.tipCents)})
                     </span>
                     <Price cents={bill.tipCents} />
                 </div>
@@ -326,7 +398,7 @@ export default function OrderPanel({
                             disabled={!draftCount}
                             onClick={onSendKitchen}
                         >
-                            <Icon name="chef" /> Send to kitchen
+                            <Icon name="chef" /> Send food to kitchen
                             {draftCount > 0 && <span className="count-badge">{draftCount}</span>}
                         </button>
                     )}
@@ -371,7 +443,8 @@ export default function OrderPanel({
                             </button>
                             {!guestApproved && itemCount > 0 && (
                                 <p className="pin-help">
-                                    Print guest bill, get signature &amp; payment tick before collecting.
+                                    Print guest bill, get signature &amp; payment tick before
+                                    collecting. Guest ticket also queues beverages for the server.
                                 </p>
                             )}
                         </div>
