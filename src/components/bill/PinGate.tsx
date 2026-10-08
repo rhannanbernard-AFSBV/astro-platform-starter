@@ -3,12 +3,20 @@ import { Icon } from './Icons';
 type Props = {
     pinInput: string;
     pinError: string | null;
+    helpText?: string;
     onPinInput: (value: string) => void;
     onSubmit: () => void;
     onClose: () => void;
 };
 
-export default function PinGate({ pinInput, pinError, onPinInput, onSubmit, onClose }: Props) {
+export default function PinGate({
+    pinInput,
+    pinError,
+    helpText = 'Enter your staff PIN',
+    onPinInput,
+    onSubmit,
+    onClose,
+}: Props) {
     return (
         <div className="receipt-overlay" role="dialog" aria-modal="true" aria-label="Staff PIN">
             <div className="receipt-sheet modifier-sheet">
@@ -22,7 +30,7 @@ export default function PinGate({ pinInput, pinError, onPinInput, onSubmit, onCl
                     </button>
                 </div>
                 <div className="modifier-body">
-                    <p className="pin-help">Server 1234 · Manager 9999</p>
+                    <p className="pin-help">{helpText}</p>
                     <label className="custom-tip">
                         PIN
                         <input
@@ -35,7 +43,7 @@ export default function PinGate({ pinInput, pinError, onPinInput, onSubmit, onCl
                     </label>
                     {pinError && <p className="share-feedback">{pinError}</p>}
                     <button type="button" className="generate-button" onClick={onSubmit}>
-                        Unlock
+                        Sign in
                     </button>
                 </div>
             </div>

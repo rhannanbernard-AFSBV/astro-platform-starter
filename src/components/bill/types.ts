@@ -5,7 +5,9 @@ export type FilterCategory = 'All' | MenuCategory;
 export const TIP_PRESETS = [0, 10, 15, 18] as const;
 export type TipPreset = (typeof TIP_PRESETS)[number] | 'custom';
 
-export type StaffRole = 'server' | 'manager';
+export const STAFF_ROLES = ['kitchen', 'server', 'admin', 'manager'] as const;
+export type StaffRole = (typeof STAFF_ROLES)[number];
+export type AppView = 'service' | 'kitchen' | 'reports' | 'admin' | 'users';
 export type PaymentMethod = 'cash' | 'card' | 'mixed';
 export type KitchenStatus = 'draft' | 'queued' | 'preparing' | 'ready' | 'served';
 export type TableStatus = 'open' | 'paid';
@@ -112,12 +114,13 @@ export type StaffUser = {
 };
 
 export type PersistedState = {
-    version: 2;
+    version: 3;
     menu: MenuItem[];
     tables: TableOrder[];
     activeTableId: string;
     sales: SaleRecord[];
     restaurant: RestaurantProfile;
+    staff: StaffUser[];
     activeStaffId: string;
 };
 

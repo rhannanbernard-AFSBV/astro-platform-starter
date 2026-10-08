@@ -5,7 +5,6 @@ import {
     createTable,
     DEFAULT_TAX_PERCENT,
     PLACEHOLDER_IMAGE,
-    STAFF_USERS,
 } from './bill/defaults';
 import { Icon } from './bill/Icons';
 import {
@@ -26,10 +25,29 @@ import PaymentModal, {
 } from './bill/PaymentModal';
 import PinGate from './bill/PinGate';
 import ReceiptView from './bill/ReceiptView';
+import {
+    canAccessView,
+    canClearOrder,
+    canCreateOrders,
+    canDeleteMenuItems,
+    canGenerateBill,
+    canManageMenu,
+    canManageUsers,
+    canReopenTable,
+    canRunKitchenBoard,
+    canSendToKitchen,
+    canTakePayment,
+    canVoidKitchenItems,
+    DEFAULT_VIEW_BY_ROLE,
+    ROLE_LABELS,
+    roleHelpText,
+    viewsForRole,
+} from './bill/roles';
 import ServiceMenu from './bill/ServiceMenu';
-import { findStaffByPin, loadState } from './bill/storage';
+import { createStaffUser, findStaffByPin, loadState } from './bill/storage';
 import { useDebouncedSave } from './bill/useDebouncedSave';
 import {
+    type AppView,
     type BillSnapshot,
     type FilterCategory,
     type KitchenStatus,
@@ -37,6 +55,7 @@ import {
     type PaymentMethod,
     type PersistedState,
     type SelectedModifier,
+    type StaffRole,
     type TableOrder,
     type TipPreset,
 } from './bill/types';
@@ -44,8 +63,15 @@ import {
 const KitchenBoard = lazy(() => import('./bill/KitchenBoard'));
 const SalesReport = lazy(() => import('./bill/SalesReport'));
 const AdminPanel = lazy(() => import('./bill/AdminPanel'));
+const UsersPanel = lazy(() => import('./bill/UsersPanel'));
 
-type ViewMode = 'service' | 'kitchen' | 'reports' | 'admin';
+const VIEW_LABELS: Record<AppView, string> = {
+    service: 'Service',
+    kitchen: 'Kitchen',
+    reports: 'Sales',
+    admin: 'Menu',
+    users: 'Users',
+};
 
 function emptyMenuForm(): Omit<MenuItem, 'id'> {
     return {
@@ -67,7 +93,7 @@ export default function RestaurantBillGenerator() {
     const [hydrated, setHydrated] = useState(false);
     const [online, setOnline] = useState(true);
     const [state, setState] = useState<PersistedState>(() => loadState());
-    const [view, setView] = useState<ViewMode>('service');
+    const [view, setView] = useState<AppView>('service');
     const [category, setCategory] = useState<FilterCategory>('All');
     const [search, setSearch] = useState('');
     const [receipt, setReceipt] = useState<BillSnapshot | null>(null);
@@ -93,6 +119,9 @@ export default function RestaurantBillGenerator() {
     useEffect(() => {
         const initial = loadState();
         setState(initial);
+        const initialStaff =
+            initial.staff.find((entry) => entry.id === initial.activeStaffId) ?? initial.staff[0];
+        setView(DEFAULT_VIEW_BY_ROLE[initialStaff.role]);
         setHydrated(true);
         setOnline(navigator.onLine);
         const onOnline = () => setOnline(true);
@@ -110,8 +139,16 @@ export default function RestaurantBillGenerator() {
         };
     }, []);
 
-    const staff = STAFF_USERS.find((entry) => entry.id === state.activeStaffId) ?? STAFF_USERS[0];
-    const isManager = staff.role === 'manager';
+    const staff =
+        state.staff.find((entry) => entry.id === state.activeStaffId) ?? state.staff[0];
+    const allowedViews = useMemo(() => viewsForRole(staff.role), [staff.role]);
+
+    useEffect(() => {
+        if (!canAccessView(staff.role, view)) {
+            setView(DEFAULT_VIEW_BY_ROLE[staff.role]);
+        }
+    }, [staff.role, view]);
+
     const activeTable =
         state.tables.find((table) => table.id === state.activeTableId) ?? state.tables[0];
     const menuById = useMemo(() => new Map(state.menu.map((item) => [item.id, item])), [state.menu]);
@@ -136,8 +173,19 @@ export default function RestaurantBillGenerator() {
         }));
     };
 
+    const switchStaff = (staffId: string) => {
+        const next = state.staff.find((entry) => entry.id === staffId);
+        if (!next) return;
+        setState((current) => ({ ...current, activeStaffId: staffId }));
+        setView(DEFAULT_VIEW_BY_ROLE[next.role]);
+        setReceipt(null);
+        setPaymentOpen(false);
+        setModifierItem(null);
+        setShareFeedback(`Signed in as ${next.name} (${ROLE_LABELS[next.role]}).`);
+    };
+
     const requireManager = (action: () => void) => {
-        if (isManager) {
+        if (staff.role === 'manager') {
             action();
             return;
         }
@@ -148,24 +196,27 @@ export default function RestaurantBillGenerator() {
     };
 
     const submitPin = () => {
-        const match = findStaffByPin(pinInput.trim());
+        const match = findStaffByPin(state.staff, pinInput.trim());
         if (!match) {
-            setPinError('Invalid PIN. Try 1234 (server) or 9999 (manager).');
+            setPinError('Invalid PIN. Check Users for available staff PINs.');
+            return;
+        }
+        if (pendingManagerAction && match.role !== 'manager') {
+            setPinError('Manager PIN required for that action.');
             return;
         }
         setState((current) => ({ ...current, activeStaffId: match.id }));
+        setView(DEFAULT_VIEW_BY_ROLE[match.role]);
         setShowPinGate(false);
-        if (match.role === 'manager' && pendingManagerAction) pendingManagerAction();
-        else if (pendingManagerAction && match.role !== 'manager') {
-            setShareFeedback('Manager PIN required for that action.');
-        }
+        if (pendingManagerAction && match.role === 'manager') pendingManagerAction();
         setPendingManagerAction(null);
         setPinInput('');
         setPinError(null);
+        setShareFeedback(`Signed in as ${match.name} (${ROLE_LABELS[match.role]}).`);
     };
 
     const openModifierModal = (item: MenuItem) => {
-        if (isPaid) return;
+        if (isPaid || !canCreateOrders(staff.role)) return;
         const defaults: Record<string, string[]> = {};
         item.modifierGroups.forEach((group) => {
             defaults[group.id] = group.multi ? [] : group.options[0] ? [group.options[0].id] : [];
@@ -225,7 +276,7 @@ export default function RestaurantBillGenerator() {
     };
 
     const changeQuantity = (lineId: string, change: number) => {
-        if (isPaid) return;
+        if (isPaid || !canCreateOrders(staff.role)) return;
         const line = activeTable.lines.find((entry) => entry.id === lineId);
         const apply = () =>
             updateActiveTable((table) => ({
@@ -238,13 +289,19 @@ export default function RestaurantBillGenerator() {
                     .filter((entry) => entry.quantity > 0),
             }));
         if (line && line.kitchenStatus !== 'draft' && change < 0) {
-            requireManager(apply);
-            return;
+            if (!canVoidKitchenItems(staff.role)) {
+                requireManager(apply);
+                return;
+            }
         }
         apply();
     };
 
     const setKitchenStatus = (tableId: string, lineId: string, kitchenStatus: KitchenStatus) => {
+        if (!canRunKitchenBoard(staff.role)) {
+            setShareFeedback('Kitchen role required to update ticket status.');
+            return;
+        }
         setState((current) => ({
             ...current,
             tables: current.tables.map((table) =>
@@ -380,29 +437,39 @@ export default function RestaurantBillGenerator() {
                 </a>
                 <div className="service-status">
                     <span className={`status-dot ${isPaid ? 'paid' : ''}`} />
-                    <span>{isPaid ? 'Table paid' : 'Open for service'}</span>
-                    <span className="status-divider" />
-                    <label className="table-switcher">
-                        <span className="sr-only">Active table</span>
-                        <select
-                            value={activeTable.id}
-                            onChange={(event) => {
-                                setState((current) => ({
-                                    ...current,
-                                    activeTableId: event.target.value,
-                                }));
-                                setReceipt(null);
-                            }}
-                            aria-label="Switch table"
-                        >
-                            {state.tables.map((table) => (
-                                <option key={table.id} value={table.id}>
-                                    {table.label}
-                                    {table.status === 'paid' ? ' · paid' : ''}
-                                </option>
-                            ))}
-                        </select>
-                    </label>
+                    <span>
+                        {staff.role === 'kitchen'
+                            ? 'Kitchen station'
+                            : isPaid
+                              ? 'Table paid'
+                              : 'Open for service'}
+                    </span>
+                    {staff.role !== 'kitchen' && (
+                        <>
+                            <span className="status-divider" />
+                            <label className="table-switcher">
+                                <span className="sr-only">Active table</span>
+                                <select
+                                    value={activeTable.id}
+                                    onChange={(event) => {
+                                        setState((current) => ({
+                                            ...current,
+                                            activeTableId: event.target.value,
+                                        }));
+                                        setReceipt(null);
+                                    }}
+                                    aria-label="Switch table"
+                                >
+                                    {state.tables.map((table) => (
+                                        <option key={table.id} value={table.id}>
+                                            {table.label}
+                                            {table.status === 'paid' ? ' · paid' : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                        </>
+                    )}
                     <span className="status-divider" />
                     <span className={`online-pill ${online ? 'on' : 'off'}`}>
                         <Icon name="wifi" /> {online ? 'Online' : 'Offline'}
@@ -410,14 +477,7 @@ export default function RestaurantBillGenerator() {
                 </div>
                 <div className="top-actions">
                     <div className="mode-toggle" role="group" aria-label="Workspace mode">
-                        {(
-                            [
-                                ['service', 'Service'],
-                                ['kitchen', 'Kitchen'],
-                                ['reports', 'Sales'],
-                                ['admin', 'Menu'],
-                            ] as const
-                        ).map(([key, label]) => (
+                        {allowedViews.map((key) => (
                             <button
                                 key={key}
                                 type="button"
@@ -427,7 +487,8 @@ export default function RestaurantBillGenerator() {
                                 {key === 'kitchen' && <Icon name="chef" />}
                                 {key === 'reports' && <Icon name="chart" />}
                                 {key === 'admin' && <Icon name="settings" />}
-                                {label}
+                                {key === 'users' && <Icon name="users" />}
+                                {VIEW_LABELS[key]}
                             </button>
                         ))}
                     </div>
@@ -445,7 +506,7 @@ export default function RestaurantBillGenerator() {
                         <span>
                             <strong>{staff.name}</strong>
                             <small>
-                                {staff.role} · PIN
+                                {ROLE_LABELS[staff.role]} · switch
                             </small>
                         </span>
                     </button>
@@ -453,20 +514,20 @@ export default function RestaurantBillGenerator() {
             </header>
 
             <main className={`workspace ${view !== 'service' ? 'wide-main' : ''}`}>
-                {view === 'service' && (
+                {view === 'service' && canAccessView(staff.role, 'service') && (
                     <ServiceMenu
                         menu={state.menu}
                         activeTable={activeTable}
                         category={category}
                         search={search}
-                        isPaid={isPaid}
+                        isPaid={isPaid || !canCreateOrders(staff.role)}
                         onCategory={setCategory}
                         onSearch={setSearch}
                         onAdd={openModifierModal}
                     />
                 )}
 
-                {view === 'kitchen' && (
+                {view === 'kitchen' && canAccessView(staff.role, 'kitchen') && (
                     <Suspense fallback={<ViewFallback />}>
                         <KitchenBoard
                             tables={state.tables}
@@ -476,13 +537,63 @@ export default function RestaurantBillGenerator() {
                     </Suspense>
                 )}
 
-                {view === 'reports' && (
+                {view === 'reports' && canAccessView(staff.role, 'reports') && (
                     <Suspense fallback={<ViewFallback />}>
                         <SalesReport sales={todaySales} onExport={exportSales} />
                     </Suspense>
                 )}
 
-                {view === 'admin' && (
+                {view === 'users' && canManageUsers(staff.role) && (
+                    <Suspense fallback={<ViewFallback />}>
+                        <UsersPanel
+                            staff={state.staff}
+                            activeStaffId={staff.id}
+                            currentRole={staff.role}
+                            onCreate={({ name, role, pin }) => {
+                                if (!canManageUsers(staff.role)) return 'Not allowed.';
+                                const trimmedName = name.trim();
+                                const trimmedPin = pin.trim();
+                                if (trimmedName.length < 2) return 'Enter a full name.';
+                                if (!/^\d{4,8}$/.test(trimmedPin)) {
+                                    return 'PIN must be 4–8 digits.';
+                                }
+                                if (state.staff.some((user) => user.pin === trimmedPin)) {
+                                    return 'That PIN is already in use.';
+                                }
+                                if (role === 'manager' && staff.role !== 'manager') {
+                                    return 'Only a manager can create another manager.';
+                                }
+                                const user = createStaffUser({
+                                    name: trimmedName,
+                                    role: role as StaffRole,
+                                    pin: trimmedPin,
+                                });
+                                setState((current) => ({
+                                    ...current,
+                                    staff: [...current.staff, user],
+                                }));
+                                return null;
+                            }}
+                            onDelete={(id) => {
+                                if (id === staff.id) return 'Cannot delete the signed-in user.';
+                                const target = state.staff.find((user) => user.id === id);
+                                if (!target) return 'User not found.';
+                                if (target.role === 'manager' && staff.role !== 'manager') {
+                                    return 'Only a manager can delete a manager.';
+                                }
+                                if (state.staff.length <= 1) return 'At least one user is required.';
+                                setState((current) => ({
+                                    ...current,
+                                    staff: current.staff.filter((user) => user.id !== id),
+                                }));
+                                return null;
+                            }}
+                            onSwitchUser={switchStaff}
+                        />
+                    </Suspense>
+                )}
+
+                {view === 'admin' && canManageMenu(staff.role) && (
                     <Suspense fallback={<ViewFallback />}>
                         <AdminPanel
                             menu={state.menu}
@@ -541,8 +652,8 @@ export default function RestaurantBillGenerator() {
                                     modifierGroups: item.modifierGroups,
                                 });
                             }}
-                            onDeleteItem={(id) =>
-                                requireManager(() => {
+                            onDeleteItem={(id) => {
+                                const remove = () => {
                                     setState((current) => ({
                                         ...current,
                                         menu: current.menu.filter((item) => item.id !== id),
@@ -557,8 +668,10 @@ export default function RestaurantBillGenerator() {
                                         setEditingId(null);
                                         setMenuForm(emptyMenuForm());
                                     }
-                                })
-                            }
+                                };
+                                if (canDeleteMenuItems(staff.role)) remove();
+                                else requireManager(remove);
+                            }}
                             onNewTableLabel={setNewTableLabel}
                             onAddTable={() => {
                                 const label =
@@ -579,7 +692,7 @@ export default function RestaurantBillGenerator() {
                     </Suspense>
                 )}
 
-                {view === 'service' && (
+                {view === 'service' && canAccessView(staff.role, 'service') && (
                     <OrderPanel
                         activeTable={activeTable}
                         menuById={menuById}
@@ -588,15 +701,28 @@ export default function RestaurantBillGenerator() {
                         draftCount={draftCount}
                         isPaid={isPaid}
                         shareFeedback={shareFeedback}
-                        onClear={() =>
-                            requireManager(() =>
-                                updateActiveTable((table) => ({
-                                    ...table,
-                                    lines: [],
-                                    billGeneratedAt: null,
-                                })),
-                            )
-                        }
+                        canClear={canClearOrder(staff.role)}
+                        canSendKitchen={canSendToKitchen(staff.role)}
+                        canGenerateBill={canGenerateBill(staff.role)}
+                        canTakePayment={canTakePayment(staff.role)}
+                        canReopen={canReopenTable(staff.role)}
+                        onClear={() => {
+                            if (!canClearOrder(staff.role)) {
+                                requireManager(() =>
+                                    updateActiveTable((table) => ({
+                                        ...table,
+                                        lines: [],
+                                        billGeneratedAt: null,
+                                    })),
+                                );
+                                return;
+                            }
+                            updateActiveTable((table) => ({
+                                ...table,
+                                lines: [],
+                                billGeneratedAt: null,
+                            }));
+                        }}
                         onAddGuest={() => {
                             if (isPaid) return;
                             updateActiveTable((table) => ({
@@ -679,7 +805,7 @@ export default function RestaurantBillGenerator() {
                             }))
                         }
                         onSendKitchen={() => {
-                            if (!draftCount || isPaid) return;
+                            if (!draftCount || isPaid || !canSendToKitchen(staff.role)) return;
                             const sentAt = new Date().toISOString();
                             updateActiveTable((table) => ({
                                 ...table,
@@ -695,8 +821,14 @@ export default function RestaurantBillGenerator() {
                             }));
                             setShareFeedback(`${draftCount} item(s) sent to kitchen.`);
                         }}
-                        onGenerateBill={generateBill}
-                        onTakePayment={openPayment}
+                        onGenerateBill={() => {
+                            if (!canGenerateBill(staff.role)) return;
+                            generateBill();
+                        }}
+                        onTakePayment={() => {
+                            if (!canTakePayment(staff.role)) return;
+                            openPayment();
+                        }}
                         onViewPaidReceipt={() =>
                             setReceipt(
                                 buildSnapshot(
@@ -707,18 +839,29 @@ export default function RestaurantBillGenerator() {
                                 ),
                             )
                         }
-                        onReopen={() =>
-                            requireManager(() =>
-                                updateActiveTable((table) => ({
-                                    ...table,
-                                    status: 'open',
-                                    paidAt: null,
-                                    payment: null,
-                                    billGeneratedAt: null,
-                                    lines: [],
-                                })),
-                            )
-                        }
+                        onReopen={() => {
+                            if (!canReopenTable(staff.role)) {
+                                requireManager(() =>
+                                    updateActiveTable((table) => ({
+                                        ...table,
+                                        status: 'open',
+                                        paidAt: null,
+                                        payment: null,
+                                        billGeneratedAt: null,
+                                        lines: [],
+                                    })),
+                                );
+                                return;
+                            }
+                            updateActiveTable((table) => ({
+                                ...table,
+                                status: 'open',
+                                paidAt: null,
+                                payment: null,
+                                billGeneratedAt: null,
+                                lines: [],
+                            }));
+                        }}
                     />
                 )}
             </main>
@@ -758,6 +901,7 @@ export default function RestaurantBillGenerator() {
                 <PinGate
                     pinInput={pinInput}
                     pinError={pinError}
+                    helpText={roleHelpText(state.staff)}
                     onPinInput={setPinInput}
                     onSubmit={submitPin}
                     onClose={() => {

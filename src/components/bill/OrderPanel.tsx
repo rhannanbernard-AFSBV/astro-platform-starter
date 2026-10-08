@@ -11,6 +11,11 @@ type Props = {
     draftCount: number;
     isPaid: boolean;
     shareFeedback: string | null;
+    canClear: boolean;
+    canSendKitchen: boolean;
+    canGenerateBill: boolean;
+    canTakePayment: boolean;
+    canReopen: boolean;
     onClear: () => void;
     onAddGuest: () => void;
     onRenameGuest: (guestId: string, name: string) => void;
@@ -36,6 +41,11 @@ export default function OrderPanel({
     draftCount,
     isPaid,
     shareFeedback,
+    canClear,
+    canSendKitchen,
+    canGenerateBill,
+    canTakePayment,
+    canReopen,
     onClear,
     onAddGuest,
     onRenameGuest,
@@ -59,15 +69,17 @@ export default function OrderPanel({
                     <p className="eyebrow">Current order</p>
                     <h2>{activeTable.label}</h2>
                 </div>
-                <button
-                    className="clear-button"
-                    type="button"
-                    onClick={onClear}
-                    disabled={!itemCount || isPaid}
-                    aria-label="Clear order"
-                >
-                    <Icon name="trash" />
-                </button>
+                {canClear && (
+                    <button
+                        className="clear-button"
+                        type="button"
+                        onClick={onClear}
+                        disabled={!itemCount || isPaid}
+                        aria-label="Clear order"
+                    >
+                        <Icon name="trash" />
+                    </button>
+                )}
             </div>
             <div className="order-meta">
                 <span>
@@ -270,48 +282,62 @@ export default function OrderPanel({
 
             {!isPaid ? (
                 <>
-                    <button
-                        className="secondary-button"
-                        type="button"
-                        disabled={!draftCount}
-                        onClick={onSendKitchen}
-                    >
-                        <Icon name="chef" /> Send to kitchen
-                        {draftCount > 0 && <span className="count-badge">{draftCount}</span>}
-                    </button>
-                    <button
-                        className={`generate-button ${activeTable.billGeneratedAt ? 'ready' : ''}`}
-                        type="button"
-                        disabled={!itemCount}
-                        onClick={onGenerateBill}
-                    >
-                        <Icon name={activeTable.billGeneratedAt ? 'check' : 'receipt'} />
-                        {activeTable.billGeneratedAt ? 'View receipt' : 'Generate bill'}
-                        {!activeTable.billGeneratedAt && (
-                            <span>
-                                <Price cents={bill.totalCents} compact />
-                            </span>
-                        )}
-                    </button>
-                    <div className="secondary-actions">
+                    {canSendKitchen && (
                         <button
+                            className="secondary-button"
                             type="button"
-                            className="secondary-button paid-button"
-                            disabled={!itemCount}
-                            onClick={onTakePayment}
+                            disabled={!draftCount}
+                            onClick={onSendKitchen}
                         >
-                            <Icon name="check" /> Take payment
+                            <Icon name="chef" /> Send to kitchen
+                            {draftCount > 0 && <span className="count-badge">{draftCount}</span>}
                         </button>
-                    </div>
+                    )}
+                    {canGenerateBill && (
+                        <button
+                            className={`generate-button ${activeTable.billGeneratedAt ? 'ready' : ''}`}
+                            type="button"
+                            disabled={!itemCount}
+                            onClick={onGenerateBill}
+                        >
+                            <Icon name={activeTable.billGeneratedAt ? 'check' : 'receipt'} />
+                            {activeTable.billGeneratedAt ? 'View receipt' : 'Generate bill'}
+                            {!activeTable.billGeneratedAt && (
+                                <span>
+                                    <Price cents={bill.totalCents} compact />
+                                </span>
+                            )}
+                        </button>
+                    )}
+                    {canTakePayment && (
+                        <div className="secondary-actions">
+                            <button
+                                type="button"
+                                className="secondary-button paid-button"
+                                disabled={!itemCount}
+                                onClick={onTakePayment}
+                            >
+                                <Icon name="check" /> Take payment
+                            </button>
+                        </div>
+                    )}
                 </>
             ) : (
                 <>
-                    <button className="generate-button ready" type="button" onClick={onViewPaidReceipt}>
-                        <Icon name="receipt" /> View paid receipt
-                    </button>
-                    <button type="button" className="secondary-button" onClick={onReopen}>
-                        <Icon name="lock" /> Reopen table
-                    </button>
+                    {canGenerateBill && (
+                        <button
+                            className="generate-button ready"
+                            type="button"
+                            onClick={onViewPaidReceipt}
+                        >
+                            <Icon name="receipt" /> View paid receipt
+                        </button>
+                    )}
+                    {canReopen && (
+                        <button type="button" className="secondary-button" onClick={onReopen}>
+                            <Icon name="lock" /> Reopen table
+                        </button>
+                    )}
                 </>
             )}
             {shareFeedback && (

@@ -7,7 +7,8 @@ import type {
     TableOrder,
 } from './types';
 
-export const STORAGE_KEY = 'savory-bill-generator-v2';
+export const STORAGE_KEY = 'savory-bill-generator-v3';
+export const LEGACY_STORAGE_KEYS = ['savory-bill-generator-v2', 'savory-bill-generator-v1'] as const;
 export const DEFAULT_TAX_PERCENT = 5;
 export const PLACEHOLDER_IMAGE =
     'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=700&q=85';
@@ -21,10 +22,15 @@ export const DEFAULT_RESTAURANT: RestaurantProfile = {
     feedbackUrl: 'https://savory.example/feedback',
 };
 
-export const STAFF_USERS: StaffUser[] = [
+export const DEFAULT_STAFF: StaffUser[] = [
     { id: 'staff_server', name: 'Alex Morgan', role: 'server', pin: '1234', initials: 'AM' },
+    { id: 'staff_kitchen', name: 'Casey Cook', role: 'kitchen', pin: '2222', initials: 'CC' },
+    { id: 'staff_admin', name: 'Riley Admin', role: 'admin', pin: '5555', initials: 'RA' },
     { id: 'staff_manager', name: 'Jordan Lee', role: 'manager', pin: '9999', initials: 'JL' },
 ];
+
+/** @deprecated use DEFAULT_STAFF / state.staff */
+export const STAFF_USERS = DEFAULT_STAFF;
 
 const sharedMods = (extras: ModifierGroup[] = []): ModifierGroup[] => [
     {
@@ -220,12 +226,13 @@ export function createDefaultState(): PersistedState {
         },
     ];
     return {
-        version: 2,
+        version: 3,
         menu: DEFAULT_MENU,
         tables,
         activeTableId: tables[0].id,
         sales: [],
         restaurant: DEFAULT_RESTAURANT,
-        activeStaffId: STAFF_USERS[0].id,
+        staff: DEFAULT_STAFF.map((user) => ({ ...user })),
+        activeStaffId: DEFAULT_STAFF[0].id,
     };
 }

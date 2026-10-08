@@ -3,12 +3,13 @@ import {
     createId,
     DEFAULT_MENU,
     DEFAULT_RESTAURANT,
-    STAFF_USERS,
+    DEFAULT_STAFF,
+    LEGACY_STORAGE_KEYS,
     STORAGE_KEY,
 } from './defaults';
-import type { MenuItem, OrderLine, PersistedState, TableOrder } from './types';
-
-const LEGACY_KEY = 'savory-bill-generator-v1';
+import type { MenuItem, OrderLine, PersistedState, StaffRole, StaffUser, TableOrder } from './types';
+import { STAFF_ROLES } from './types';
+import { initialsFromName } from './roles';
 
 function withModifiers(menu: MenuItem[]): MenuItem[] {
     const defaults = new Map(DEFAULT_MENU.map((item) => [item.id, item]));
@@ -45,7 +46,9 @@ function migrateTables(tables: Array<Record<string, unknown>>): TableOrder[] {
         id: String(table.id),
         label: String(table.label ?? 'Table'),
         status: table.status === 'paid' ? 'paid' : 'open',
-        lines: migrateLegacyLines(Array.isArray(table.lines) ? (table.lines as Array<Record<string, unknown>>) : []),
+        lines: migrateLegacyLines(
+            Array.isArray(table.lines) ? (table.lines as Array<Record<string, unknown>>) : [],
+        ),
         guests: Array.isArray(table.guests) ? (table.guests as TableOrder['guests']) : [],
         tipPreset: (table.tipPreset as TableOrder['tipPreset']) ?? 15,
         tipCustomPercent: Number(table.tipCustomPercent ?? 15),
@@ -57,19 +60,74 @@ function migrateTables(tables: Array<Record<string, unknown>>): TableOrder[] {
     }));
 }
 
+function isStaffRole(value: unknown): value is StaffRole {
+    return typeof value === 'string' && (STAFF_ROLES as readonly string[]).includes(value);
+}
+
+function migrateStaff(rawStaff: unknown, activeStaffId: unknown): StaffUser[] {
+    if (!Array.isArray(rawStaff) || rawStaff.length === 0) {
+        return DEFAULT_STAFF.map((user) => ({ ...user }));
+    }
+
+    const migrated = rawStaff
+        .map((entry) => {
+            if (!entry || typeof entry !== 'object') return null;
+            const user = entry as Record<string, unknown>;
+            const name = String(user.name ?? '').trim();
+            const pin = String(user.pin ?? '').trim();
+            if (!name || !pin) return null;
+            const role: StaffRole = isStaffRole(user.role)
+                ? user.role
+                : user.role === 'server'
+                  ? 'server'
+                  : 'server';
+            return {
+                id: typeof user.id === 'string' ? user.id : createId('staff'),
+                name,
+                role,
+                pin,
+                initials:
+                    typeof user.initials === 'string' && user.initials
+                        ? user.initials
+                        : initialsFromName(name),
+            } satisfies StaffUser;
+        })
+        .filter((user): user is StaffUser => Boolean(user));
+
+    if (migrated.length === 0) return DEFAULT_STAFF.map((user) => ({ ...user }));
+
+    // Ensure seed roles exist when upgrading older installs
+    for (const seed of DEFAULT_STAFF) {
+        if (!migrated.some((user) => user.role === seed.role)) {
+            migrated.push({ ...seed });
+        }
+    }
+
+    if (typeof activeStaffId === 'string' && !migrated.some((user) => user.id === activeStaffId)) {
+        // keep list as-is; caller picks fallback active id
+    }
+
+    return migrated;
+}
+
 function normalizeState(value: unknown): PersistedState | null {
     if (!value || typeof value !== 'object') return null;
     const raw = value as Record<string, unknown>;
     if (!Array.isArray(raw.menu) || !Array.isArray(raw.tables) || raw.tables.length === 0) return null;
 
     const tables = migrateTables(raw.tables as Array<Record<string, unknown>>);
+    const staff = migrateStaff(raw.staff, raw.activeStaffId);
     const activeTableId =
         typeof raw.activeTableId === 'string' && tables.some((table) => table.id === raw.activeTableId)
             ? raw.activeTableId
             : tables[0].id;
+    const activeStaffId =
+        typeof raw.activeStaffId === 'string' && staff.some((user) => user.id === raw.activeStaffId)
+            ? raw.activeStaffId
+            : staff[0].id;
 
     return {
-        version: 2,
+        version: 3,
         menu: withModifiers(raw.menu as MenuItem[]),
         tables,
         activeTableId,
@@ -78,18 +136,26 @@ function normalizeState(value: unknown): PersistedState | null {
             raw.restaurant && typeof raw.restaurant === 'object'
                 ? { ...DEFAULT_RESTAURANT, ...(raw.restaurant as PersistedState['restaurant']) }
                 : DEFAULT_RESTAURANT,
-        activeStaffId:
-            typeof raw.activeStaffId === 'string' &&
-            STAFF_USERS.some((staff) => staff.id === raw.activeStaffId)
-                ? raw.activeStaffId
-                : STAFF_USERS[0].id,
+        staff,
+        activeStaffId,
     };
+}
+
+function readRawState(): string | null {
+    if (typeof window === 'undefined') return null;
+    const current = window.localStorage.getItem(STORAGE_KEY);
+    if (current) return current;
+    for (const key of LEGACY_STORAGE_KEYS) {
+        const legacy = window.localStorage.getItem(key);
+        if (legacy) return legacy;
+    }
+    return null;
 }
 
 export function loadState(): PersistedState {
     if (typeof window === 'undefined') return createDefaultState();
     try {
-        const raw = window.localStorage.getItem(STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_KEY);
+        const raw = readRawState();
         if (!raw) return createDefaultState();
         const parsed = normalizeState(JSON.parse(raw));
         if (!parsed) return createDefaultState();
@@ -105,6 +171,21 @@ export function saveState(state: PersistedState) {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-export function findStaffByPin(pin: string) {
-    return STAFF_USERS.find((staff) => staff.pin === pin) ?? null;
+export function findStaffByPin(staff: StaffUser[], pin: string) {
+    return staff.find((user) => user.pin === pin) ?? null;
+}
+
+export function createStaffUser(input: {
+    name: string;
+    role: StaffRole;
+    pin: string;
+}): StaffUser {
+    const name = input.name.trim();
+    return {
+        id: createId('staff'),
+        name,
+        role: input.role,
+        pin: input.pin.trim(),
+        initials: initialsFromName(name),
+    };
 }
