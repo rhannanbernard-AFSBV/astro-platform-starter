@@ -1342,6 +1342,423 @@ button {
     }
 }
 
+.staff-item .avatar {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    color: var(--green);
+    background: #e4ebe6;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.users-panel .admin-item {
+    align-items: center;
+}
+
+.role-banner {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border: 1px solid #d6e7db;
+    border-radius: 10px;
+    color: #336443;
+    background: #f1f8f3;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.price-dual {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    line-height: 1.15;
+}
+
+.price-dual strong {
+    color: var(--green);
+    font-size: 16px;
+}
+
+.price-dual small,
+.price-dual.compact small {
+    color: #8a7b68;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.price-dual.compact {
+    display: inline-flex;
+    flex-direction: column;
+}
+
+.card-footer .price-dual strong,
+.order-item-top .price-dual strong,
+.bill-summary .price-dual strong {
+    color: var(--green);
+}
+
+.bill-summary .total .price-dual strong {
+    font-size: 22px;
+}
+
+.fx-note {
+    margin: 8px 0 0;
+    color: #aaa49a;
+    font-size: 11px;
+    text-align: center;
+}
+
+.view-fallback {
+    padding: 80px 24px;
+    color: var(--muted);
+    text-align: center;
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 22px;
+}
+
+.ticket-count {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.ticket-virtual {
+    margin-top: 24px;
+    display: grid;
+    gap: 12px;
+}
+
+.ticket-virtual .ticket-card {
+    margin-bottom: 12px;
+}
+
+.online-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.online-pill svg {
+    width: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.online-pill.on {
+    color: #336443;
+}
+
+.online-pill.off {
+    color: #9b5740;
+}
+
+.staff-chip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+}
+
+.staff-chip > span:last-child {
+    display: flex;
+    flex-direction: column;
+}
+
+.staff-chip small {
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: capitalize;
+}
+
+.workspace.wide-main {
+    grid-template-columns: 1fr;
+}
+
+.workspace.wide-main .menu-panel {
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.mod-line {
+    margin: 4px 0 0 !important;
+    color: #8a6348 !important;
+    font-size: 11px !important;
+}
+
+.count-badge {
+    margin-left: 6px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    color: #fff;
+    background: var(--apricot);
+    font-size: 11px;
+}
+
+.ticket-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+    margin-top: 28px;
+}
+
+.ticket-card {
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--paper);
+    padding: 16px;
+    box-shadow: 0 8px 24px rgba(52, 43, 32, .05);
+}
+
+.ticket-card header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.ticket-card h3 {
+    margin: 0 0 8px;
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 20px;
+}
+
+.ticket-card p {
+    margin: 0 0 6px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.ticket-note {
+    color: #8a6348 !important;
+    font-weight: 600;
+}
+
+.ticket-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.ticket-actions button {
+    flex: 1;
+    min-height: 36px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    color: var(--green);
+    background: #f6faf7;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.ticket-card.queued {
+    border-color: #d8c3a5;
+}
+
+.ticket-card.preparing {
+    border-color: #c9a36a;
+    background: #fffaf2;
+}
+
+.ticket-card.ready {
+    border-color: #8fb39a;
+    background: #f3faf5;
+}
+
+.report-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin: 28px 0;
+}
+
+.report-stats > div {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--paper);
+    padding: 16px;
+}
+
+.report-stats span {
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.report-stats strong {
+    display: block;
+    margin-top: 8px;
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 28px;
+    color: var(--green);
+}
+
+.report-stats .wide {
+    grid-column: 1 / -1;
+}
+
+.sales-table {
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    overflow: hidden;
+    background: var(--paper);
+}
+
+.sales-row {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr 1.2fr .9fr .9fr;
+    gap: 10px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--line);
+    font-size: 13px;
+}
+
+.sales-row.head {
+    border-top: 0;
+    color: var(--muted);
+    background: #f7f5ef;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.modifier-sheet {
+    width: min(560px, 100%);
+}
+
+.modifier-body {
+    padding: 8px 22px 24px;
+}
+
+.mod-group {
+    margin-bottom: 18px;
+}
+
+.mod-group h3 {
+    display: flex;
+    justify-content: space-between;
+    margin: 0 0 10px;
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 18px;
+}
+
+.mod-group small {
+    color: var(--muted);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.mod-options {
+    display: grid;
+    gap: 8px;
+}
+
+.mod-options button {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: #fbfaf7;
+    color: var(--ink);
+    cursor: pointer;
+    text-align: left;
+}
+
+.mod-options button.active {
+    border-color: var(--green);
+    background: #edf2ee;
+}
+
+.pin-help {
+    margin: 0 0 12px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.receipt-brand {
+    align-items: flex-start !important;
+}
+
+.receipt-logo {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    margin-bottom: 8px;
+    border-radius: 50% 50% 46% 54%;
+    color: #fff;
+    background: var(--green);
+    font: 700 22px/1 'Playfair Display', serif;
+}
+
+.receipt-qr {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 20px;
+    padding: 14px;
+    border: 1px dashed #d8d2c8;
+    border-radius: 14px;
+}
+
+.receipt-qr img {
+    width: 110px;
+    height: 110px;
+    object-fit: cover;
+    background: #fff;
+}
+
+.receipt-qr strong {
+    display: block;
+    margin-bottom: 4px;
+    font-family: 'Playfair Display', Georgia, serif;
+}
+
+.receipt-qr span {
+    color: var(--muted);
+    font-size: 12px;
+    word-break: break-all;
+}
+
+@media (max-width: 900px) {
+    .report-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .sales-row,
+    .sales-row.head {
+        grid-template-columns: 1fr 1fr;
+    }
+    .mode-toggle {
+        max-width: 100%;
+        overflow-x: auto;
+    }
+}
+
 @media print {
     body * {
         visibility: hidden !important;
