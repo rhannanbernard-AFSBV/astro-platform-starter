@@ -180,7 +180,7 @@ def _seed_snapshot() -> dict[str, Any]:
         "activeTableId": table_id,
         "sales": [],
         "restaurant": {
-            "name": "Savory Kitchen & Bar",
+            "name": "Authentic Jamaican Cuisine & Bar",
             "tagline": "Coastal plates · craft drinks",
             "address": "14 Front Street, Philipsburg, Sint Maarten",
             "phone": "+1 (721) 555-0142",
@@ -211,7 +211,7 @@ def _ensure_seed(conn: sqlite3.Connection) -> None:
     created = _now_iso()
     conn.execute(
         "INSERT INTO tenants (id, company_name, country_code, created_at) VALUES (?, ?, ?, ?)",
-        (DEFAULT_TENANT_ID, "Savory Kitchen & Bar", "SXM", created),
+        (DEFAULT_TENANT_ID, "Authentic Jamaican Cuisine & Bar", "SXM", created),
     )
     must_change = 1 if force_seed_pin_change() else 0
     demo_staff = [

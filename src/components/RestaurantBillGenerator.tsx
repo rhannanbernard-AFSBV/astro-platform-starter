@@ -1121,17 +1121,17 @@ export default function RestaurantBillGenerator() {
     );
 
     if (!hydrated) {
-        return <div className="bistro-app loading-shell">Loading Savory…</div>;
+        return <div className="bistro-app loading-shell">Loading…</div>;
     }
 
     return (
         <div className="bistro-app">
             <header className="topbar">
-                <a className="brand" href="/" aria-label="Savory home">
-                    <span className="brand-mark">S</span>
+                <a className="brand" href="/" aria-label="Authentic Jamaican Cuisine & Bar home">
+                    <span className="brand-mark">A</span>
                     <span>
-                        <strong>SAVORY</strong>
-                        <small>Kitchen &amp; Bar · USD/XCG</small>
+                        <strong>Authentic Jamaican</strong>
+                        <small>Cuisine &amp; Bar · USD/XCG</small>
                     </span>
                 </a>
                 <div className="service-status">

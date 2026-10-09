@@ -32,7 +32,7 @@ export const DEFAULT_TAX_PERCENT = DEFAULT_SERVICE_CHARGE_PERCENT;
 export const PLACEHOLDER_IMAGE = '/menu/1.svg';
 
 export const DEFAULT_RESTAURANT: RestaurantProfile = {
-    name: 'Savory Kitchen & Bar',
+    name: 'Authentic Jamaican Cuisine & Bar',
     tagline: 'Coastal plates · craft drinks',
     address: '14 Front Street, Philipsburg, Sint Maarten',
     phone: '+1 (721) 555-0142',

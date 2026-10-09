@@ -16,6 +16,7 @@ import type {
     OrderLine,
     PersistedState,
     PosSettings,
+    RestaurantProfile,
     SaleRecord,
     StaffRole,
     StaffUser,
@@ -24,6 +25,17 @@ import type {
 } from './types';
 import { STAFF_ROLES, TIP_AMOUNT_PRESETS } from './types';
 import { initialsFromName } from './roles';
+
+const LEGACY_RESTAURANT_NAMES = new Set(['Savory Kitchen & Bar', 'SAVORY', 'Savory']);
+
+function migrateRestaurant(raw: unknown): RestaurantProfile {
+    if (!raw || typeof raw !== 'object') return { ...DEFAULT_RESTAURANT };
+    const merged = { ...DEFAULT_RESTAURANT, ...(raw as Partial<RestaurantProfile>) };
+    if (!merged.name || LEGACY_RESTAURANT_NAMES.has(merged.name)) {
+        merged.name = DEFAULT_RESTAURANT.name;
+    }
+    return merged;
+}
 
 function withModifiers(menu: MenuItem[]): MenuItem[] {
     const defaults = new Map(DEFAULT_MENU.map((item) => [item.id, item]));
@@ -322,10 +334,7 @@ function normalizeState(value: unknown): PersistedState | null {
         tables,
         activeTableId,
         sales: migrateSales(raw.sales),
-        restaurant:
-            raw.restaurant && typeof raw.restaurant === 'object'
-                ? { ...DEFAULT_RESTAURANT, ...(raw.restaurant as PersistedState['restaurant']) }
-                : DEFAULT_RESTAURANT,
+        restaurant: migrateRestaurant(raw.restaurant),
         staff,
         activeStaffId,
         nextOrderSeq: Math.max(1, Number(raw.nextOrderSeq ?? 1)),
