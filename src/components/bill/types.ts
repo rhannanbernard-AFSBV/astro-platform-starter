@@ -35,6 +35,17 @@ export type ModifierGroup = {
     options: ModifierOption[];
 };
 
+/** Local-time pour / happy-hour window (hours 0–23). */
+export type HappyHourWindow = {
+    priceCents: number;
+    /** Inclusive start hour (local) */
+    startHour: number;
+    /** Exclusive end hour (local); may wrap past midnight */
+    endHour: number;
+    /** 0=Sun … 6=Sat; omit or empty = every day */
+    daysOfWeek?: number[];
+};
+
 export type MenuItem = {
     id: string;
     name: string;
@@ -43,6 +54,10 @@ export type MenuItem = {
     priceCents: number;
     image: string;
     popular?: boolean;
+    /** Out of stock — greyed out on Service / bar */
+    eightySixed?: boolean;
+    /** Optional time-window pour price */
+    happyHour?: HappyHourWindow | null;
     modifierGroups: ModifierGroup[];
 };
 
@@ -74,6 +89,10 @@ export type OrderLine = {
     courseFire: CourseFire;
     bumpedAt: string | null;
     bumpCount: number;
+    /** Unit price locked at add (includes modifiers + happy hour); null = live lookup */
+    unitPriceSnapshotCents: number | null;
+    /** When set, line is fully comped ($0) but remains on the check */
+    compReason: string | null;
 };
 
 export type PaymentTender = {
@@ -84,9 +103,13 @@ export type PaymentTender = {
     paidAt: string;
 };
 
+export type CheckKind = 'table' | 'bar_tab';
+
 export type TableOrder = {
     id: string;
     label: string;
+    /** Floor table vs standup bar tab */
+    checkKind: CheckKind;
     status: TableStatus;
     lines: OrderLine[];
     guests: Guest[];
@@ -111,6 +134,8 @@ export type SaleRecord = {
     serviceChargeCents: number;
     tipCents: number;
     totalCents: number;
+    /** Sum of pre-comp line totals that were written off */
+    compCents: number;
     payment: PaymentTender;
     serverName: string;
     itemCount: number;
@@ -137,6 +162,8 @@ export type PosSettings = {
     bumpAfterMinutes: number;
     /** Minutes without activity before the station UI locks (0 = off) */
     idleLockMinutes: number;
+    /** When true, adding a drink immediately fires it to the bar rail */
+    autoFireDrinks: boolean;
 };
 
 export type StaffUser = {
@@ -162,7 +189,7 @@ export type AppNotification = {
 
 export type AuditEntry = {
     id: string;
-    kind: 'void_ticket' | 'void_payment' | 'void_line';
+    kind: 'void_ticket' | 'void_payment' | 'void_line' | 'comp';
     reason: string;
     staffId: string;
     staffName: string;
@@ -170,6 +197,22 @@ export type AuditEntry = {
     details: string;
     tableLabel: string | null;
 };
+
+export const COMP_REASON_PRESETS = [
+    'Spill / remake',
+    'VIP / host',
+    'Staff drink',
+    'Manager goodwill',
+    'Other',
+] as const;
+
+export const VOID_REASON_PRESETS = [
+    'Guest changed mind',
+    'Wrong item / modifier',
+    '86’d / out of stock',
+    'Duplicate ticket',
+    'Other',
+] as const;
 
 export type PersistedState = {
     version: 6;
@@ -208,6 +251,7 @@ export type BillSnapshot = {
         kitchenStatus?: KitchenStatus;
         courseFire?: CourseFire;
         category?: MenuCategory;
+        compReason?: string | null;
     }>;
     guests: Array<{
         id: string;

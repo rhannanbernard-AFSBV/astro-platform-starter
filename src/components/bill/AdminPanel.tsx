@@ -285,10 +285,20 @@ export default function AdminPanel({
                             }
                         />
                     </label>
+                    <label className="checkbox">
+                        <input
+                            type="checkbox"
+                            checked={settings.autoFireDrinks}
+                            onChange={(event) =>
+                                onSettingsChange({ autoFireDrinks: event.target.checked })
+                            }
+                        />
+                        Auto-fire drinks to bar on add
+                    </label>
                 </div>
                 <p className="fx-note">
-                    FX, service charge, bump timer, and idle lock sync across open tabs. Set idle lock
-                    to 0 to disable the station lock screen.
+                    FX, service charge, bump timer, idle lock, and auto-fire sync across open tabs.
+                    Set idle lock to 0 to disable the station lock screen.
                 </p>
                 <h2>Station deep-links</h2>
                 <p className="fx-note">
@@ -306,9 +316,9 @@ export default function AdminPanel({
                         </div>
                     ))}
                 </div>
-                <h2>Void audit log</h2>
+                <h2>Void / comp audit log</h2>
                 {auditLog.length === 0 ? (
-                    <p className="fx-note">No voids recorded yet.</p>
+                    <p className="fx-note">No voids or comps recorded yet.</p>
                 ) : (
                     <ul className="audit-log-list">
                         {auditLog.slice(0, 12).map((entry) => (
@@ -513,6 +523,121 @@ export default function AdminPanel({
                         />
                         Mark as popular
                     </label>
+                    <label className="checkbox">
+                        <input
+                            type="checkbox"
+                            checked={Boolean(menuForm.eightySixed)}
+                            onChange={(event) =>
+                                onFormChange((current) => ({
+                                    ...current,
+                                    eightySixed: event.target.checked,
+                                }))
+                            }
+                        />
+                        86’d / out of stock
+                    </label>
+                    <div className="happy-hour-editor">
+                        <label className="checkbox">
+                            <input
+                                type="checkbox"
+                                checked={Boolean(menuForm.happyHour)}
+                                onChange={(event) =>
+                                    onFormChange((current) => ({
+                                        ...current,
+                                        happyHour: event.target.checked
+                                            ? {
+                                                  priceCents: Math.max(
+                                                      0,
+                                                      Math.round(current.priceCents * 0.8),
+                                                  ),
+                                                  startHour: 16,
+                                                  endHour: 19,
+                                              }
+                                            : null,
+                                    }))
+                                }
+                            />
+                            Happy hour / pour price
+                        </label>
+                        {menuForm.happyHour && (
+                            <div className="admin-row">
+                                <label>
+                                    HH price (USD)
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={(menuForm.happyHour.priceCents / 100).toFixed(2)}
+                                        onChange={(event) =>
+                                            onFormChange((current) => ({
+                                                ...current,
+                                                happyHour: current.happyHour
+                                                    ? {
+                                                          ...current.happyHour,
+                                                          priceCents: Math.round(
+                                                              Number(event.target.value || 0) * 100,
+                                                          ),
+                                                      }
+                                                    : null,
+                                            }))
+                                        }
+                                    />
+                                </label>
+                                <label>
+                                    Start hour (0–23)
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="23"
+                                        value={menuForm.happyHour.startHour}
+                                        onChange={(event) =>
+                                            onFormChange((current) => ({
+                                                ...current,
+                                                happyHour: current.happyHour
+                                                    ? {
+                                                          ...current.happyHour,
+                                                          startHour: Math.min(
+                                                              23,
+                                                              Math.max(
+                                                                  0,
+                                                                  Number(event.target.value || 0),
+                                                              ),
+                                                          ),
+                                                      }
+                                                    : null,
+                                            }))
+                                        }
+                                    />
+                                </label>
+                                <label>
+                                    End hour (0–23)
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="23"
+                                        value={menuForm.happyHour.endHour}
+                                        onChange={(event) =>
+                                            onFormChange((current) => ({
+                                                ...current,
+                                                happyHour: current.happyHour
+                                                    ? {
+                                                          ...current.happyHour,
+                                                          endHour: Math.min(
+                                                              23,
+                                                              Math.max(
+                                                                  0,
+                                                                  Number(event.target.value || 0),
+                                                              ),
+                                                          ),
+                                                      }
+                                                    : null,
+                                            }))
+                                        }
+                                    />
+                                </label>
+                            </div>
+                        )}
+                    </div>
                     <div className="admin-actions">
                         <button className="generate-button" type="submit">
                             {editingId ? 'Save changes' : 'Add to menu'}
@@ -560,7 +685,11 @@ export default function AdminPanel({
                             <div>
                                 <strong>{item.name}</strong>
                                 <p>
-                                    {item.category} · <Price cents={item.priceCents} compact /> ·{' '}
+                                    {item.category} · <Price cents={item.priceCents} compact />
+                                    {item.happyHour
+                                        ? ` · HH $${(item.happyHour.priceCents / 100).toFixed(2)} ${item.happyHour.startHour}–${item.happyHour.endHour}h`
+                                        : ''}
+                                    {item.eightySixed ? ' · 86’d' : ''} ·{' '}
                                     {item.modifierGroups.length} modifier groups
                                 </p>
                             </div>

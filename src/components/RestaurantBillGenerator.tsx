@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import './restaurant-bill-generator.css';
 import {
+    createBarTab,
     createId,
     createTable,
     ensureCoreModifierGroups,
@@ -14,6 +15,7 @@ import {
     computeBill,
     computePayment,
     decodeSnapshot,
+    effectiveMenuPriceCents,
     formatDual,
     salesForDay,
     salesToCsv,
@@ -46,13 +48,16 @@ import ReceiptView from './bill/ReceiptView';
 import {
     canAccessView,
     canClearOrder,
+    canCompLine,
     canCreateOrders,
     canDeleteMenuItems,
     canDeletePayments,
     canDeleteTickets,
+    canEightySix,
     canGenerateBill,
     canManageMenu,
     canManageUsers,
+    canOpenBarTab,
     canReopenTable,
     canRunBarBoard,
     canRunKitchenBoard,
@@ -142,6 +147,8 @@ function emptyMenuForm(): Omit<MenuItem, 'id'> {
         priceCents: 0,
         image: PLACEHOLDER_IMAGE,
         popular: false,
+        eightySixed: false,
+        happyHour: null,
         modifierGroups: ensureCoreModifierGroups([]),
     };
 }
@@ -165,10 +172,26 @@ function sanitizeMenuForm(form: Omit<MenuItem, 'id'>): Omit<MenuItem, 'id'> {
                       ],
         };
     });
+    const hh = form.happyHour;
+    const happyHour =
+        hh &&
+        Number.isFinite(hh.priceCents) &&
+        hh.priceCents >= 0 &&
+        Number.isFinite(hh.startHour) &&
+        Number.isFinite(hh.endHour)
+            ? {
+                  priceCents: Math.max(0, Math.round(hh.priceCents)),
+                  startHour: Math.min(23, Math.max(0, Math.round(hh.startHour))),
+                  endHour: Math.min(23, Math.max(0, Math.round(hh.endHour))),
+                  daysOfWeek: hh.daysOfWeek,
+              }
+            : null;
     return {
         ...form,
         name: form.name.trim(),
         description: form.description.trim(),
+        eightySixed: form.eightySixed === true,
+        happyHour,
         modifierGroups: groups,
     };
 }
@@ -210,6 +233,7 @@ export default function RestaurantBillGenerator() {
         title: string;
         details: string;
         tableLabel: string | null;
+        mode: 'void' | 'comp';
         apply: (reason: string) => void;
     }>(null);
     const [posSession, setPosSession] = useState<PosSession | null>(null);
@@ -562,6 +586,10 @@ export default function RestaurantBillGenerator() {
 
     const openModifierModal = (item: MenuItem) => {
         if (isPaid || !canCreateOrders(staff.role)) return;
+        if (item.eightySixed) {
+            setShareFeedback(`${item.name} is 86’d — out of stock.`);
+            return;
+        }
         const defaults: Record<string, string[]> = {};
         item.modifierGroups.forEach((group) => {
             defaults[group.id] = group.multi ? [] : group.options[0] ? [group.options[0].id] : [];
@@ -595,6 +623,11 @@ export default function RestaurantBillGenerator() {
 
     const confirmAddItem = () => {
         if (!modifierItem) return;
+        if (modifierItem.eightySixed) {
+            setShareFeedback(`${modifierItem.name} is 86’d — out of stock.`);
+            setModifierItem(null);
+            return;
+        }
         const modifiers: SelectedModifier[] = modifierItem.modifierGroups.flatMap((group) => {
             const selected = selectedMods[group.id] ?? [];
             return selected
@@ -607,35 +640,68 @@ export default function RestaurantBillGenerator() {
                     priceDeltaCents: option.priceDeltaCents,
                 }));
         });
-        updateActiveTable((table) => {
+        const modTotal = modifiers.reduce((sum, mod) => sum + mod.priceDeltaCents, 0);
+        const snapshot = effectiveMenuPriceCents(modifierItem) + modTotal;
+        const isDrink = isBeverageItem(modifierItem);
+        const autoFire =
+            isDrink && state.settings.autoFireDrinks && canSendToBar(staff.role);
+        let firedCount = 0;
+
+        commit((current) => {
+            const table = current.tables.find((entry) => entry.id === current.activeTableId);
+            if (!table) return current;
             const unpaidGuest =
                 table.guests.find((guest) => !guest.paidAt) ?? table.guests[0] ?? null;
-            return {
-                ...table,
-                billGeneratedAt: null,
-                guestBillApprovedAt: null,
-                guestSignatureDataUrl: null,
-                guestPreferredPayment: null,
-                lines: [
-                    ...table.lines,
-                    {
-                        id: createId('line'),
-                        menuItemId: modifierItem.id,
-                        quantity: 1,
-                        guestId: unpaidGuest?.id ?? null,
-                        note: lineNote.trim(),
-                        modifiers,
-                        kitchenStatus: 'draft',
-                        sentToKitchenAt: null,
-                        orderNumber: null,
-                        sentByStaffId: null,
-                        courseFire: 'fire',
-                        bumpedAt: null,
-                        bumpCount: 0,
-                    },
-                ],
+            let next: PersistedState = {
+                ...current,
+                tables: current.tables.map((entry) =>
+                    entry.id !== current.activeTableId
+                        ? entry
+                        : {
+                              ...entry,
+                              billGeneratedAt: null,
+                              guestBillApprovedAt: null,
+                              guestSignatureDataUrl: null,
+                              guestPreferredPayment: null,
+                              lines: [
+                                  ...entry.lines,
+                                  {
+                                      id: createId('line'),
+                                      menuItemId: modifierItem.id,
+                                      quantity: 1,
+                                      guestId: unpaidGuest?.id ?? null,
+                                      note: lineNote.trim(),
+                                      modifiers,
+                                      kitchenStatus: 'draft',
+                                      sentToKitchenAt: null,
+                                      orderNumber: null,
+                                      sentByStaffId: null,
+                                      courseFire: 'fire',
+                                      bumpedAt: null,
+                                      bumpCount: 0,
+                                      unitPriceSnapshotCents: snapshot,
+                                      compReason: null,
+                                  },
+                              ],
+                          },
+                ),
             };
+            if (autoFire) {
+                const result = applySendDrinksToBar(next, menuById);
+                next = result.state;
+                firedCount = result.sentCount;
+            }
+            return next;
         });
+        if (autoFire) {
+            setShareFeedback(
+                firedCount > 0
+                    ? `${firedCount} drink(s) fired to the bar rail.`
+                    : `${modifierItem.name} added.`,
+            );
+        } else if (isDrink) {
+            setShareFeedback(`${modifierItem.name} added — Fire drinks when ready.`);
+        }
         setModifierItem(null);
     };
 
@@ -646,14 +712,84 @@ export default function RestaurantBillGenerator() {
         tableLabel: string | null,
         apply: (reason: string) => void,
         needsManager: boolean,
+        mode: 'void' | 'comp' = 'void',
     ) => {
         const openVoid = () =>
-            setVoidPending({ kind, title, details, tableLabel, apply });
+            setVoidPending({ kind, title, details, tableLabel, apply, mode });
         if (needsManager) {
             requireManager(openVoid);
             return;
         }
         openVoid();
+    };
+
+    const openBarTab = (guestName: string) => {
+        if (!canOpenBarTab(staff.role)) return;
+        const tab = createBarTab(guestName, state.settings.defaultServiceChargePercent);
+        commit((current) => ({
+            ...current,
+            tables: [...current.tables, tab],
+            activeTableId: tab.id,
+        }));
+        setView('service');
+        setShareFeedback(`Bar tab opened for ${guestName.trim()}.`);
+    };
+
+    const toggleEightySix = (menuItemId: string) => {
+        if (!canEightySix(staff.role)) {
+            setShareFeedback('Kitchen, bartender, or manager can 86 items.');
+            return;
+        }
+        commit((current) => ({
+            ...current,
+            menu: current.menu.map((item) =>
+                item.id === menuItemId ? { ...item, eightySixed: !item.eightySixed } : item,
+            ),
+        }));
+        const item = menuById.get(menuItemId);
+        if (item) {
+            setShareFeedback(
+                item.eightySixed
+                    ? `${item.name} back in stock.`
+                    : `${item.name} 86’d — hidden from new orders.`,
+            );
+        }
+    };
+
+    const requestCompLine = (lineId: string) => {
+        const line = activeTable.lines.find((entry) => entry.id === lineId);
+        if (!line || line.compReason) return;
+        const item = menuById.get(line.menuItemId);
+        if (!item) return;
+        const drink = isBeverageItem(item);
+        if (!canCompLine(staff.role, drink)) {
+            setShareFeedback(
+                drink
+                    ? 'Bartender or manager can comp drinks.'
+                    : 'Manager required to comp food.',
+            );
+            return;
+        }
+        const needsManager = !drink && staff.role !== 'manager' && staff.role !== 'admin';
+        requestVoid(
+            'comp',
+            'Comp line',
+            `${item.name} × ${line.quantity} · ${activeTable.label}`,
+            activeTable.label,
+            (reason) => {
+                updateActiveTable((table) => ({
+                    ...table,
+                    billGeneratedAt: null,
+                    guestBillApprovedAt: null,
+                    lines: table.lines.map((entry) =>
+                        entry.id === lineId ? { ...entry, compReason: reason } : entry,
+                    ),
+                }));
+                setShareFeedback(`${item.name} comped · ${reason}`);
+            },
+            needsManager,
+            'comp',
+        );
     };
 
     const confirmVoid = (reason: string) => {
@@ -982,6 +1118,7 @@ export default function RestaurantBillGenerator() {
             serviceChargeCents: saleGuest?.serviceChargeCents ?? bill.serviceChargeCents,
             tipCents: saleGuest?.tipCents ?? bill.tipCents,
             totalCents: dueCents,
+            compCents: saleGuest ? 0 : bill.compCents,
             payment,
             serverName: staff.name,
             itemCount: saleGuest
@@ -1109,7 +1246,7 @@ export default function RestaurantBillGenerator() {
             setShareFeedback('No drink drafts to send to the bar.');
             return;
         }
-        setShareFeedback(`${sentCount} drink(s) sent to the bar rail.`);
+        setShareFeedback(`${sentCount} drink(s) fired to the bar rail.`);
         setNotifOpen(true);
     };
 
@@ -1235,7 +1372,7 @@ export default function RestaurantBillGenerator() {
                                 ? 'Table paid'
                                 : 'Open for service'}
                     </span>
-                    {staff.role !== 'kitchen' && staff.role !== 'bartender' && (
+                    {staff.role !== 'kitchen' && (
                         <>
                             <span className="status-divider" />
                             <label className="table-switcher">
@@ -1366,11 +1503,13 @@ export default function RestaurantBillGenerator() {
                             <TableMap
                                 tables={state.tables}
                                 activeTableId={activeTable.id}
+                                canOpenBarTab={canOpenBarTab(staff.role)}
                                 onSelect={(tableId) => {
                                     commit((current) => ({ ...current, activeTableId: tableId }));
                                     setReceipt(null);
                                     setGuestBillOpen(false);
                                 }}
+                                onOpenBarTab={openBarTab}
                             />
                         </div>
                         <ServiceMenu
@@ -1397,12 +1536,14 @@ export default function RestaurantBillGenerator() {
                             canDeleteTickets={
                                 canDeleteTickets(staff.role) && staff.role !== 'kitchen'
                             }
+                            canEightySix={canEightySix(staff.role)}
                             onStatus={setKitchenStatus}
                             onDeleteTicket={deleteKitchenTicket}
                             onBump={bumpTicket}
                             onRecall={recallTicket}
                             onCourseFire={setCourseFireOnLine}
                             onFireAllHeld={fireAllHeld}
+                            onToggleEightySix={toggleEightySix}
                         />
                     </Suspense>
                 )}
@@ -1417,12 +1558,14 @@ export default function RestaurantBillGenerator() {
                             canDeleteTickets={
                                 canDeleteTickets(staff.role) && staff.role !== 'bartender'
                             }
+                            canEightySix={canEightySix(staff.role)}
                             onStatus={setKitchenStatus}
                             onDeleteTicket={deleteKitchenTicket}
                             onBump={bumpTicket}
                             onRecall={recallTicket}
                             onCourseFire={setCourseFireOnLine}
                             onFireAllHeld={fireAllHeld}
+                            onToggleEightySix={toggleEightySix}
                         />
                     </Suspense>
                 )}
@@ -1623,6 +1766,10 @@ export default function RestaurantBillGenerator() {
                                     priceCents: item.priceCents,
                                     image: item.image,
                                     popular: Boolean(item.popular),
+                                    eightySixed: Boolean(item.eightySixed),
+                                    happyHour: item.happyHour
+                                        ? { ...item.happyHour }
+                                        : null,
                                     modifierGroups: ensureCoreModifierGroups(item.modifierGroups),
                                 });
                             }}
@@ -1689,6 +1836,7 @@ export default function RestaurantBillGenerator() {
                         canReopen={canReopenTable(staff.role)}
                         canDeleteTickets={canDeleteTickets(staff.role)}
                         canUpdateBeverageStatus={canUpdateBeverageStatus(staff.role)}
+                        canCompLine={(isDrink) => canCompLine(staff.role, isDrink)}
                         flashLineIds={flashIds}
                         onClear={() => {
                             if (!canClearOrder(staff.role)) {
@@ -1771,6 +1919,7 @@ export default function RestaurantBillGenerator() {
                         onChangeQuantity={changeQuantity}
                         onDeleteLine={deleteLine}
                         onBeverageStatus={setBeverageStatus}
+                        onCompLine={requestCompLine}
                         onAssignGuest={(lineId, guestId) => {
                             if (isPaid) return;
                             updateActiveTable((table) => ({
@@ -1976,6 +2125,7 @@ export default function RestaurantBillGenerator() {
                 <VoidReasonModal
                     title={voidPending.title}
                     details={voidPending.details}
+                    mode={voidPending.mode}
                     onConfirm={confirmVoid}
                     onCancel={() => setVoidPending(null)}
                 />

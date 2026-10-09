@@ -36,6 +36,7 @@ type Props = {
     canReopen: boolean;
     canDeleteTickets: boolean;
     canUpdateBeverageStatus: boolean;
+    canCompLine?: (isDrink: boolean) => boolean;
     flashLineIds?: string[];
     onClear: () => void;
     onAddGuest: () => void;
@@ -50,6 +51,7 @@ type Props = {
     onServiceChargeEnabled: (enabled: boolean) => void;
     onServiceChargePercent: (value: number) => void;
     onBeverageStatus: (lineId: string, status: KitchenStatus) => void;
+    onCompLine?: (lineId: string) => void;
     onSendKitchen: () => void;
     onSendBar: () => void;
     onGenerateBill: () => void;
@@ -77,6 +79,7 @@ export default function OrderPanel({
     canReopen,
     canDeleteTickets,
     canUpdateBeverageStatus,
+    canCompLine,
     flashLineIds = [],
     onClear,
     onAddGuest,
@@ -91,6 +94,7 @@ export default function OrderPanel({
     onServiceChargeEnabled,
     onServiceChargePercent,
     onBeverageStatus,
+    onCompLine,
     onSendKitchen,
     onSendBar,
     onGenerateBill,
@@ -122,7 +126,9 @@ export default function OrderPanel({
         <aside className="order-panel">
             <div className="order-title">
                 <div>
-                    <p className="eyebrow">Current order</p>
+                    <p className="eyebrow">
+                        {activeTable.checkKind === 'bar_tab' ? 'Bar tab' : 'Current order'}
+                    </p>
                     <h2>{activeTable.label}</h2>
                 </div>
                 {canClear && (
@@ -211,9 +217,16 @@ export default function OrderPanel({
                             line.kitchenStatus !== 'draft' &&
                             Boolean(next);
 
+                        const isComped = Boolean(line.compReason);
+                        const canComp =
+                            !isPaid &&
+                            !isComped &&
+                            Boolean(canCompLine?.(beverage)) &&
+                            Boolean(onCompLine);
+
                         return (
                             <div
-                                className={`order-item ${beverage ? 'beverage-line' : ''} status-${line.kitchenStatus} ${flashLineIds.includes(line.id) ? 'ready-flash' : ''}`}
+                                className={`order-item ${beverage ? 'beverage-line' : ''} status-${line.kitchenStatus}${isComped ? ' comped-line' : ''} ${flashLineIds.includes(line.id) ? 'ready-flash' : ''}`}
                                 key={line.id}
                             >
                                 <div className="order-item-top">
@@ -223,13 +236,15 @@ export default function OrderPanel({
                                             {beverage && (
                                                 <span className="bev-tag">Beverage</span>
                                             )}
+                                            {isComped && <span className="comp-tag">COMP</span>}
                                         </h3>
                                         <p>
                                             <Price cents={unitPriceCents(item, line)} compact /> each
                                             {line.orderNumber ? ` · #${line.orderNumber}` : ''}
                                             {beverage && line.kitchenStatus === 'draft'
-                                                ? ' · ready to send to bar'
+                                                ? ' · ready to fire to bar'
                                                 : ''}
+                                            {isComped ? ` · ${line.compReason}` : ''}
                                         </p>
                                         <StatusChip status={line.kitchenStatus} />
                                         {line.modifiers.length > 0 && (
@@ -241,6 +256,16 @@ export default function OrderPanel({
                                     </div>
                                     <div className="order-item-aside">
                                         <Price cents={lineTotalCents(item, line)} />
+                                        {canComp && (
+                                            <button
+                                                type="button"
+                                                className="line-comp"
+                                                aria-label={`Comp ${item.name}`}
+                                                onClick={() => onCompLine?.(line.id)}
+                                            >
+                                                Comp
+                                            </button>
+                                        )}
                                         {!isPaid &&
                                             (line.kitchenStatus === 'draft' || canDeleteTickets) && (
                                                 <button
@@ -326,7 +351,7 @@ export default function OrderPanel({
                                 )}
                                 {beverage && line.kitchenStatus === 'draft' && (
                                     <p className="pin-help bev-help">
-                                        Use Send drinks to bar so the bartender can pour and bump.
+                                        Fire drinks to bar so the bartender can pour and bump.
                                     </p>
                                 )}
                             </div>
@@ -414,6 +439,12 @@ export default function OrderPanel({
                     <span>Subtotal</span>
                     <Price cents={bill.subtotalCents} />
                 </div>
+                {bill.compCents > 0 && (
+                    <div>
+                        <span>Comps</span>
+                        <Price cents={bill.compCents} />
+                    </div>
+                )}
                 <div>
                     <span>
                         Service Charge
@@ -460,7 +491,7 @@ export default function OrderPanel({
                             disabled={!drinkDraftCount}
                             onClick={onSendBar}
                         >
-                            <Icon name="receipt" /> Send drinks to bar
+                            <Icon name="receipt" /> Fire drinks now
                             {drinkDraftCount > 0 && (
                                 <span className="count-badge">{drinkDraftCount}</span>
                             )}

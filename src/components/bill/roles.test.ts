@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+    canCompLine,
+    canCreateOrders,
     canDeleteTickets,
+    canEightySix,
+    canOpenBarTab,
     canRunBarBoard,
     canSendToBar,
     canTakePayment,
@@ -16,11 +20,17 @@ describe('roles', () => {
         expect(canTakePayment('kitchen')).toBe(false);
     });
 
-    it('gives bartender a dedicated bar rail', () => {
-        expect(viewsForRole('bartender')).toEqual(['bar']);
+    it('gives bartender bar + service and drink revenue powers', () => {
+        expect(viewsForRole('bartender')).toEqual(['bar', 'service']);
         expect(canRunBarBoard('bartender')).toBe(true);
         expect(canUpdateBeverageStatus('bartender')).toBe(true);
-        expect(canTakePayment('bartender')).toBe(false);
+        expect(canCreateOrders('bartender')).toBe(true);
+        expect(canSendToBar('bartender')).toBe(true);
+        expect(canTakePayment('bartender')).toBe(true);
+        expect(canOpenBarTab('bartender')).toBe(true);
+        expect(canCompLine('bartender', true)).toBe(true);
+        expect(canCompLine('bartender', false)).toBe(false);
+        expect(canEightySix('bartender')).toBe(true);
         expect(canSendToBar('server')).toBe(true);
     });
 

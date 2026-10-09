@@ -53,11 +53,17 @@ function withModifiers(menu: MenuItem[]): MenuItem[] {
     }
     const defaults = new Map(DEFAULT_MENU.map((item) => [item.id, item]));
     return menu.map((item) => {
+        const seed = defaults.get(item.id);
         const baseGroups = item.modifierGroups?.length
             ? item.modifierGroups
-            : defaults.get(item.id)?.modifierGroups ?? [];
+            : seed?.modifierGroups ?? [];
         return {
             ...item,
+            eightySixed: item.eightySixed === true,
+            happyHour:
+                item.happyHour && typeof item.happyHour === 'object'
+                    ? item.happyHour
+                    : (seed?.happyHour ?? null),
             modifierGroups: ensureCoreModifierGroups(baseGroups),
         };
     });
@@ -88,6 +94,12 @@ function migrateLegacyLines(lines: Array<Record<string, unknown>>): OrderLine[] 
                 : 'fire',
         bumpedAt: typeof line.bumpedAt === 'string' ? line.bumpedAt : null,
         bumpCount: Math.max(0, Number(line.bumpCount ?? 0)),
+        unitPriceSnapshotCents:
+            typeof line.unitPriceSnapshotCents === 'number' &&
+            Number.isFinite(line.unitPriceSnapshotCents)
+                ? Math.max(0, Math.round(line.unitPriceSnapshotCents))
+                : null,
+        compReason: typeof line.compReason === 'string' && line.compReason ? line.compReason : null,
     }));
 }
 
@@ -132,16 +144,20 @@ function migrateTipFields(table: Record<string, unknown>): {
     const tipCents = Math.round(5000 * (percent / 100));
     const match = (TIP_AMOUNT_PRESETS as readonly number[]).find((value) => value === tipCents);
     return match !== undefined
-        ? { tipAmountPreset: match, tipCents: match }
+        ? { tipAmountPreset: match as TipAmountPreset, tipCents: match }
         : { tipAmountPreset: tipCents === 0 ? 0 : 'custom', tipCents };
 }
 
 function migrateTables(tables: Array<Record<string, unknown>>): TableOrder[] {
     return tables.map((table) => {
         const tip = migrateTipFields(table);
+        const label = String(table.label ?? 'Table');
+        const checkKind =
+            table.checkKind === 'bar_tab' || /^Tab\s*·/i.test(label) ? 'bar_tab' : 'table';
         return {
             id: String(table.id),
-            label: String(table.label ?? 'Table'),
+            label,
+            checkKind,
             status:
                 table.status === 'paid' ? 'paid' : table.status === 'partial' ? 'partial' : 'open',
             lines: migrateLegacyLines(
@@ -187,6 +203,7 @@ function migrateSales(rawSales: unknown): SaleRecord[] {
             serviceChargeCents: Number(sale.serviceChargeCents ?? sale.taxCents ?? 0),
             tipCents: Number(sale.tipCents ?? 0),
             totalCents: Number(sale.totalCents ?? 0),
+            compCents: Math.max(0, Number(sale.compCents ?? 0)),
             payment: sale.payment as SaleRecord['payment'],
             serverName: String(sale.serverName ?? 'Server'),
             itemCount: Number(sale.itemCount ?? 0),
@@ -206,7 +223,10 @@ function migrateAuditLog(raw: unknown): PersistedState['auditLog'] {
             if (!entry || typeof entry !== 'object') return null;
             const a = entry as Record<string, unknown>;
             const kind =
-                a.kind === 'void_payment' || a.kind === 'void_line' || a.kind === 'void_ticket'
+                a.kind === 'void_payment' ||
+                a.kind === 'void_line' ||
+                a.kind === 'void_ticket' ||
+                a.kind === 'comp'
                     ? a.kind
                     : 'void_ticket';
             return {
@@ -236,13 +256,16 @@ function migrateNotifications(raw: unknown): AppNotification[] {
                         ? 'server_ack'
                         : n.kind === 'bump_alert'
                           ? 'bump_alert'
-                          : 'kitchen_ticket',
+                          : n.kind === 'bar_ticket'
+                            ? 'bar_ticket'
+                            : 'kitchen_ticket',
                 title: String(n.title ?? 'Notification'),
                 message: String(n.message ?? ''),
                 orderNumber: typeof n.orderNumber === 'string' ? n.orderNumber : null,
                 tableLabel: typeof n.tableLabel === 'string' ? n.tableLabel : null,
                 audienceRole:
                     n.audienceRole === 'kitchen' ||
+                    n.audienceRole === 'bartender' ||
                     n.audienceRole === 'server' ||
                     n.audienceRole === 'admin' ||
                     n.audienceRole === 'manager' ||
@@ -342,6 +365,10 @@ function normalizeState(value: unknown): PersistedState | null {
             0,
             Number(rawSettings.idleLockMinutes ?? DEFAULT_SETTINGS.idleLockMinutes),
         ),
+        autoFireDrinks:
+            rawSettings.autoFireDrinks !== undefined
+                ? rawSettings.autoFireDrinks !== false
+                : DEFAULT_SETTINGS.autoFireDrinks,
     };
 
     return {

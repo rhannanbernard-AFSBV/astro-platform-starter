@@ -29,6 +29,7 @@ type Props = {
     menuById: Map<string, MenuItem>;
     bumpAfterMinutes: number;
     canDeleteTickets: boolean;
+    canEightySix?: boolean;
     /** Kitchen expo (food) or bar rail (drinks). */
     board?: BoardKind;
     onStatus: (tableId: string, lineId: string, status: KitchenStatus) => void;
@@ -37,6 +38,7 @@ type Props = {
     onRecall: (tableId: string, lineId: string) => void;
     onCourseFire: (tableId: string, lineId: string, courseFire: CourseFire) => void;
     onFireAllHeld: (tableId: string) => void;
+    onToggleEightySix?: (menuItemId: string) => void;
 };
 
 export default function KitchenBoard({
@@ -44,6 +46,7 @@ export default function KitchenBoard({
     menuById,
     bumpAfterMinutes,
     canDeleteTickets,
+    canEightySix = false,
     board = 'kitchen',
     onStatus,
     onDeleteTicket,
@@ -51,8 +54,15 @@ export default function KitchenBoard({
     onRecall,
     onCourseFire,
     onFireAllHeld,
+    onToggleEightySix,
 }: Props) {
     const isBar = board === 'bar';
+    const stockItems = useMemo(() => {
+        const items = [...menuById.values()].filter((item) =>
+            isBar ? isBeverageItem(item) : isKitchenBoundItem(item),
+        );
+        return items.sort((a, b) => a.name.localeCompare(b.name));
+    }, [menuById, isBar]);
     const [statusFilter, setStatusFilter] = useState<ActiveKitchenStatus | 'all'>('all');
     const [courseFilter, setCourseFilter] = useState<CourseFire | 'all'>('all');
     const [activeTableId, setActiveTableId] = useState<string>('');
@@ -146,6 +156,26 @@ export default function KitchenBoard({
                 </div>
                 <p className="ticket-count">{totalActive} active</p>
             </div>
+
+            {canEightySix && onToggleEightySix && (
+                <div className="eighty-six-rail" aria-label="86 list">
+                    <p className="billing-label">86 list — tap to toggle stock</p>
+                    <div className="eighty-six-chips">
+                        {stockItems.map((item) => (
+                            <button
+                                key={item.id}
+                                type="button"
+                                className={`eighty-chip${item.eightySixed ? ' active' : ''}`}
+                                onClick={() => onToggleEightySix(item.id)}
+                                title={item.eightySixed ? 'Mark back in stock' : '86 this item'}
+                            >
+                                {item.eightySixed ? '86 · ' : ''}
+                                {item.name}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             <StatusTabs
                 active={statusFilter}

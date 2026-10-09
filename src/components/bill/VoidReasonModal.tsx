@@ -1,44 +1,52 @@
 import { useState } from 'react';
 import { Icon } from './Icons';
+import { COMP_REASON_PRESETS, VOID_REASON_PRESETS } from './types';
 
-const PRESETS = [
-    'Guest changed mind',
-    'Wrong item / modifier',
-    '86’d / out of stock',
-    'Duplicate ticket',
-    'Manager comp',
-    'Other',
-] as const;
+type Mode = 'void' | 'comp';
 
 type Props = {
     title: string;
     details: string;
+    mode?: Mode;
     onConfirm: (reason: string) => void;
     onCancel: () => void;
 };
 
-export default function VoidReasonModal({ title, details, onConfirm, onCancel }: Props) {
-    const [preset, setPreset] = useState<(typeof PRESETS)[number]>('Guest changed mind');
+export default function VoidReasonModal({
+    title,
+    details,
+    mode = 'void',
+    onConfirm,
+    onCancel,
+}: Props) {
+    const presets = mode === 'comp' ? COMP_REASON_PRESETS : VOID_REASON_PRESETS;
+    const [preset, setPreset] = useState<string>(presets[0]);
     const [custom, setCustom] = useState('');
 
     const resolved = preset === 'Other' ? custom.trim() : preset;
+    const isComp = mode === 'comp';
 
     return (
         <div className="receipt-overlay" role="dialog" aria-modal="true" aria-label={title}>
             <div className="receipt-sheet modifier-sheet">
                 <div className="receipt-toolbar">
                     <div>
-                        <p className="eyebrow">Void audit</p>
+                        <p className="eyebrow">{isComp ? 'Comp audit' : 'Void audit'}</p>
                         <h2>{title}</h2>
                         <p className="pin-help">{details}</p>
                     </div>
-                    <button type="button" className="ghost" onClick={onCancel} aria-label="Cancel void">
+                    <button
+                        type="button"
+                        className="ghost"
+                        onClick={onCancel}
+                        aria-label={isComp ? 'Cancel comp' : 'Cancel void'}
+                    >
                         <Icon name="close" />
                     </button>
                 </div>
                 <div className="modifier-body">
-                    <div className="tip-presets" role="group" aria-label="Void reason">
-                        {PRESETS.map((entry) => (
+                    <div className="tip-presets" role="group" aria-label={isComp ? 'Comp reason' : 'Void reason'}>
+                        {presets.map((entry) => (
                             <button
                                 key={entry}
                                 type="button"
@@ -56,7 +64,11 @@ export default function VoidReasonModal({ title, details, onConfirm, onCancel }:
                                 type="text"
                                 value={custom}
                                 onChange={(event) => setCustom(event.target.value)}
-                                placeholder="Describe why this is being voided"
+                                placeholder={
+                                    isComp
+                                        ? 'Describe why this is being comped'
+                                        : 'Describe why this is being voided'
+                                }
                                 autoFocus
                             />
                         </label>
@@ -71,7 +83,7 @@ export default function VoidReasonModal({ title, details, onConfirm, onCancel }:
                             disabled={!resolved}
                             onClick={() => onConfirm(resolved)}
                         >
-                            Confirm void
+                            {isComp ? 'Confirm comp' : 'Confirm void'}
                         </button>
                     </div>
                 </div>

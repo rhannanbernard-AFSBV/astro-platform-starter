@@ -19,6 +19,12 @@ export const LEGACY_STORAGE_KEYS = [
 export const DEFAULT_SERVICE_CHARGE_PERCENT = 5;
 export const DEFAULT_XCG_PER_USD = 1.8;
 
+/** Default happy hour: 4pm–7pm local, every day */
+export const DEFAULT_HAPPY_HOUR = {
+    startHour: 16,
+    endHour: 19,
+} as const;
+
 export const DEFAULT_SETTINGS: PosSettings = {
     xcgPerUsd: DEFAULT_XCG_PER_USD,
     defaultServiceChargePercent: DEFAULT_SERVICE_CHARGE_PERCENT,
@@ -26,6 +32,7 @@ export const DEFAULT_SETTINGS: PosSettings = {
     shiftClosedAt: null,
     bumpAfterMinutes: 8,
     idleLockMinutes: 5,
+    autoFireDrinks: true,
 };
 /** @deprecated use DEFAULT_SERVICE_CHARGE_PERCENT */
 export const DEFAULT_TAX_PERCENT = DEFAULT_SERVICE_CHARGE_PERCENT;
@@ -218,6 +225,7 @@ export const DEFAULT_MENU: MenuItem[] = [
         priceCents: 950,
         image: '/menu/7.svg',
         popular: true,
+        happyHour: { ...DEFAULT_HAPPY_HOUR, priceCents: 750 },
         modifierGroups: [
             {
                 id: 'drink',
@@ -238,6 +246,7 @@ export const DEFAULT_MENU: MenuItem[] = [
         priceCents: 550,
         image: '/menu/8.svg',
         popular: true,
+        happyHour: { ...DEFAULT_HAPPY_HOUR, priceCents: 400 },
         modifierGroups: [],
     },
     {
@@ -247,6 +256,7 @@ export const DEFAULT_MENU: MenuItem[] = [
         category: 'Drinks',
         priceCents: 600,
         image: '/menu/8.svg',
+        happyHour: { ...DEFAULT_HAPPY_HOUR, priceCents: 450 },
         modifierGroups: [],
     },
     {
@@ -284,11 +294,13 @@ export function createId(prefix: string) {
 export function createTable(
     label: string,
     serviceChargePercent = DEFAULT_SERVICE_CHARGE_PERCENT,
+    checkKind: TableOrder['checkKind'] = 'table',
 ): TableOrder {
     const guestId = createId('guest');
     return {
         id: createId('table'),
         label,
+        checkKind,
         status: 'open',
         lines: [],
         guests: [{ id: guestId, name: 'Guest 1', paidAt: null, payment: null }],
@@ -303,6 +315,17 @@ export function createTable(
         guestPreferredPayment: null,
         guestBillApprovedAt: null,
     };
+}
+
+/** Standup bar tab — no floor table required. */
+export function createBarTab(
+    guestName: string,
+    serviceChargePercent = DEFAULT_SERVICE_CHARGE_PERCENT,
+): TableOrder {
+    const name = guestName.trim() || 'Guest';
+    const tab = createTable(`Tab · ${name}`, serviceChargePercent, 'bar_tab');
+    tab.guests[0].name = name;
+    return tab;
 }
 
 export function createDefaultState(): PersistedState {
@@ -329,6 +352,8 @@ export function createDefaultState(): PersistedState {
             courseFire: 'fire',
             bumpedAt: null,
             bumpCount: 0,
+            unitPriceSnapshotCents: 2450,
+            compReason: null,
         },
         {
             id: createId('line'),
@@ -344,6 +369,8 @@ export function createDefaultState(): PersistedState {
             courseFire: 'fire',
             bumpedAt: null,
             bumpCount: 0,
+            unitPriceSnapshotCents: 750,
+            compReason: null,
         },
     ];
     return {

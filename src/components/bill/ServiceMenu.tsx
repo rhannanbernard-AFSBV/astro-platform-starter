@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { optimizeImageUrl } from './images';
+import { effectiveMenuPriceCents, isHappyHourActive } from './math';
 import Price from './Price';
 import { Icon } from './Icons';
 import type { FilterCategory, MenuItem, TableOrder } from './types';
@@ -47,7 +48,7 @@ export default function ServiceMenu({
     }, [activeTable.lines]);
 
     const favorites = useMemo(
-        () => menu.filter((item) => item.popular).slice(0, 6),
+        () => menu.filter((item) => item.popular && !item.eightySixed).slice(0, 6),
         [menu],
     );
 
@@ -63,6 +64,13 @@ export default function ServiceMenu({
     }, [menu, category, search]);
 
     const readyFlash = flashLineIds.length > 0;
+
+    const priceFor = (item: MenuItem) => effectiveMenuPriceCents(item);
+
+    const addOrBlock = (item: MenuItem, quick: boolean) => {
+        if (item.eightySixed || isPaid) return;
+        (quick ? onQuickAdd ?? onAdd : onAdd)(item);
+    };
 
     return (
         <section className={`menu-panel ${readyFlash ? 'ready-flash-panel' : ''}`}>
@@ -93,11 +101,11 @@ export default function ServiceMenu({
                                 key={item.id}
                                 type="button"
                                 className="favorite-chip"
-                                disabled={isPaid}
-                                onClick={() => (onQuickAdd ?? onAdd)(item)}
+                                disabled={isPaid || item.eightySixed}
+                                onClick={() => addOrBlock(item, true)}
                             >
                                 <span>{item.name}</span>
-                                <Price cents={item.priceCents} compact />
+                                <Price cents={priceFor(item)} compact />
                             </button>
                         ))}
                     </div>
@@ -112,18 +120,26 @@ export default function ServiceMenu({
                     </button>
                 </div>
                 <div className="bar-chips">
-                    {drinks.map((item) => (
-                        <button
-                            key={item.id}
-                            type="button"
-                            className="bar-chip"
-                            disabled={isPaid}
-                            onClick={() => (onQuickAdd ?? onAdd)(item)}
-                        >
-                            <strong>{item.name}</strong>
-                            <Price cents={item.priceCents} compact />
-                        </button>
-                    ))}
+                    {drinks.map((item) => {
+                        const eighty = Boolean(item.eightySixed);
+                        const hh = isHappyHourActive(item);
+                        return (
+                            <button
+                                key={item.id}
+                                type="button"
+                                className={`bar-chip${eighty ? ' eighty-sixed' : ''}${hh ? ' happy-hour' : ''}`}
+                                disabled={isPaid || eighty}
+                                onClick={() => addOrBlock(item, true)}
+                                title={eighty ? '86’d — out of stock' : hh ? 'Happy hour price' : undefined}
+                            >
+                                <strong>
+                                    {item.name}
+                                    {eighty ? ' · 86' : hh ? ' · HH' : ''}
+                                </strong>
+                                <Price cents={priceFor(item)} compact />
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
 
@@ -142,9 +158,11 @@ export default function ServiceMenu({
             <div className="menu-grid">
                 {filteredItems.map((item) => {
                     const quantity = quantities.get(item.id) ?? 0;
+                    const eighty = Boolean(item.eightySixed);
+                    const hh = isHappyHourActive(item);
                     return (
                         <article
-                            className={`menu-card ${item.category === 'Drinks' ? 'drink-card' : ''}`}
+                            className={`menu-card ${item.category === 'Drinks' ? 'drink-card' : ''}${eighty ? ' eighty-sixed' : ''}`}
                             key={item.id}
                         >
                             <div className="food-image">
@@ -156,7 +174,9 @@ export default function ServiceMenu({
                                     width={480}
                                     height={320}
                                 />
-                                {item.popular && <span className="popular">Popular</span>}
+                                {item.popular && !eighty && <span className="popular">Popular</span>}
+                                {eighty && <span className="eighty-badge">86</span>}
+                                {hh && !eighty && <span className="hh-badge">Happy hour</span>}
                                 {quantity > 0 && <span className="in-order">{quantity} in order</span>}
                             </div>
                             <div className="card-copy">
@@ -164,9 +184,18 @@ export default function ServiceMenu({
                                 <h2>{item.name}</h2>
                                 <p className="description">{item.description}</p>
                                 <div className="card-footer">
-                                    <Price cents={item.priceCents} />
+                                    <div className="price-stack">
+                                        <Price cents={priceFor(item)} />
+                                        {hh && (
+                                            <small className="hh-was">
+                                                was <Price cents={item.priceCents} compact />
+                                            </small>
+                                        )}
+                                    </div>
                                     {isPaid ? (
                                         <span className="paid-lock">Paid</span>
+                                    ) : eighty ? (
+                                        <span className="paid-lock">86’d</span>
                                     ) : (
                                         <button
                                             className="add-button"

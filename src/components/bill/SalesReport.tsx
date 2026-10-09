@@ -113,6 +113,12 @@ export default function SalesReport({
                     </strong>
                 </div>
                 <div>
+                    <span>Comps</span>
+                    <strong>
+                        <Price cents={summary.compCents} compact />
+                    </strong>
+                </div>
+                <div>
                     <span>Cash net</span>
                     <strong>
                         <Price cents={summary.cashCents} compact />

@@ -21,7 +21,7 @@ export function viewsForRole(role: StaffRole): AppView[] {
         case 'kitchen':
             return ['kitchen'];
         case 'bartender':
-            return ['bar'];
+            return ['bar', 'service'];
         case 'server':
             return ['service'];
         case 'admin':
@@ -49,9 +49,9 @@ export function canViewSales(role: StaffRole): boolean {
     return role === 'admin' || role === 'manager';
 }
 
-/** Waiter/server service capabilities */
+/** Floor + bar ringing */
 export function canCreateOrders(role: StaffRole): boolean {
-    return role === 'server' || role === 'admin' || role === 'manager';
+    return role === 'server' || role === 'bartender' || role === 'admin' || role === 'manager';
 }
 
 export function canSendToKitchen(role: StaffRole): boolean {
@@ -59,15 +59,35 @@ export function canSendToKitchen(role: StaffRole): boolean {
 }
 
 export function canSendToBar(role: StaffRole): boolean {
-    return role === 'server' || role === 'admin' || role === 'manager';
+    return role === 'server' || role === 'bartender' || role === 'admin' || role === 'manager';
 }
 
 export function canGenerateBill(role: StaffRole): boolean {
-    return role === 'server' || role === 'admin' || role === 'manager';
+    return role === 'server' || role === 'bartender' || role === 'admin' || role === 'manager';
 }
 
 export function canTakePayment(role: StaffRole): boolean {
-    return role === 'server' || role === 'admin' || role === 'manager';
+    return role === 'server' || role === 'bartender' || role === 'admin' || role === 'manager';
+}
+
+export function canOpenBarTab(role: StaffRole): boolean {
+    return role === 'server' || role === 'bartender' || role === 'admin' || role === 'manager';
+}
+
+/** Comp a line — drinks for bar staff; food needs manager */
+export function canCompLine(role: StaffRole, isDrink: boolean): boolean {
+    if (role === 'manager' || role === 'admin') return true;
+    if (isDrink && (role === 'bartender' || role === 'server')) return true;
+    return false;
+}
+
+export function canEightySix(role: StaffRole): boolean {
+    return (
+        role === 'bartender' ||
+        role === 'kitchen' ||
+        role === 'admin' ||
+        role === 'manager'
+    );
 }
 
 export function canRunKitchenBoard(role: StaffRole): boolean {

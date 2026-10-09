@@ -2852,6 +2852,123 @@ button.status-tab {
     color: #123047;
 }
 
+.bar-chip.eighty-sixed,
+.menu-card.eighty-sixed {
+    opacity: 0.45;
+    filter: grayscale(0.7);
+}
+
+.bar-chip.happy-hour {
+    box-shadow: inset 0 0 0 1px #2f6f8f;
+}
+
+.eighty-badge,
+.hh-badge {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    padding: 0.2rem 0.45rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #fff8e8;
+    background: #6b2a1f;
+}
+
+.hh-badge {
+    background: #2f6f8f;
+}
+
+.price-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.hh-was {
+    opacity: 0.7;
+    text-decoration: line-through;
+}
+
+.bar-tabs-block {
+    margin-top: 1rem;
+}
+
+.open-tab-form {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.4rem;
+    margin: 0.4rem 0 0.6rem;
+}
+
+.open-tab-form input {
+    border: 1px solid #2b1c12;
+    background: #fff8e8;
+    color: #24180f;
+    padding: 0.45rem 0.55rem;
+}
+
+.table-tile.bar-tab-tile {
+    background: linear-gradient(180deg, #e7f3f8, #d2e8f1);
+    border-color: #2f6f8f;
+}
+
+.eighty-six-rail {
+    margin: 0.6rem 0 0.9rem;
+}
+
+.eighty-six-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.eighty-chip {
+    border: 1px solid #8eb9cd;
+    background: #f4fafc;
+    color: #123047;
+    padding: 0.35rem 0.55rem;
+    font-size: 0.85rem;
+}
+
+.eighty-chip.active {
+    background: #6b2a1f;
+    border-color: #4a1c14;
+    color: #fff8e8;
+}
+
+.comp-tag,
+.bev-tag {
+    margin-left: 0.4rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.comp-tag {
+    color: #6b2a1f;
+}
+
+.comped-line {
+    opacity: 0.72;
+}
+
+.line-comp {
+    margin-top: 0.25rem;
+    border: 1px solid #8eb9cd;
+    background: #e7f3f8;
+    color: #123047;
+    font-size: 0.75rem;
+    padding: 0.2rem 0.4rem;
+}
+
+.happy-hour-editor {
+    margin: 0.75rem 0;
+    display: grid;
+    gap: 0.5rem;
+}
+
 .lock-station-btn,
 .staff-chip {
     color: #f6e7c3;

@@ -3,14 +3,16 @@ import {
     buildSnapshot,
     computeBill,
     computePayment,
+    effectiveMenuPriceCents,
     getActiveXcgRate,
     percentOfCents,
     setActiveXcgRate,
     tipCentsOf,
+    unitPriceCents,
     usdCentsToXcgCents,
     xcgCentsToUsdCents,
 } from './math';
-import type { MenuItem, TableOrder } from './types';
+import type { MenuItem, OrderLine, TableOrder } from './types';
 
 const menu: MenuItem[] = [
     {
@@ -27,33 +29,44 @@ const menu: MenuItem[] = [
         name: 'Cola',
         description: '',
         category: 'Drinks',
-        priceCents: 300,
+        priceCents: 500,
         image: '',
+        happyHour: { priceCents: 350, startHour: 16, endHour: 19 },
         modifierGroups: [],
     },
 ];
+
+function line(partial: Partial<OrderLine> & Pick<OrderLine, 'id' | 'menuItemId'>): OrderLine {
+    return {
+        quantity: 1,
+        guestId: 'g1',
+        note: '',
+        modifiers: [],
+        kitchenStatus: 'draft',
+        sentToKitchenAt: null,
+        orderNumber: null,
+        sentByStaffId: null,
+        courseFire: 'fire',
+        bumpedAt: null,
+        bumpCount: 0,
+        unitPriceSnapshotCents: null,
+        compReason: null,
+        ...partial,
+    };
+}
 
 function table(overrides: Partial<TableOrder> = {}): TableOrder {
     return {
         id: 't1',
         label: 'Table 1',
+        checkKind: 'table',
         status: 'open',
         lines: [
-            {
+            line({
                 id: 'l1',
                 menuItemId: 'm1',
                 quantity: 2,
-                guestId: 'g1',
-                note: '',
-                modifiers: [],
-                kitchenStatus: 'draft',
-                sentToKitchenAt: null,
-                orderNumber: null,
-                sentByStaffId: null,
-                courseFire: 'fire',
-                bumpedAt: null,
-                bumpCount: 0,
-            },
+            }),
         ],
         guests: [{ id: 'g1', name: 'Guest 1', paidAt: null, payment: null }],
         tipAmountPreset: 500,
@@ -103,36 +116,21 @@ describe('money math', () => {
     it('builds kitchen receipt template without drinks or prices payload fields for guest', () => {
         const order = table({
             lines: [
-                {
+                line({
                     id: 'l1',
                     menuItemId: 'm1',
-                    quantity: 1,
-                    guestId: 'g1',
-                    note: '',
-                    modifiers: [],
                     kitchenStatus: 'queued',
                     sentToKitchenAt: new Date().toISOString(),
                     orderNumber: 'ORD-1',
                     sentByStaffId: 'staff_server',
                     courseFire: 'hold',
-                    bumpedAt: null,
-                    bumpCount: 0,
-                },
-                {
+                }),
+                line({
                     id: 'l2',
                     menuItemId: 'd1',
-                    quantity: 1,
-                    guestId: 'g1',
-                    note: '',
-                    modifiers: [],
                     kitchenStatus: 'queued',
-                    sentToKitchenAt: null,
-                    orderNumber: null,
                     sentByStaffId: 'staff_server',
-                    courseFire: 'fire',
-                    bumpedAt: null,
-                    bumpCount: 0,
-                },
+                }),
             ],
         });
         const kitchen = buildSnapshot(order, menu, undefined, 'Server', 'kitchen');
@@ -140,5 +138,34 @@ describe('money math', () => {
         expect(kitchen.items).toHaveLength(1);
         expect(kitchen.items[0].name).toBe('Pasta');
         expect(kitchen.payment).toBeNull();
+    });
+
+    it('applies happy hour and locks snapshot / comps', () => {
+        const drink = menu[1];
+        const during = new Date('2026-10-09T17:00:00');
+        const outside = new Date('2026-10-09T12:00:00');
+        expect(effectiveMenuPriceCents(drink, during)).toBe(350);
+        expect(effectiveMenuPriceCents(drink, outside)).toBe(500);
+
+        const snapped = line({
+            id: 'd',
+            menuItemId: 'd1',
+            unitPriceSnapshotCents: 350,
+        });
+        expect(unitPriceCents(drink, snapped, outside)).toBe(350);
+
+        const comped = { ...snapped, compReason: 'VIP / host' };
+        expect(unitPriceCents(drink, comped)).toBe(0);
+        const bill = computeBill(
+            table({
+                tipAmountPreset: 0,
+                tipCents: 0,
+                serviceChargeEnabled: false,
+                lines: [comped],
+            }),
+            menu,
+        );
+        expect(bill.subtotalCents).toBe(0);
+        expect(bill.compCents).toBe(350);
     });
 });

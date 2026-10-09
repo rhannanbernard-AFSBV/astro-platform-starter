@@ -55,6 +55,8 @@ function line(
         courseFire: 'fire' as const,
         bumpedAt: null,
         bumpCount: 0,
+        unitPriceSnapshotCents: null,
+        compReason: null,
     };
 }
 
