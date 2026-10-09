@@ -50,28 +50,46 @@ export const DEFAULT_STAFF: StaffUser[] = [
 /** @deprecated use DEFAULT_STAFF / state.staff */
 export const STAFF_USERS = DEFAULT_STAFF;
 
+export const DEFAULT_PREP_GROUP: ModifierGroup = {
+    id: 'prep',
+    name: 'Prep',
+    multi: true,
+    options: [
+        { id: 'no-onion', name: 'No onion', priceDeltaCents: 0 },
+        { id: 'extra-spicy', name: 'Extra spicy', priceDeltaCents: 0 },
+        { id: 'no-bonnet', name: 'No scotch bonnet', priceDeltaCents: 0 },
+    ],
+};
+
+export const DEFAULT_SIDES_GROUP: ModifierGroup = {
+    id: 'sides',
+    name: 'Side swap',
+    multi: false,
+    options: [
+        { id: 'rice-peas', name: 'Rice & peas', priceDeltaCents: 0 },
+        { id: 'festival', name: 'Festival', priceDeltaCents: 100 },
+        { id: 'plantain', name: 'Sweet plantain', priceDeltaCents: 125 },
+        { id: 'callaloo', name: 'Callaloo', priceDeltaCents: 150 },
+    ],
+};
+
+/** Ensure Prep + Side swap exist (editable in Menu admin). Extra groups are kept. */
+export function ensureCoreModifierGroups(groups: ModifierGroup[] = []): ModifierGroup[] {
+    const byId = new Map(groups.map((group) => [group.id, group]));
+    const prep = byId.get('prep') ?? { ...DEFAULT_PREP_GROUP, options: DEFAULT_PREP_GROUP.options.map((o) => ({ ...o })) };
+    const sides =
+        byId.get('sides') ??
+        { ...DEFAULT_SIDES_GROUP, options: DEFAULT_SIDES_GROUP.options.map((o) => ({ ...o })) };
+    const extras = groups.filter((group) => group.id !== 'prep' && group.id !== 'sides');
+    return [
+        { ...prep, name: 'Prep', multi: true },
+        { ...sides, name: 'Side swap', multi: false },
+        ...extras,
+    ];
+}
+
 const sharedMods = (extras: ModifierGroup[] = []): ModifierGroup[] => [
-    {
-        id: 'prep',
-        name: 'Prep',
-        multi: true,
-        options: [
-            { id: 'no-onion', name: 'No onion', priceDeltaCents: 0 },
-            { id: 'extra-spicy', name: 'Extra spicy', priceDeltaCents: 0 },
-            { id: 'no-bonnet', name: 'No scotch bonnet', priceDeltaCents: 0 },
-        ],
-    },
-    {
-        id: 'sides',
-        name: 'Side swap',
-        multi: false,
-        options: [
-            { id: 'rice-peas', name: 'Rice & peas', priceDeltaCents: 0 },
-            { id: 'festival', name: 'Festival', priceDeltaCents: 100 },
-            { id: 'plantain', name: 'Sweet plantain', priceDeltaCents: 125 },
-            { id: 'callaloo', name: 'Callaloo', priceDeltaCents: 150 },
-        ],
-    },
+    ...ensureCoreModifierGroups([]),
     ...extras,
 ];
 

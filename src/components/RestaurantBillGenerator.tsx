@@ -3,6 +3,7 @@ import './restaurant-bill-generator.css';
 import {
     createId,
     createTable,
+    ensureCoreModifierGroups,
     PLACEHOLDER_IMAGE,
 } from './bill/defaults';
 import GuestBillModal from './bill/GuestBillModal';
@@ -137,7 +138,34 @@ function emptyMenuForm(): Omit<MenuItem, 'id'> {
         priceCents: 0,
         image: PLACEHOLDER_IMAGE,
         popular: false,
-        modifierGroups: [],
+        modifierGroups: ensureCoreModifierGroups([]),
+    };
+}
+
+function sanitizeMenuForm(form: Omit<MenuItem, 'id'>): Omit<MenuItem, 'id'> {
+    const groups = ensureCoreModifierGroups(form.modifierGroups).map((group) => {
+        const options = group.options
+            .map((option) => ({ ...option, name: option.name.trim() }))
+            .filter((option) => option.name.length > 0);
+        return {
+            ...group,
+            options:
+                options.length > 0
+                    ? options
+                    : [
+                          {
+                              id: createId(group.id),
+                              name: group.id === 'prep' ? 'As prepared' : 'House side',
+                              priceDeltaCents: 0,
+                          },
+                      ],
+        };
+    });
+    return {
+        ...form,
+        name: form.name.trim(),
+        description: form.description.trim(),
+        modifierGroups: groups,
     };
 }
 
@@ -1470,6 +1498,7 @@ export default function RestaurantBillGenerator() {
                             }}
                             onSaveItem={() => {
                                 if (!menuForm.name.trim() || menuForm.priceCents < 0) return;
+                                const cleaned = sanitizeMenuForm(menuForm);
                                 if (editingId) {
                                     setState((current) => ({
                                         ...current,
@@ -1477,9 +1506,7 @@ export default function RestaurantBillGenerator() {
                                             item.id === editingId
                                                 ? {
                                                       ...item,
-                                                      ...menuForm,
-                                                      name: menuForm.name.trim(),
-                                                      description: menuForm.description.trim(),
+                                                      ...cleaned,
                                                   }
                                                 : item,
                                         ),
@@ -1491,9 +1518,7 @@ export default function RestaurantBillGenerator() {
                                             ...current.menu,
                                             {
                                                 id: createId('menu'),
-                                                ...menuForm,
-                                                name: menuForm.name.trim(),
-                                                description: menuForm.description.trim(),
+                                                ...cleaned,
                                             },
                                         ],
                                     }));
@@ -1514,7 +1539,7 @@ export default function RestaurantBillGenerator() {
                                     priceCents: item.priceCents,
                                     image: item.image,
                                     popular: Boolean(item.popular),
-                                    modifierGroups: item.modifierGroups,
+                                    modifierGroups: ensureCoreModifierGroups(item.modifierGroups),
                                 });
                             }}
                             onDeleteItem={(id) => {

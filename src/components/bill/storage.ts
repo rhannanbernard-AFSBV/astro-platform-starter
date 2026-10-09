@@ -7,6 +7,7 @@ import {
     DEFAULT_SETTINGS,
     DEFAULT_STAFF,
     DEFAULT_XCG_PER_USD,
+    ensureCoreModifierGroups,
     LEGACY_STORAGE_KEYS,
     STORAGE_KEY,
 } from './defaults';
@@ -51,12 +52,15 @@ function withModifiers(menu: MenuItem[]): MenuItem[] {
         }));
     }
     const defaults = new Map(DEFAULT_MENU.map((item) => [item.id, item]));
-    return menu.map((item) => ({
-        ...item,
-        modifierGroups: item.modifierGroups?.length
+    return menu.map((item) => {
+        const baseGroups = item.modifierGroups?.length
             ? item.modifierGroups
-            : defaults.get(item.id)?.modifierGroups ?? [],
-    }));
+            : defaults.get(item.id)?.modifierGroups ?? [];
+        return {
+            ...item,
+            modifierGroups: ensureCoreModifierGroups(baseGroups),
+        };
+    });
 }
 
 function migrateLegacyLines(lines: Array<Record<string, unknown>>): OrderLine[] {

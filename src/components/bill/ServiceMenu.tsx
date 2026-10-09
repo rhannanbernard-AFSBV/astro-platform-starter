@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { optimizeImageUrl } from './images';
-import MarketStall from './MarketStall';
 import Price from './Price';
 import { Icon } from './Icons';
 import type { FilterCategory, MenuItem, TableOrder } from './types';
@@ -79,26 +78,11 @@ export default function ServiceMenu({
                         type="search"
                         value={search}
                         onChange={(event) => onSearch(event.target.value)}
-                        placeholder="Search pot & market"
+                        placeholder="Search menu"
                         aria-label="Search menu"
                     />
                 </label>
             </div>
-
-            <MarketStall
-                onPick={(name) => {
-                    const needle = name.toLowerCase();
-                    const match = menu.find((item) => {
-                        const hay = item.name.toLowerCase();
-                        return (
-                            hay.includes(needle) ||
-                            needle.split(/\s+/).every((part) => part.length < 3 || hay.includes(part))
-                        );
-                    });
-                    if (match && !isPaid) (onQuickAdd ?? onAdd)(match);
-                    else onSearch(name);
-                }}
-            />
 
             {favorites.length > 0 && (
                 <div className="favorites-row" aria-label="Popular favorites">

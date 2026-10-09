@@ -1,5 +1,7 @@
+import { useRef, useState } from 'react';
+import { createId, ensureCoreModifierGroups } from './defaults';
+import { fileToMenuImageDataUrl, optimizeImageUrl } from './images';
 import { Icon } from './Icons';
-import { optimizeImageUrl } from './images';
 import Price from './Price';
 import { stationDeepLink, type StationKey } from './posLogic';
 import {
@@ -7,6 +9,8 @@ import {
     type AuditEntry,
     type MenuCategory,
     type MenuItem,
+    type ModifierGroup,
+    type ModifierOption,
     type PosSettings,
     type TableOrder,
 } from './types';
@@ -40,6 +44,119 @@ const STATION_LINKS: Array<{ key: StationKey; label: string }> = [
     { key: 'admin', label: 'Menu admin' },
 ];
 
+const STOCK_IMAGES = [
+    '/menu/1.svg',
+    '/menu/2.svg',
+    '/menu/3.svg',
+    '/menu/4.svg',
+    '/menu/5.svg',
+    '/menu/6.svg',
+    '/menu/7.svg',
+    '/menu/8.svg',
+    '/menu/9.svg',
+    '/menu/10.svg',
+    '/market/mango.svg',
+    '/market/plantain.svg',
+    '/market/breadfruit.svg',
+    '/market/callaloo.svg',
+];
+
+function updateGroup(
+    groups: ModifierGroup[],
+    groupId: 'prep' | 'sides',
+    updater: (group: ModifierGroup) => ModifierGroup,
+): ModifierGroup[] {
+    const ensured = ensureCoreModifierGroups(groups);
+    return ensured.map((group) => (group.id === groupId ? updater(group) : group));
+}
+
+function ModifierGroupEditor({
+    title,
+    help,
+    group,
+    onChange,
+}: {
+    title: string;
+    help: string;
+    group: ModifierGroup;
+    onChange: (group: ModifierGroup) => void;
+}) {
+    const setOption = (optionId: string, patch: Partial<ModifierOption>) => {
+        onChange({
+            ...group,
+            options: group.options.map((option) =>
+                option.id === optionId ? { ...option, ...patch } : option,
+            ),
+        });
+    };
+
+    const removeOption = (optionId: string) => {
+        onChange({
+            ...group,
+            options: group.options.filter((option) => option.id !== optionId),
+        });
+    };
+
+    const addOption = () => {
+        const option: ModifierOption = {
+            id: createId(group.id),
+            name: '',
+            priceDeltaCents: 0,
+        };
+        onChange({ ...group, options: [...group.options, option] });
+    };
+
+    return (
+        <div className="modifier-editor">
+            <div className="modifier-editor-head">
+                <h3>{title}</h3>
+                <span>{group.multi ? 'Multi-select' : 'Pick one'}</span>
+            </div>
+            <p className="fx-note">{help}</p>
+            <ul className="modifier-option-list">
+                {group.options.map((option) => (
+                    <li key={option.id}>
+                        <input
+                            type="text"
+                            value={option.name}
+                            placeholder="Option name"
+                            aria-label={`${title} option name`}
+                            onChange={(event) => setOption(option.id, { name: event.target.value })}
+                        />
+                        <label className="modifier-price">
+                            +$
+                            <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={(option.priceDeltaCents / 100).toFixed(2)}
+                                onChange={(event) =>
+                                    setOption(option.id, {
+                                        priceDeltaCents: Math.round(
+                                            Number(event.target.value || 0) * 100,
+                                        ),
+                                    })
+                                }
+                            />
+                        </label>
+                        <button
+                            type="button"
+                            className="ghost-text danger-text"
+                            onClick={() => removeOption(option.id)}
+                            disabled={group.options.length <= 1}
+                        >
+                            Remove
+                        </button>
+                    </li>
+                ))}
+            </ul>
+            <button type="button" className="secondary-button" onClick={addOption}>
+                <Icon name="plus" /> Add option
+            </button>
+        </div>
+    );
+}
+
 export default function AdminPanel({
     menu,
     tables,
@@ -59,12 +176,35 @@ export default function AdminPanel({
     onSwitchTable,
     onSettingsChange,
 }: Props) {
+    const fileRef = useRef<HTMLInputElement | null>(null);
+    const [imageError, setImageError] = useState<string | null>(null);
+    const [imageBusy, setImageBusy] = useState(false);
+
+    const groups = ensureCoreModifierGroups(menuForm.modifierGroups);
+    const prep = groups.find((group) => group.id === 'prep')!;
+    const sides = groups.find((group) => group.id === 'sides')!;
+
     const copyStation = async (station: StationKey) => {
         const url = stationDeepLink(station);
         try {
             await navigator.clipboard.writeText(url);
         } catch {
             /* ignore */
+        }
+    };
+
+    const onPickFile = async (file: File | null) => {
+        if (!file) return;
+        setImageBusy(true);
+        setImageError(null);
+        try {
+            const dataUrl = await fileToMenuImageDataUrl(file);
+            onFormChange((current) => ({ ...current, image: dataUrl }));
+        } catch (err) {
+            setImageError(err instanceof Error ? err.message : 'Could not read image.');
+        } finally {
+            setImageBusy(false);
+            if (fileRef.current) fileRef.current.value = '';
         }
     };
 
@@ -259,15 +399,106 @@ export default function AdminPanel({
                     <p className="fx-note">
                         XCG preview: shown on menu at {settings.xcgPerUsd.toFixed(2)} × USD
                     </p>
-                    <label>
-                        Image URL
-                        <input
-                            value={menuForm.image}
-                            onChange={(event) =>
-                                onFormChange((current) => ({ ...current, image: event.target.value }))
-                            }
-                        />
-                    </label>
+
+                    <div className="meal-photo-editor">
+                        <h3>Meal picture</h3>
+                        <div className="meal-photo-preview">
+                            <img
+                                src={optimizeImageUrl(menuForm.image, 320)}
+                                alt=""
+                                loading="lazy"
+                            />
+                            <div className="meal-photo-actions">
+                                <button
+                                    type="button"
+                                    className="secondary-button"
+                                    disabled={imageBusy}
+                                    onClick={() => fileRef.current?.click()}
+                                >
+                                    {imageBusy ? 'Uploading…' : 'Upload photo'}
+                                </button>
+                                <input
+                                    ref={fileRef}
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                                    hidden
+                                    onChange={(event) =>
+                                        void onPickFile(event.target.files?.[0] ?? null)
+                                    }
+                                />
+                                <label>
+                                    Image URL
+                                    <input
+                                        value={menuForm.image.startsWith('data:') ? '' : menuForm.image}
+                                        placeholder={
+                                            menuForm.image.startsWith('data:')
+                                                ? 'Custom photo uploaded'
+                                                : '/menu/1.svg'
+                                        }
+                                        onChange={(event) =>
+                                            onFormChange((current) => ({
+                                                ...current,
+                                                image: event.target.value,
+                                            }))
+                                        }
+                                    />
+                                </label>
+                            </div>
+                        </div>
+                        {imageError && <p className="share-feedback">{imageError}</p>}
+                        <p className="fx-note">Stock art — tap to use</p>
+                        <div className="stock-image-grid">
+                            {STOCK_IMAGES.map((src) => (
+                                <button
+                                    key={src}
+                                    type="button"
+                                    className={
+                                        menuForm.image === src
+                                            ? 'stock-image-btn active'
+                                            : 'stock-image-btn'
+                                    }
+                                    onClick={() =>
+                                        onFormChange((current) => ({ ...current, image: src }))
+                                    }
+                                    aria-label={`Use ${src}`}
+                                >
+                                    <img src={src} alt="" loading="lazy" />
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <ModifierGroupEditor
+                        title="Prep"
+                        help="Extras and prep notes guests can multi-select."
+                        group={prep}
+                        onChange={(group) =>
+                            onFormChange((current) => ({
+                                ...current,
+                                modifierGroups: updateGroup(
+                                    current.modifierGroups,
+                                    'prep',
+                                    () => group,
+                                ),
+                            }))
+                        }
+                    />
+                    <ModifierGroupEditor
+                        title="Side swap"
+                        help="One side choice per plate (rice & peas, festival, plantain…)."
+                        group={sides}
+                        onChange={(group) =>
+                            onFormChange((current) => ({
+                                ...current,
+                                modifierGroups: updateGroup(
+                                    current.modifierGroups,
+                                    'sides',
+                                    () => group,
+                                ),
+                            }))
+                        }
+                    />
+
                     <label className="checkbox">
                         <input
                             type="checkbox"
