@@ -274,6 +274,12 @@ function migrateSales(rawSales: unknown): SaleRecord[] {
                 : [],
             guestName: typeof sale.guestName === 'string' ? sale.guestName : null,
             guestId: typeof sale.guestId === 'string' ? sale.guestId : null,
+            checkKind:
+                sale.checkKind === 'bar_tab' || sale.checkKind === 'table'
+                    ? sale.checkKind
+                    : /^Tab\s*·/i.test(String(sale.tableLabel ?? ''))
+                      ? 'bar_tab'
+                      : 'table',
         };
     });
 }

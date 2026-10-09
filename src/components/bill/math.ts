@@ -1,6 +1,7 @@
 import { DEFAULT_RESTAURANT } from './defaults';
 import type {
     BillSnapshot,
+    CheckKind,
     MenuItem,
     OrderLine,
     PaymentMethod,
@@ -320,6 +321,13 @@ export function salesForDay(sales: SaleRecord[], day = new Date()): SaleRecord[]
     return sales.filter((sale) => sale.paidAt.slice(0, 10) === key);
 }
 
+export type SalesSummary = ReturnType<typeof summarizeSales>;
+
+export function saleCheckKind(sale: Pick<SaleRecord, 'checkKind' | 'tableLabel'>): CheckKind {
+    if (sale.checkKind === 'bar_tab' || sale.checkKind === 'table') return sale.checkKind;
+    return /^Tab\s*·/i.test(sale.tableLabel) ? 'bar_tab' : 'table';
+}
+
 export function summarizeSales(sales: SaleRecord[]) {
     return sales.reduce(
         (acc, sale) => {
@@ -348,10 +356,44 @@ export function summarizeSales(sales: SaleRecord[]) {
     );
 }
 
+/** Floor vs bar station day-part totals for shift close / Sales. */
+export function summarizeSalesByStation(sales: SaleRecord[]) {
+    const floor: SaleRecord[] = [];
+    const bar: SaleRecord[] = [];
+    for (const sale of sales) {
+        if (saleCheckKind(sale) === 'bar_tab') bar.push(sale);
+        else floor.push(sale);
+    }
+    return {
+        floor: summarizeSales(floor),
+        bar: summarizeSales(bar),
+        all: summarizeSales(sales),
+    };
+}
+
+/** Human text for shift-close confirm / owner readout. */
+export function formatShiftCloseSummary(sales: SaleRecord[], rate?: number): string {
+    const { floor, bar, all } = summarizeSalesByStation(sales);
+    const money = (cents: number) => formatDual(cents, rate);
+    return [
+        `Close shift?`,
+        ``,
+        `All stations · Checks ${all.count} · Sales ${money(all.totalCents)}`,
+        `Tips ${money(all.tipCents)} · Comps ${money(all.compCents)}`,
+        `Cash net ${money(all.cashCents)} · Card ${money(all.cardCents)}`,
+        ``,
+        `Floor · Checks ${floor.count} · ${money(floor.totalCents)} · tips ${money(floor.tipCents)}`,
+        `Bar · Checks ${bar.count} · ${money(bar.totalCents)} · tips ${money(bar.tipCents)}`,
+        ``,
+        `Payments stay blocked until a new shift is opened.`,
+    ].join('\n');
+}
+
 export function salesToCsv(sales: SaleRecord[]): string {
     const header = [
         'paid_at',
         'table',
+        'station',
         'guest',
         'server',
         'items',
@@ -370,6 +412,7 @@ export function salesToCsv(sales: SaleRecord[]): string {
         [
             sale.paidAt,
             sale.tableLabel,
+            saleCheckKind(sale) === 'bar_tab' ? 'bar' : 'floor',
             sale.guestName ?? '',
             sale.serverName,
             sale.itemCount,

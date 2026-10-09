@@ -10,6 +10,7 @@
         "astro": "astro",
         "test": "vitest run",
         "test:watch": "vitest",
+        "test:smoke": "vitest run src/components/bill/floorSmoke.test.ts",
         "pos:api": "cd backend && python3 -m uvicorn app.main:app --reload --port 8000",
         "pos:test": "cd backend && python3 -m pytest -q",
         "test:all": "vitest run && npm run pos:test"

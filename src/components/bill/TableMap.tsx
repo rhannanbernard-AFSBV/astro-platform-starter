@@ -7,10 +7,12 @@ type Props = {
     activeTableId: string;
     canOpenBarTab?: boolean;
     canCloseBarTab?: boolean;
+    lastClosedBarTabName?: string | null;
     onSelect: (tableId: string) => void;
     onOpenBarTab?: (guestName: string) => void;
     onCloseBarTab?: (tableId: string) => void;
     onRenameBarTab?: (tableId: string, guestName: string) => void;
+    onReopenLastBarTab?: () => void;
 };
 
 const TONE_LABEL = {
@@ -26,10 +28,12 @@ export default function TableMap({
     activeTableId,
     canOpenBarTab = false,
     canCloseBarTab = false,
+    lastClosedBarTabName = null,
     onSelect,
     onOpenBarTab,
     onCloseBarTab,
     onRenameBarTab,
+    onReopenLastBarTab,
 }: Props) {
     const [tabName, setTabName] = useState('');
     const [renameValue, setRenameValue] = useState('');
@@ -103,6 +107,15 @@ export default function TableMap({
                             Open tab
                         </button>
                     </form>
+                )}
+                {canOpenBarTab && lastClosedBarTabName && onReopenLastBarTab && (
+                    <button
+                        type="button"
+                        className="secondary-button reopen-tab-button"
+                        onClick={onReopenLastBarTab}
+                    >
+                        Reopen last tab · {lastClosedBarTabName}
+                    </button>
                 )}
                 {tabs.length > 0 ? (
                     <div className="table-map-grid">{tabs.map(renderTile)}</div>

@@ -4,15 +4,17 @@ import {
     computeBill,
     computePayment,
     effectiveMenuPriceCents,
+    formatShiftCloseSummary,
     getActiveXcgRate,
     percentOfCents,
     setActiveXcgRate,
+    summarizeSalesByStation,
     tipCentsOf,
     unitPriceCents,
     usdCentsToXcgCents,
     xcgCentsToUsdCents,
 } from './math';
-import type { MenuItem, OrderLine, TableOrder } from './types';
+import type { MenuItem, OrderLine, SaleRecord, TableOrder } from './types';
 
 const menu: MenuItem[] = [
     {
@@ -167,5 +169,60 @@ describe('money math', () => {
         );
         expect(bill.subtotalCents).toBe(0);
         expect(bill.compCents).toBe(350);
+    });
+
+    it('splits shift day-part totals by floor vs bar station', () => {
+        const payment = {
+            method: 'cash' as const,
+            cashCents: 1000,
+            cardCents: 0,
+            changeDueCents: 0,
+            paidAt: '2026-10-09T20:00:00.000Z',
+        };
+        const sales: SaleRecord[] = [
+            {
+                id: 's1',
+                tableId: 't1',
+                tableLabel: 'Table 12',
+                paidAt: payment.paidAt,
+                subtotalCents: 2000,
+                serviceChargeCents: 100,
+                tipCents: 200,
+                totalCents: 2300,
+                compCents: 0,
+                payment,
+                serverName: 'Alex',
+                itemCount: 2,
+                orderNumbers: [],
+                guestName: null,
+                guestId: null,
+                checkKind: 'table',
+            },
+            {
+                id: 's2',
+                tableId: 'b1',
+                tableLabel: 'Tab · Pat',
+                paidAt: payment.paidAt,
+                subtotalCents: 900,
+                serviceChargeCents: 45,
+                tipCents: 0,
+                totalCents: 945,
+                compCents: 100,
+                payment: { ...payment, method: 'card', cashCents: 0, cardCents: 945 },
+                serverName: 'Morgan',
+                itemCount: 1,
+                orderNumbers: [],
+                guestName: 'Pat',
+                guestId: null,
+                checkKind: 'bar_tab',
+            },
+        ];
+        const stations = summarizeSalesByStation(sales);
+        expect(stations.floor.totalCents).toBe(2300);
+        expect(stations.bar.totalCents).toBe(945);
+        expect(stations.bar.compCents).toBe(100);
+        const text = formatShiftCloseSummary(sales);
+        expect(text).toContain('Floor ·');
+        expect(text).toContain('Bar ·');
     });
 });

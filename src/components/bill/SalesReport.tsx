@@ -1,7 +1,7 @@
 import { Icon } from './Icons';
 import Price from './Price';
 import type { PosSettings, SaleRecord } from './types';
-import { summarizeSales } from './math';
+import { summarizeSales, summarizeSalesByStation } from './math';
 
 type OwnerOps = {
     openTables?: number;
@@ -36,6 +36,7 @@ export default function SalesReport({
     onBackup,
 }: Props) {
     const summary = summarizeSales(sales);
+    const stations = summarizeSalesByStation(sales);
     const shiftOpen = Boolean(settings.shiftOpenedAt && !settings.shiftClosedAt);
 
     return (
@@ -88,9 +89,47 @@ export default function SalesReport({
                         {settings.shiftClosedAt
                             ? ` · ${new Date(settings.shiftClosedAt).toLocaleString()}`
                             : ''}
+                        {!shiftOpen && settings.shiftClosedAt
+                            ? ' · payments blocked until you open a shift'
+                            : ''}
                     </p>
                 )}
             </div>
+
+            <div className="station-daypart" aria-label="Station day-part summary">
+                <p className="billing-label">Station day-part</p>
+                <div className="report-stats station-stats">
+                    <div>
+                        <span>Floor checks</span>
+                        <strong>{stations.floor.count}</strong>
+                        <small>
+                            <Price cents={stations.floor.totalCents} compact /> · tips{' '}
+                            <Price cents={stations.floor.tipCents} compact />
+                        </small>
+                    </div>
+                    <div>
+                        <span>Bar checks</span>
+                        <strong>{stations.bar.count}</strong>
+                        <small>
+                            <Price cents={stations.bar.totalCents} compact /> · tips{' '}
+                            <Price cents={stations.bar.tipCents} compact />
+                        </small>
+                    </div>
+                    <div>
+                        <span>Floor comps</span>
+                        <strong>
+                            <Price cents={stations.floor.compCents} compact />
+                        </strong>
+                    </div>
+                    <div>
+                        <span>Bar comps</span>
+                        <strong>
+                            <Price cents={stations.bar.compCents} compact />
+                        </strong>
+                    </div>
+                </div>
+            </div>
+
             <div className="report-stats">
                 <div>
                     <span>Checks</span>

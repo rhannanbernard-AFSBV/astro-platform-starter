@@ -18,10 +18,10 @@ import {
     decodeSnapshot,
     effectiveMenuPriceCents,
     formatDual,
+    formatShiftCloseSummary,
     salesForDay,
     salesToCsv,
     setActiveXcgRate,
-    summarizeSales,
     usdCentsToXcgCents,
 } from './bill/math';
 import ModifierModal from './bill/ModifierModal';
@@ -43,9 +43,11 @@ import {
     drinkDraftLineIds,
     fireHeldLines,
     isShiftAcceptingPayments,
+    memoryFromClosedBarTab,
     parseStationParam,
     recallKitchenLine,
     setLineCourseFire,
+    type ClosedBarTabMemory,
 } from './bill/posLogic';
 import ReceiptView from './bill/ReceiptView';
 import {
@@ -284,6 +286,7 @@ export default function RestaurantBillGenerator() {
     const [changePinBusy, setChangePinBusy] = useState(false);
     const [hideDemoCredentials, setHideDemoCredentials] = useState(false);
     const [ownerOps, setOwnerOps] = useState<OwnerSummary | null>(null);
+    const [lastClosedBarTab, setLastClosedBarTab] = useState<ClosedBarTabMemory | null>(null);
     const serverMode = isServerMode();
 
     useDebouncedSave(state, hydrated && !serverMode, 400);
@@ -805,6 +808,8 @@ export default function RestaurantBillGenerator() {
             setShareFeedback('Settle or clear the tab before closing it.');
             return;
         }
+        const memory = memoryFromClosedBarTab(tab);
+        if (memory) setLastClosedBarTab(memory);
         commit((current) => {
             const remaining = current.tables.filter((table) => table.id !== tableId);
             const nextActive =
@@ -813,7 +818,27 @@ export default function RestaurantBillGenerator() {
                     : current.activeTableId;
             return { ...current, tables: remaining, activeTableId: nextActive };
         });
-        setShareFeedback(`${tab.label} closed.`);
+        setShareFeedback(
+            memory
+                ? `${tab.label} closed — use Reopen last tab if that was a mistake.`
+                : `${tab.label} closed.`,
+        );
+    };
+
+    const reopenLastBarTab = () => {
+        if (!canOpenBarTab(staff.role) || !lastClosedBarTab) return;
+        const tab = createBarTab(
+            lastClosedBarTab.guestName,
+            state.settings.defaultServiceChargePercent,
+        );
+        commit((current) => ({
+            ...current,
+            tables: [...current.tables, tab],
+            activeTableId: tab.id,
+        }));
+        setLastClosedBarTab(null);
+        setView('service');
+        setShareFeedback(`Reopened bar tab for ${tab.guests[0]?.name ?? 'guest'}.`);
     };
 
     const shiftAcceptsPayments = isShiftAcceptingPayments(state.settings);
@@ -1224,6 +1249,7 @@ export default function RestaurantBillGenerator() {
             orderNumbers,
             guestName: saleGuest?.name ?? null,
             guestId: saleGuest?.id ?? null,
+            checkKind: activeTable.checkKind ?? 'table',
         };
 
         const applyLocal = () => {
@@ -1608,6 +1634,8 @@ export default function RestaurantBillGenerator() {
                                 onOpenBarTab={openBarTab}
                                 onCloseBarTab={closeBarTab}
                                 onRenameBarTab={renameBarTab}
+                                lastClosedBarTabName={lastClosedBarTab?.guestName ?? null}
+                                onReopenLastBarTab={reopenLastBarTab}
                             />
                         </div>
                         <ServiceMenu
@@ -1694,10 +1722,7 @@ export default function RestaurantBillGenerator() {
                                 }))
                             }
                             onCloseShift={() => {
-                                const summary = summarizeSales(todaySales);
-                                const ok = window.confirm(
-                                    `Close shift?\n\nChecks: ${summary.count}\nSales: ${formatDual(summary.totalCents)}\nTips: ${formatDual(summary.tipCents)}\nComps: ${formatDual(summary.compCents)}\n\nPayments stay blocked until a new shift is opened.`,
-                                );
+                                const ok = window.confirm(formatShiftCloseSummary(todaySales));
                                 if (!ok) return;
                                 commit((current) => ({
                                     ...current,
@@ -1706,7 +1731,9 @@ export default function RestaurantBillGenerator() {
                                         shiftClosedAt: new Date().toISOString(),
                                     },
                                 }));
-                                setShareFeedback('Shift closed — open a new shift before taking payments.');
+                                setShareFeedback(
+                                    'Shift closed with floor/bar day-part totals — open a new shift before taking payments.',
+                                );
                             }}
                         />
                     </Suspense>

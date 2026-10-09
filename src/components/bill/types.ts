@@ -186,6 +186,8 @@ export type SaleRecord = {
     orderNumbers: string[];
     guestName: string | null;
     guestId: string | null;
+    /** Floor table vs standup bar — used for shift day-part / station totals */
+    checkKind?: CheckKind;
 };
 
 export type RestaurantProfile = {

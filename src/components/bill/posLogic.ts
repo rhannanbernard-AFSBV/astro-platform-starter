@@ -195,6 +195,21 @@ export function canCloseBarTabCheck(table: TableOrder): boolean {
     return table.checkKind === 'bar_tab' && (table.status === 'paid' || table.lines.length === 0);
 }
 
+export type ClosedBarTabMemory = {
+    label: string;
+    guestName: string;
+};
+
+/** Remember a closed tab so floor can one-tap reopen the same guest. */
+export function memoryFromClosedBarTab(table: TableOrder): ClosedBarTabMemory | null {
+    if (table.checkKind !== 'bar_tab') return null;
+    const guestName =
+        table.guests[0]?.name?.trim() ||
+        table.label.replace(/^Tab\s*·\s*/i, '').trim() ||
+        'Guest';
+    return { label: table.label, guestName };
+}
+
 export function nextBeverageStatus(status: KitchenStatus): KitchenStatus | null {
     if (status === 'queued') return 'preparing';
     if (status === 'preparing') return 'ready';
