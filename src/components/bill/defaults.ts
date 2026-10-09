@@ -1,4 +1,5 @@
 import { BEVERAGE_MENU } from './beverageMenu';
+import { applyEnrichment, localEnrichMenuItem } from './menuAi';
 import type {
     MenuItem,
     ModifierGroup,
@@ -102,7 +103,7 @@ const sharedMods = (extras: ModifierGroup[] = []): ModifierGroup[] => [
     ...extras,
 ];
 
-export const DEFAULT_MENU: MenuItem[] = [
+const RAW_DEFAULT_MENU: MenuItem[] = [
     {
         id: '1',
         name: 'Jerk Chicken',
@@ -218,6 +219,11 @@ export const DEFAULT_MENU: MenuItem[] = [
         modifierGroups: [],
     },
 ];
+
+/** Seed catalog with AI prep / pairing / ingredient copy (local or GPT-4o-shaped). */
+export const DEFAULT_MENU: MenuItem[] = RAW_DEFAULT_MENU.map((item) =>
+    applyEnrichment(item, localEnrichMenuItem(item)),
+);
 
 export function createId(prefix: string) {
     return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;

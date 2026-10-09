@@ -218,6 +218,26 @@ export default function ServiceMenu({
                                             .join(' · ')}
                                     </p>
                                 )}
+                                {(item.ingredients || item.prepGuide || item.pairingNotes) && (
+                                    <details className="menu-intel">
+                                        <summary>Prep · ingredients · pairing</summary>
+                                        {item.ingredients && (
+                                            <p>
+                                                <strong>Ingredients:</strong> {item.ingredients}
+                                            </p>
+                                        )}
+                                        {item.prepGuide && (
+                                            <p>
+                                                <strong>Prep:</strong> {item.prepGuide}
+                                            </p>
+                                        )}
+                                        {item.pairingNotes && (
+                                            <p>
+                                                <strong>Pairs with:</strong> {item.pairingNotes}
+                                            </p>
+                                        )}
+                                    </details>
+                                )}
                                 <div className="card-footer">
                                     <div className="price-stack">
                                         <Price cents={priceFor(item)} />

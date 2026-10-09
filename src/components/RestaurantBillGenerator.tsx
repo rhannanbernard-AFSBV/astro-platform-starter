@@ -7,6 +7,7 @@ import {
     ensureCoreModifierGroups,
     PLACEHOLDER_IMAGE,
 } from './bill/defaults';
+import { applyEnrichment, enrichMenuItem } from './bill/menuAi';
 import GuestBillModal from './bill/GuestBillModal';
 import { Icon } from './bill/Icons';
 import {
@@ -149,6 +150,11 @@ function emptyMenuForm(): Omit<MenuItem, 'id'> {
         popular: false,
         eightySixed: false,
         happyHour: null,
+        origin: null,
+        vintageYear: null,
+        prepGuide: null,
+        pairingNotes: null,
+        ingredients: null,
         modifierGroups: ensureCoreModifierGroups([]),
     };
 }
@@ -192,6 +198,14 @@ function sanitizeMenuForm(form: Omit<MenuItem, 'id'>): Omit<MenuItem, 'id'> {
         description: form.description.trim(),
         eightySixed: form.eightySixed === true,
         happyHour,
+        origin: form.origin?.trim() || null,
+        vintageYear:
+            typeof form.vintageYear === 'number' && Number.isFinite(form.vintageYear)
+                ? Math.round(form.vintageYear)
+                : null,
+        prepGuide: form.prepGuide?.trim() || null,
+        pairingNotes: form.pairingNotes?.trim() || null,
+        ingredients: form.ingredients?.trim() || null,
         modifierGroups: groups,
     };
 }
@@ -212,6 +226,8 @@ export default function RestaurantBillGenerator() {
     const [shareFeedback, setShareFeedback] = useState<string | null>(null);
     const [menuForm, setMenuForm] = useState(emptyMenuForm());
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [aiEnrichBusy, setAiEnrichBusy] = useState(false);
+    const [aiEnrichNote, setAiEnrichNote] = useState<string | null>(null);
     const [newTableLabel, setNewTableLabel] = useState('');
     const [pinInput, setPinInput] = useState('');
     const [pinError, setPinError] = useState<string | null>(null);
@@ -1714,6 +1730,36 @@ export default function RestaurantBillGenerator() {
                             settings={state.settings}
                             auditLog={state.auditLog}
                             onFormChange={setMenuForm}
+                            aiEnrichBusy={aiEnrichBusy}
+                            aiEnrichNote={aiEnrichNote}
+                            onAiEnrich={async () => {
+                                if (!menuForm.name.trim()) return;
+                                setAiEnrichBusy(true);
+                                setAiEnrichNote(null);
+                                try {
+                                    const enrichment = await enrichMenuItem(menuForm);
+                                    setMenuForm((current) =>
+                                        applyEnrichment(
+                                            { id: 'draft', ...current },
+                                            enrichment,
+                                            { overwrite: true },
+                                        ),
+                                    );
+                                    setAiEnrichNote(
+                                        enrichment.source === 'gpt-4o'
+                                            ? 'Filled by GPT-4o.'
+                                            : 'Filled by professional local assist (set OPENAI_API_KEY on the API for GPT-4o).',
+                                    );
+                                } catch (err) {
+                                    setAiEnrichNote(
+                                        err instanceof Error
+                                            ? err.message
+                                            : 'AI enrich failed.',
+                                    );
+                                } finally {
+                                    setAiEnrichBusy(false);
+                                }
+                            }}
                             onSettingsChange={(patch: Partial<PosSettings>) => {
                                 commit((current) => ({
                                     ...current,
@@ -1723,9 +1769,31 @@ export default function RestaurantBillGenerator() {
                                     setActiveXcgRate(patch.xcgPerUsd);
                                 }
                             }}
-                            onSaveItem={() => {
+                            onSaveItem={async () => {
                                 if (!menuForm.name.trim() || menuForm.priceCents < 0) return;
-                                const cleaned = sanitizeMenuForm(menuForm);
+                                let cleaned = sanitizeMenuForm(menuForm);
+                                const needsEnrich =
+                                    !editingId &&
+                                    (!cleaned.prepGuide ||
+                                        !cleaned.ingredients ||
+                                        !cleaned.pairingNotes);
+                                if (needsEnrich) {
+                                    setAiEnrichBusy(true);
+                                    try {
+                                        const enrichment = await enrichMenuItem(cleaned);
+                                        cleaned = applyEnrichment(
+                                            { id: 'draft', ...cleaned },
+                                            enrichment,
+                                        );
+                                        setAiEnrichNote(
+                                            enrichment.source === 'gpt-4o'
+                                                ? 'New item enriched with GPT-4o.'
+                                                : 'New item enriched with local assist (add OPENAI_API_KEY for GPT-4o).',
+                                        );
+                                    } finally {
+                                        setAiEnrichBusy(false);
+                                    }
+                                }
                                 if (editingId) {
                                     setState((current) => ({
                                         ...current,
@@ -1756,9 +1824,11 @@ export default function RestaurantBillGenerator() {
                             onCancelEdit={() => {
                                 setEditingId(null);
                                 setMenuForm(emptyMenuForm());
+                                setAiEnrichNote(null);
                             }}
                             onEditItem={(item) => {
                                 setEditingId(item.id);
+                                setAiEnrichNote(null);
                                 setMenuForm({
                                     name: item.name,
                                     description: item.description,
@@ -1770,6 +1840,11 @@ export default function RestaurantBillGenerator() {
                                     happyHour: item.happyHour
                                         ? { ...item.happyHour }
                                         : null,
+                                    origin: item.origin ?? null,
+                                    vintageYear: item.vintageYear ?? null,
+                                    prepGuide: item.prepGuide ?? null,
+                                    pairingNotes: item.pairingNotes ?? null,
+                                    ingredients: item.ingredients ?? null,
                                     modifierGroups: ensureCoreModifierGroups(item.modifierGroups),
                                 });
                             }}

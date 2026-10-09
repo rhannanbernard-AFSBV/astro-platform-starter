@@ -2982,6 +2982,32 @@ button.status-tab {
     font-weight: 600;
 }
 
+.ai-enrich-block {
+    display: grid;
+    gap: 0.55rem;
+    margin: 0.5rem 0 0.75rem;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #8eb9cd;
+    background: linear-gradient(180deg, #f4fafc, #e7f3f8);
+}
+
+.menu-intel {
+    margin: 0.45rem 0 0.2rem;
+    font-size: 0.85rem;
+    color: #24180f;
+}
+
+.menu-intel summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: #2f6f8f;
+}
+
+.menu-intel p {
+    margin: 0.35rem 0 0;
+    line-height: 1.35;
+}
+
 .lock-station-btn,
 .staff-chip {
     color: #f6e7c3;

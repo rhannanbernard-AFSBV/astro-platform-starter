@@ -28,7 +28,7 @@ type Props = {
     settings: PosSettings;
     auditLog: AuditEntry[];
     onFormChange: (updater: (current: MenuForm) => MenuForm) => void;
-    onSaveItem: () => void;
+    onSaveItem: () => void | Promise<void>;
     onCancelEdit: () => void;
     onEditItem: (item: MenuItem) => void;
     onDeleteItem: (id: string) => void;
@@ -36,6 +36,9 @@ type Props = {
     onAddTable: () => void;
     onSwitchTable: (id: string) => void;
     onSettingsChange: (patch: Partial<PosSettings>) => void;
+    onAiEnrich?: () => void | Promise<void>;
+    aiEnrichBusy?: boolean;
+    aiEnrichNote?: string | null;
 };
 
 const STATION_LINKS: Array<{ key: StationKey; label: string }> = [
@@ -177,6 +180,9 @@ export default function AdminPanel({
     onAddTable,
     onSwitchTable,
     onSettingsChange,
+    onAiEnrich,
+    aiEnrichBusy = false,
+    aiEnrichNote = null,
 }: Props) {
     const fileRef = useRef<HTMLInputElement | null>(null);
     const [imageError, setImageError] = useState<string | null>(null);
@@ -372,6 +378,66 @@ export default function AdminPanel({
                             rows={3}
                         />
                     </label>
+                    <div className="ai-enrich-block">
+                        <div className="admin-row">
+                            <button
+                                type="button"
+                                className="secondary-button"
+                                disabled={aiEnrichBusy || !menuForm.name.trim()}
+                                onClick={() => void onAiEnrich?.()}
+                            >
+                                {aiEnrichBusy ? 'GPT-4o writing…' : 'Generate with GPT-4o'}
+                            </button>
+                        </div>
+                        <p className="fx-note">
+                            Writes prep method, ingredients, and wine↔meal pairings. Never sets
+                            prices. Uses OpenAI GPT-4o when the API key is configured; otherwise a
+                            professional local fallback.
+                        </p>
+                        {aiEnrichNote && <p className="pin-help">{aiEnrichNote}</p>}
+                        <label>
+                            Ingredients
+                            <textarea
+                                value={menuForm.ingredients ?? ''}
+                                onChange={(event) =>
+                                    onFormChange((current) => ({
+                                        ...current,
+                                        ingredients: event.target.value,
+                                    }))
+                                }
+                                rows={3}
+                                placeholder="Ingredient breakdown"
+                            />
+                        </label>
+                        <label>
+                            Prep guide
+                            <textarea
+                                value={menuForm.prepGuide ?? ''}
+                                onChange={(event) =>
+                                    onFormChange((current) => ({
+                                        ...current,
+                                        prepGuide: event.target.value,
+                                    }))
+                                }
+                                rows={3}
+                                placeholder="How to professionally prepare / serve"
+                            />
+                        </label>
+                        <label>
+                            Pairing notes
+                            <textarea
+                                value={menuForm.pairingNotes ?? ''}
+                                onChange={(event) =>
+                                    onFormChange((current) => ({
+                                        ...current,
+                                        pairingNotes: event.target.value,
+                                    }))
+                                }
+                                rows={3}
+                                placeholder="Wine↔meal or drink pairings"
+                            />
+                        </label>
+                    </div>
                     <div className="admin-row">
                         <label>
                             Category
@@ -405,6 +471,39 @@ export default function AdminPanel({
                                     }))
                                 }
                                 required
+                            />
+                        </label>
+                    </div>
+                    <div className="admin-row">
+                        <label>
+                            Origin / made in
+                            <input
+                                value={menuForm.origin ?? ''}
+                                onChange={(event) =>
+                                    onFormChange((current) => ({
+                                        ...current,
+                                        origin: event.target.value,
+                                    }))
+                                }
+                                placeholder="e.g. Marlborough, New Zealand"
+                            />
+                        </label>
+                        <label>
+                            Vintage year
+                            <input
+                                type="number"
+                                min="1900"
+                                max="2100"
+                                value={menuForm.vintageYear ?? ''}
+                                onChange={(event) =>
+                                    onFormChange((current) => ({
+                                        ...current,
+                                        vintageYear: event.target.value
+                                            ? Number(event.target.value)
+                                            : null,
+                                    }))
+                                }
+                                placeholder="e.g. 2022"
                             />
                         </label>
                     </div>

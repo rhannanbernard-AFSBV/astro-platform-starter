@@ -3,7 +3,15 @@
  * When PUBLIC_POS_API_URL is set, the SPA uses the server as source of truth.
  */
 
-import type { PersistedState, SaleRecord, StaffUser } from './types';
+import type { MenuCategory, PersistedState, SaleRecord, StaffUser } from './types';
+
+export type MenuEnrichmentPayload = {
+    description: string;
+    prepGuide: string;
+    pairingNotes: string;
+    ingredients: string;
+    source: 'gpt-4o' | 'local';
+};
 
 const TOKEN_KEY = 'savory-pos-session-token';
 
@@ -23,6 +31,7 @@ export type PosConfig = {
     idleMinutes?: number;
     hideDemoCredentials?: boolean;
     pinMaxAttempts?: number;
+    openaiMenuEnrich?: boolean;
 };
 
 export type OwnerSummary = {
@@ -277,4 +286,31 @@ export async function createCardIntent(input: {
         method: 'POST',
         body: JSON.stringify(input),
     });
+}
+
+/** GPT-4o (or local fallback) menu enrichment via POS API. */
+export async function enrichMenuItemRemote(input: {
+    name: string;
+    category: MenuCategory | string;
+    description?: string;
+    origin?: string | null;
+    vintageYear?: number | null;
+}): Promise<MenuEnrichmentPayload> {
+    const data = await request<MenuEnrichmentPayload>('/pos/ai/enrich-menu-item', {
+        method: 'POST',
+        body: JSON.stringify({
+            name: input.name,
+            category: input.category,
+            description: input.description ?? '',
+            origin: input.origin ?? null,
+            vintageYear: input.vintageYear ?? null,
+        }),
+    });
+    return {
+        description: data.description,
+        prepGuide: data.prepGuide,
+        pairingNotes: data.pairingNotes,
+        ingredients: data.ingredients,
+        source: data.source === 'gpt-4o' ? 'gpt-4o' : 'local',
+    };
 }

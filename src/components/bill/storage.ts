@@ -11,6 +11,8 @@ import {
     LEGACY_STORAGE_KEYS,
     STORAGE_KEY,
 } from './defaults';
+import { applyEnrichment, localEnrichMenuItem } from './menuAi';
+import { initialsFromName } from './roles';
 import type {
     AppNotification,
     MenuItem,
@@ -25,7 +27,6 @@ import type {
     TipAmountPreset,
 } from './types';
 import { STAFF_ROLES, TIP_AMOUNT_PRESETS } from './types';
-import { initialsFromName } from './roles';
 
 const LEGACY_RESTAURANT_NAMES = new Set(['Savory Kitchen & Bar', 'SAVORY', 'Savory']);
 
@@ -83,6 +84,18 @@ function withModifiers(menu: MenuItem[]): MenuItem[] {
                 typeof item.vintageYear === 'number'
                     ? item.vintageYear
                     : (seed?.vintageYear ?? null),
+            prepGuide:
+                typeof item.prepGuide === 'string'
+                    ? item.prepGuide
+                    : (seed?.prepGuide ?? null),
+            pairingNotes:
+                typeof item.pairingNotes === 'string'
+                    ? item.pairingNotes
+                    : (seed?.pairingNotes ?? null),
+            ingredients:
+                typeof item.ingredients === 'string'
+                    ? item.ingredients
+                    : (seed?.ingredients ?? null),
             modifierGroups:
                 category === 'Mains' || category === 'Starters' || category === 'Desserts'
                     ? ensureCoreModifierGroups(baseGroups)
@@ -101,6 +114,9 @@ function withModifiers(menu: MenuItem[]): MenuItem[] {
                 happyHour: seed.happyHour ?? null,
                 origin: seed.origin ?? null,
                 vintageYear: seed.vintageYear ?? null,
+                prepGuide: seed.prepGuide ?? null,
+                pairingNotes: seed.pairingNotes ?? null,
+                ingredients: seed.ingredients ?? null,
                 modifierGroups: seed.modifierGroups.map((group) => ({
                     ...group,
                     options: group.options.map((option) => ({ ...option })),
@@ -108,7 +124,11 @@ function withModifiers(menu: MenuItem[]): MenuItem[] {
             });
         }
     }
-    return migrated;
+
+    return migrated.map((item) => {
+        if (item.prepGuide && item.ingredients && item.pairingNotes) return item;
+        return applyEnrichment(item, localEnrichMenuItem(item));
+    });
 }
 
 function migrateLegacyLines(lines: Array<Record<string, unknown>>): OrderLine[] {

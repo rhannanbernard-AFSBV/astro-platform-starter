@@ -9,10 +9,12 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
+from app.pos import ai as menu_ai
 from app.pos import ops
 from app.pos import payments as pay
 from app.pos import rate_limit
 from app.pos import store
+from app.pos.ai import MenuEnrichRequest, MenuEnrichResponse
 from app.pos.security import hide_demo_credentials, session_idle_minutes
 from app.pos.store import ConflictError, DEFAULT_TENANT_ID
 
@@ -452,4 +454,17 @@ async def public_config() -> dict[str, Any]:
         "idleMinutes": session_idle_minutes(),
         "hideDemoCredentials": hide_demo_credentials(),
         "pinMaxAttempts": int(os.getenv("POS_PIN_MAX_ATTEMPTS", "5")),
+        "openaiMenuEnrich": menu_ai.openai_configured(),
     }
+
+
+@router.post("/ai/enrich-menu-item", response_model=MenuEnrichResponse)
+async def enrich_menu_item(
+    body: MenuEnrichRequest,
+    session: dict[str, Any] = Depends(require_session),
+) -> MenuEnrichResponse:
+    """GPT-4o menu copy (prep / pairings / ingredients). Never computes money."""
+    role = session.get("role")
+    if role not in ("admin", "manager", "bartender", "server"):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Not allowed to enrich menu copy")
+    return await menu_ai.enrich_menu_item(body)

@@ -88,6 +88,12 @@ export type MenuItem = {
     origin?: string | null;
     /** Vintage year when applicable */
     vintageYear?: number | null;
+    /** GPT-4o / AI: professional prep method */
+    prepGuide?: string | null;
+    /** GPT-4o / AI: wine↔meal or drink pairings */
+    pairingNotes?: string | null;
+    /** GPT-4o / AI: ingredient breakdown */
+    ingredients?: string | null;
     modifierGroups: ModifierGroup[];
 };
 
