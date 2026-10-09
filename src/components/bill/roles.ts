@@ -2,6 +2,7 @@ import type { AppView, StaffRole, StaffUser } from './types';
 
 export const ROLE_LABELS: Record<StaffRole, string> = {
     kitchen: 'Kitchen',
+    bartender: 'Bartender',
     server: 'Waiter / Server',
     admin: 'Admin',
     manager: 'Manager',
@@ -9,6 +10,7 @@ export const ROLE_LABELS: Record<StaffRole, string> = {
 
 export const DEFAULT_VIEW_BY_ROLE: Record<StaffRole, AppView> = {
     kitchen: 'kitchen',
+    bartender: 'bar',
     server: 'service',
     admin: 'admin',
     manager: 'service',
@@ -18,12 +20,14 @@ export function viewsForRole(role: StaffRole): AppView[] {
     switch (role) {
         case 'kitchen':
             return ['kitchen'];
+        case 'bartender':
+            return ['bar'];
         case 'server':
             return ['service'];
         case 'admin':
-            return ['service', 'kitchen', 'reports', 'admin', 'users'];
+            return ['service', 'kitchen', 'bar', 'reports', 'admin', 'users'];
         case 'manager':
-            return ['service', 'kitchen', 'reports', 'admin', 'users'];
+            return ['service', 'kitchen', 'bar', 'reports', 'admin', 'users'];
         default:
             return ['service'];
     }
@@ -54,6 +58,10 @@ export function canSendToKitchen(role: StaffRole): boolean {
     return role === 'server' || role === 'admin' || role === 'manager';
 }
 
+export function canSendToBar(role: StaffRole): boolean {
+    return role === 'server' || role === 'admin' || role === 'manager';
+}
+
 export function canGenerateBill(role: StaffRole): boolean {
     return role === 'server' || role === 'admin' || role === 'manager';
 }
@@ -64,6 +72,10 @@ export function canTakePayment(role: StaffRole): boolean {
 
 export function canRunKitchenBoard(role: StaffRole): boolean {
     return role === 'kitchen' || role === 'admin' || role === 'manager';
+}
+
+export function canRunBarBoard(role: StaffRole): boolean {
+    return role === 'bartender' || role === 'admin' || role === 'manager';
 }
 
 /** Destructive / privileged ops — Manager only */
@@ -84,9 +96,14 @@ export function canDeleteTickets(role: StaffRole): boolean {
     return role === 'manager';
 }
 
-/** Server-managed beverage status after guest ticket is generated */
+/** Bar / beverage status after drinks are sent (bartender + floor leads) */
 export function canUpdateBeverageStatus(role: StaffRole): boolean {
-    return role === 'server' || role === 'admin' || role === 'manager';
+    return (
+        role === 'bartender' ||
+        role === 'server' ||
+        role === 'admin' ||
+        role === 'manager'
+    );
 }
 
 /** Delete / void payments and sales — Manager only */
@@ -110,6 +127,6 @@ export function roleHelpText(staff: StaffUser[]): string {
         .slice()
         .sort((a, b) => a.role.localeCompare(b.role))
         .map((user) => `${ROLE_LABELS[user.role]} ${user.pin}`)
-        .slice(0, 4);
+        .slice(0, 5);
     return samples.join(' · ');
 }

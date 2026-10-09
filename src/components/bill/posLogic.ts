@@ -25,24 +25,17 @@ export function foodDraftLineIds(
         .map((line) => line.id);
 }
 
-export function queueDraftBeverages(
+export function drinkDraftLineIds(
     table: TableOrder,
     menuById: Map<string, MenuItem>,
-    staffId: string,
-): TableOrder {
-    let changed = false;
-    const lines = table.lines.map((line) => {
-        if (line.kitchenStatus !== 'draft') return line;
-        if (!isBeverageItem(menuById.get(line.menuItemId))) return line;
-        changed = true;
-        return {
-            ...line,
-            kitchenStatus: 'queued' as const,
-            sentToKitchenAt: null,
-            sentByStaffId: staffId,
-        };
-    });
-    return changed ? { ...table, lines } : table;
+): string[] {
+    return table.lines
+        .filter(
+            (line) =>
+                line.kitchenStatus === 'draft' &&
+                isBeverageItem(menuById.get(line.menuItemId)),
+        )
+        .map((line) => line.id);
 }
 
 export function applySendFoodToKitchen(
@@ -74,7 +67,7 @@ export function applySendFoodToKitchen(
             id: createId('notif'),
             kind: 'server_ack',
             title: 'Ticket sent to kitchen',
-            message: `Your food ticket ${orderNumber} for ${table.label} was sent for prep. Beverages stay with the server.`,
+            message: `Your food ticket ${orderNumber} for ${table.label} was sent for prep. Send drinks to the bar separately.`,
             orderNumber,
             tableLabel: table.label,
             audienceRole: 'server',
@@ -99,6 +92,76 @@ export function applySendFoodToKitchen(
                           ...entry,
                           lines: entry.lines.map((line) =>
                               foodIds.has(line.id)
+                                  ? {
+                                        ...line,
+                                        kitchenStatus: 'queued' as const,
+                                        sentToKitchenAt: sentAt,
+                                        orderNumber,
+                                        sentByStaffId: state.activeStaffId,
+                                    }
+                                  : line,
+                          ),
+                      },
+            ),
+        },
+    };
+}
+
+/** Fire draft drinks to the bar expo (revenue-critical drink rail). */
+export function applySendDrinksToBar(
+    state: PersistedState,
+    menuById: Map<string, MenuItem>,
+    sentAt = new Date().toISOString(),
+): { state: PersistedState; sentCount: number; orderNumber: string | null } {
+    const table = state.tables.find((entry) => entry.id === state.activeTableId);
+    if (!table) return { state, sentCount: 0, orderNumber: null };
+
+    const drinkIds = new Set(drinkDraftLineIds(table, menuById));
+    if (drinkIds.size === 0) return { state, sentCount: 0, orderNumber: null };
+
+    const orderNumber = formatOrderNumber(state.nextOrderSeq);
+    const notifications: AppNotification[] = [
+        {
+            id: createId('notif'),
+            kind: 'bar_ticket',
+            title: 'New bar ticket',
+            message: `${table.label} · ${orderNumber} · ${drinkIds.size} drink(s) for the bar`,
+            orderNumber,
+            tableLabel: table.label,
+            audienceRole: 'bartender',
+            targetStaffId: null,
+            createdAt: sentAt,
+            readBy: [],
+        },
+        {
+            id: createId('notif'),
+            kind: 'server_ack',
+            title: 'Drinks sent to bar',
+            message: `Your bar ticket ${orderNumber} for ${table.label} was sent to the bartender.`,
+            orderNumber,
+            tableLabel: table.label,
+            audienceRole: 'server',
+            targetStaffId: state.activeStaffId,
+            createdAt: sentAt,
+            readBy: [],
+        },
+    ];
+
+    return {
+        sentCount: drinkIds.size,
+        orderNumber,
+        state: {
+            ...state,
+            nextOrderSeq: state.nextOrderSeq + 1,
+            updatedAt: Date.now(),
+            notifications: [...notifications, ...state.notifications].slice(0, 80),
+            tables: state.tables.map((entry) =>
+                entry.id !== state.activeTableId
+                    ? entry
+                    : {
+                          ...entry,
+                          lines: entry.lines.map((line) =>
+                              drinkIds.has(line.id)
                                   ? {
                                         ...line,
                                         kitchenStatus: 'queued' as const,
@@ -194,7 +257,7 @@ export function bumpKitchenLine(
         message: `${table.label} · ${line.orderNumber ?? 'ticket'} bumped by ${staff.name}`,
         orderNumber: line.orderNumber,
         tableLabel: table.label,
-        audienceRole: 'kitchen',
+        audienceRole: staff.role === 'bartender' ? 'bartender' : 'kitchen',
         targetStaffId: null,
         createdAt: at,
         readBy: [],
@@ -306,7 +369,7 @@ export function allGuestsPaid(table: TableOrder): boolean {
     return spenders.every((guest) => Boolean(guest.paidAt));
 }
 
-export type StationKey = 'service' | 'kitchen' | 'reports' | 'admin' | 'users';
+export type StationKey = 'service' | 'kitchen' | 'bar' | 'reports' | 'admin' | 'users';
 
 export function parseStationParam(value: string | null | undefined): StationKey | null {
     if (!value) return null;
@@ -314,6 +377,7 @@ export function parseStationParam(value: string | null | undefined): StationKey 
     if (
         key === 'service' ||
         key === 'kitchen' ||
+        key === 'bar' ||
         key === 'reports' ||
         key === 'admin' ||
         key === 'users'
@@ -322,6 +386,7 @@ export function parseStationParam(value: string | null | undefined): StationKey 
     }
     if (key === 'floor' || key === 'pos') return 'service';
     if (key === 'expo' || key === 'kds') return 'kitchen';
+    if (key === 'drinks' || key === 'beverage' || key === 'bartender') return 'bar';
     if (key === 'sales') return 'reports';
     if (key === 'menu') return 'admin';
     return null;

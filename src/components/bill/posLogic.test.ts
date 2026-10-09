@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { createDefaultState, createId } from './defaults';
 import {
     allGuestsPaid,
+    applySendDrinksToBar,
     applySendFoodToKitchen,
     bumpKitchenLine,
     canGuestTakePayment,
+    drinkDraftLineIds,
     foodDraftLineIds,
     isTicketLate,
     parseStationParam,
-    queueDraftBeverages,
     recallKitchenLine,
     tableStatusTone,
 } from './posLogic';
@@ -78,16 +79,25 @@ describe('posLogic kitchen vs beverages', () => {
         expect(drink?.kitchenStatus).toBe('draft');
     });
 
-    it('queues beverages when guest ticket is generated', () => {
-        const table: TableOrder = {
-            ...createDefaultState().tables[0],
-            lines: [line('drink')],
-            billGeneratedAt: new Date().toISOString(),
-        };
+    it('sends drink drafts to the bar rail', () => {
+        const state = createDefaultState();
+        const table = state.tables[0];
+        table.lines = [line('food'), line('drink')];
+        state.tables[0] = table;
+        state.activeTableId = table.id;
         const menuById = new Map(menu.map((item) => [item.id, item]));
-        const next = queueDraftBeverages(table, menuById, 'staff_server');
-        expect(next.lines[0].kitchenStatus).toBe('queued');
-        expect(next.lines[0].sentToKitchenAt).toBeNull();
+
+        expect(drinkDraftLineIds(table, menuById)).toHaveLength(1);
+
+        const result = applySendDrinksToBar(state, menuById);
+        expect(result.sentCount).toBe(1);
+        const next = result.state.tables[0];
+        const food = next.lines.find((entry) => entry.menuItemId === 'food');
+        const drink = next.lines.find((entry) => entry.menuItemId === 'drink');
+        expect(food?.kitchenStatus).toBe('draft');
+        expect(drink?.kitchenStatus).toBe('queued');
+        expect(drink?.orderNumber).toMatch(/^ORD-/);
+        expect(result.state.notifications.some((n) => n.kind === 'bar_ticket')).toBe(true);
     });
 
     it('requires guest approval before take payment', () => {
@@ -163,6 +173,8 @@ describe('posLogic kitchen vs beverages', () => {
     it('parses station deep-link params', () => {
         expect(parseStationParam('kitchen')).toBe('kitchen');
         expect(parseStationParam('expo')).toBe('kitchen');
+        expect(parseStationParam('bar')).toBe('bar');
+        expect(parseStationParam('drinks')).toBe('bar');
         expect(parseStationParam('floor')).toBe('service');
         expect(parseStationParam('nope')).toBeNull();
     });

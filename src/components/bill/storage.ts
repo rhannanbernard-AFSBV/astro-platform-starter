@@ -424,7 +424,12 @@ export function notificationsForStaff(
             if (n.audienceRole === 'all') return true;
             if (n.audienceRole === staff.role) return true;
             if (staff.role === 'manager' || staff.role === 'admin') {
-                return n.kind === 'kitchen_ticket' || n.kind === 'server_ack';
+                return (
+                    n.kind === 'kitchen_ticket' ||
+                    n.kind === 'bar_ticket' ||
+                    n.kind === 'server_ack' ||
+                    n.kind === 'bump_alert'
+                );
             }
             return false;
         })

@@ -43,6 +43,7 @@ export const DEFAULT_RESTAURANT: RestaurantProfile = {
 export const DEFAULT_STAFF: StaffUser[] = [
     { id: 'staff_server', name: 'Alex Morgan', role: 'server', pin: '1234', initials: 'AM' },
     { id: 'staff_kitchen', name: 'Casey Cook', role: 'kitchen', pin: '2222', initials: 'CC' },
+    { id: 'staff_bartender', name: 'Morgan Rum', role: 'bartender', pin: '3333', initials: 'MR' },
     { id: 'staff_admin', name: 'Riley Admin', role: 'admin', pin: '5555', initials: 'RA' },
     { id: 'staff_manager', name: 'Jordan Lee', role: 'manager', pin: '9999', initials: 'JL' },
 ];
@@ -204,6 +205,45 @@ export const DEFAULT_MENU: MenuItem[] = [
         id: '8',
         name: 'Jelly Coconut Water',
         description: 'Fresh coconut water from the husk',
+        category: 'Drinks',
+        priceCents: 600,
+        image: '/menu/8.svg',
+        modifierGroups: [],
+    },
+    {
+        id: '13',
+        name: 'Rum Punch',
+        description: 'Appleton blend, fruit juices, grenadine, nutmeg',
+        category: 'Drinks',
+        priceCents: 950,
+        image: '/menu/7.svg',
+        popular: true,
+        modifierGroups: [
+            {
+                id: 'drink',
+                name: 'Drink options',
+                multi: true,
+                options: [
+                    { id: 'less-ice', name: 'Less ice', priceDeltaCents: 0 },
+                    { id: 'strong', name: 'Strong pour', priceDeltaCents: 150 },
+                ],
+            },
+        ],
+    },
+    {
+        id: '14',
+        name: 'Red Stripe',
+        description: 'Ice-cold Jamaican lager, bottle',
+        category: 'Drinks',
+        priceCents: 550,
+        image: '/menu/8.svg',
+        popular: true,
+        modifierGroups: [],
+    },
+    {
+        id: '15',
+        name: 'Dragon Stout',
+        description: 'Dark sweet stout, bottle',
         category: 'Drinks',
         priceCents: 600,
         image: '/menu/8.svg',

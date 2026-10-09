@@ -40,6 +40,7 @@ type Props = {
 const STATION_LINKS: Array<{ key: StationKey; label: string }> = [
     { key: 'service', label: 'Service / floor' },
     { key: 'kitchen', label: 'Kitchen expo' },
+    { key: 'bar', label: 'Bar rail' },
     { key: 'reports', label: 'Sales' },
     { key: 'admin', label: 'Menu admin' },
 ];

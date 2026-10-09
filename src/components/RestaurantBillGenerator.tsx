@@ -32,12 +32,13 @@ import PinGate from './bill/PinGate';
 import {
     allGuestsPaid,
     appendAudit,
+    applySendDrinksToBar,
     applySendFoodToKitchen,
     bumpKitchenLine,
     canGuestTakePayment,
+    drinkDraftLineIds,
     fireHeldLines,
     parseStationParam,
-    queueDraftBeverages,
     recallKitchenLine,
     setLineCourseFire,
 } from './bill/posLogic';
@@ -53,7 +54,9 @@ import {
     canManageMenu,
     canManageUsers,
     canReopenTable,
+    canRunBarBoard,
     canRunKitchenBoard,
+    canSendToBar,
     canSendToKitchen,
     canTakePayment,
     canUpdateBeverageStatus,
@@ -125,6 +128,7 @@ const UsersPanel = lazy(() => import('./bill/UsersPanel'));
 const VIEW_LABELS: Record<AppView, string> = {
     service: 'Service',
     kitchen: 'Kitchen',
+    bar: 'Bar',
     reports: 'Sales',
     admin: 'Menu',
     users: 'Users',
@@ -334,9 +338,11 @@ export default function RestaurantBillGenerator() {
                 const preferredRole =
                     station === 'kitchen'
                         ? 'kitchen'
-                        : station === 'admin' || station === 'users' || station === 'reports'
-                          ? 'manager'
-                          : 'server';
+                        : station === 'bar'
+                          ? 'bartender'
+                          : station === 'admin' || station === 'users' || station === 'reports'
+                            ? 'manager'
+                            : 'server';
                 const stationStaff =
                     local.staff.find((entry) => entry.role === preferredRole) ??
                     local.staff.find((entry) => canAccessView(entry.role, station)) ??
@@ -400,6 +406,10 @@ export default function RestaurantBillGenerator() {
                 return isKitchenBoundItem(menuById.get(line.menuItemId));
             }).length,
         [activeTable.lines, menuById],
+    );
+    const drinkDraftCount = useMemo(
+        () => drinkDraftLineIds(activeTable, menuById).length,
+        [activeTable, menuById],
     );
     const isPaid = activeTable.status === 'paid';
     const isPartial = activeTable.status === 'partial';
@@ -734,15 +744,17 @@ export default function RestaurantBillGenerator() {
     };
 
     const setKitchenStatus = (tableId: string, lineId: string, kitchenStatus: KitchenStatus) => {
-        if (!canRunKitchenBoard(staff.role)) {
-            setShareFeedback('Kitchen role required to update ticket status.');
-            return;
-        }
         const targetTable = state.tables.find((table) => table.id === tableId);
         const targetLine = targetTable?.lines.find((line) => line.id === lineId);
         const targetItem = targetLine ? menuById.get(targetLine.menuItemId) : null;
-        if (isBeverageItem(targetItem)) {
-            setShareFeedback('Beverages are managed by the server, not the kitchen board.');
+        const isDrink = isBeverageItem(targetItem);
+        if (isDrink) {
+            if (!canRunBarBoard(staff.role) && !canUpdateBeverageStatus(staff.role)) {
+                setShareFeedback('Bartender role required to update bar tickets.');
+                return;
+            }
+        } else if (!canRunKitchenBoard(staff.role)) {
+            setShareFeedback('Kitchen role required to update ticket status.');
             return;
         }
         setState((current) => ({
@@ -762,17 +774,17 @@ export default function RestaurantBillGenerator() {
 
     const setBeverageStatus = (lineId: string, kitchenStatus: KitchenStatus) => {
         if (!canUpdateBeverageStatus(staff.role)) {
-            setShareFeedback('Server role required to update beverage status.');
-            return;
-        }
-        if (!activeTable.billGeneratedAt) {
-            setShareFeedback('Generate a guest ticket before updating beverage status.');
+            setShareFeedback('Bartender or server role required to update drinks.');
             return;
         }
         const line = activeTable.lines.find((entry) => entry.id === lineId);
         const item = line ? menuById.get(line.menuItemId) : null;
         if (!isBeverageItem(item)) {
             setShareFeedback('Only beverages can be updated this way.');
+            return;
+        }
+        if (line?.kitchenStatus === 'draft') {
+            setShareFeedback('Send drinks to the bar before updating status.');
             return;
         }
         updateActiveTable((table) => ({
@@ -785,8 +797,12 @@ export default function RestaurantBillGenerator() {
     };
 
     const deleteKitchenTicket = (tableId: string, lineId: string) => {
-        if (staff.role === 'kitchen') {
-            setShareFeedback('Kitchen staff cannot delete tickets. Ask a Manager.');
+        if (staff.role === 'kitchen' || staff.role === 'bartender') {
+            setShareFeedback(
+                staff.role === 'bartender'
+                    ? 'Bartenders cannot void tickets. Ask a Manager.'
+                    : 'Kitchen staff cannot delete tickets. Ask a Manager.',
+            );
             return;
         }
         const targetTable = state.tables.find((table) => table.id === tableId);
@@ -819,13 +835,33 @@ export default function RestaurantBillGenerator() {
     };
 
     const bumpTicket = (tableId: string, lineId: string) => {
-        if (!canRunKitchenBoard(staff.role)) return;
+        const targetTable = state.tables.find((table) => table.id === tableId);
+        const targetLine = targetTable?.lines.find((line) => line.id === lineId);
+        const targetItem = targetLine ? menuById.get(targetLine.menuItemId) : null;
+        const isDrink = isBeverageItem(targetItem);
+        if (isDrink) {
+            if (!canRunBarBoard(staff.role) && !canUpdateBeverageStatus(staff.role)) return;
+        } else if (!canRunKitchenBoard(staff.role)) {
+            return;
+        }
         commit((current) => bumpKitchenLine(current, tableId, lineId, staff));
-        setShareFeedback('Ticket bumped — wait timer reset and kitchen notified.');
+        setShareFeedback(
+            isDrink
+                ? 'Bar ticket bumped — wait timer reset.'
+                : 'Ticket bumped — wait timer reset and kitchen notified.',
+        );
     };
 
     const recallTicket = (tableId: string, lineId: string) => {
-        if (!canRunKitchenBoard(staff.role)) return;
+        const targetTable = state.tables.find((table) => table.id === tableId);
+        const targetLine = targetTable?.lines.find((line) => line.id === lineId);
+        const targetItem = targetLine ? menuById.get(targetLine.menuItemId) : null;
+        const isDrink = isBeverageItem(targetItem);
+        if (isDrink) {
+            if (!canRunBarBoard(staff.role) && !canUpdateBeverageStatus(staff.role)) return;
+        } else if (!canRunKitchenBoard(staff.role)) {
+            return;
+        }
         commit((current) => recallKitchenLine(current, tableId, lineId));
         setShareFeedback('Ticket recalled to Ready.');
     };
@@ -870,15 +906,16 @@ export default function RestaurantBillGenerator() {
     const openGuestBill = () => {
         if (!itemCount || isPaid || !canTakePayment(staff.role)) return;
         const generatedAt = activeTable.billGeneratedAt ?? new Date().toISOString();
-        updateActiveTable((table) => {
-            const withTicket = {
-                ...table,
-                billGeneratedAt: table.billGeneratedAt ?? generatedAt,
-            };
-            return queueDraftBeverages(withTicket, menuById, staff.id);
-        });
+        updateActiveTable((table) => ({
+            ...table,
+            billGeneratedAt: table.billGeneratedAt ?? generatedAt,
+        }));
         setGuestBillOpen(true);
-        setShareFeedback('Guest ticket generated. Beverages queued for server status updates.');
+        setShareFeedback(
+            drinkDraftCount > 0
+                ? 'Guest reviewing bill — send drinks to the bar when ready.'
+                : 'Guest reviewing bill.',
+        );
     };
 
     const openPayment = () => {
@@ -1051,32 +1088,55 @@ export default function RestaurantBillGenerator() {
             return result.state;
         });
         if (sentCount === 0) {
-            setShareFeedback('No food drafts to send. Beverages stay with the server.');
+            setShareFeedback('No food drafts to send. Use Send drinks to bar for beverages.');
             return;
         }
         setShareFeedback(
-            `${sentCount} food item(s) sent to kitchen. Beverages are not sent — queue them via guest ticket.`,
+            `${sentCount} food item(s) sent to kitchen. Send drinks to the bar separately.`,
         );
+        setNotifOpen(true);
+    };
+
+    const sendToBar = () => {
+        if (!drinkDraftCount || isPaid || !canSendToBar(staff.role)) return;
+        let sentCount = 0;
+        commit((current) => {
+            const result = applySendDrinksToBar(current, menuById);
+            sentCount = result.sentCount;
+            return result.state;
+        });
+        if (sentCount === 0) {
+            setShareFeedback('No drink drafts to send to the bar.');
+            return;
+        }
+        setShareFeedback(`${sentCount} drink(s) sent to the bar rail.`);
         setNotifOpen(true);
     };
 
     const generateBill = () => {
         if (!itemCount || isPaid) return;
         const generatedAt = new Date().toISOString();
-        const nextTable = queueDraftBeverages(
-            {
-                ...activeTable,
-                billGeneratedAt: generatedAt,
-            },
-            menuById,
-            staff.id,
-        );
-        updateActiveTable(() => nextTable);
+        updateActiveTable((table) => ({
+            ...table,
+            billGeneratedAt: generatedAt,
+        }));
         const template: ReceiptTemplate =
             activeTable.status === 'paid' ? 'paid' : 'guest';
         setReceiptTemplate(template);
-        setReceipt(buildSnapshot(nextTable, state.menu, state.restaurant, staff.name, template));
-        setShareFeedback('Guest ticket generated. Beverages queued for server status updates.');
+        setReceipt(
+            buildSnapshot(
+                { ...activeTable, billGeneratedAt: generatedAt },
+                state.menu,
+                state.restaurant,
+                staff.name,
+                template,
+            ),
+        );
+        setShareFeedback(
+            drinkDraftCount > 0
+                ? 'Guest ticket generated. Send remaining drinks to the bar when ready.'
+                : 'Guest ticket generated.',
+        );
     };
 
     const markNotifRead = (id: string) => {
@@ -1169,11 +1229,13 @@ export default function RestaurantBillGenerator() {
                     <span>
                         {staff.role === 'kitchen'
                             ? 'Kitchen station'
-                            : isPaid
-                              ? 'Table paid'
-                              : 'Open for service'}
+                            : staff.role === 'bartender'
+                              ? 'Bar station'
+                              : isPaid
+                                ? 'Table paid'
+                                : 'Open for service'}
                     </span>
-                    {staff.role !== 'kitchen' && (
+                    {staff.role !== 'kitchen' && staff.role !== 'bartender' && (
                         <>
                             <span className="status-divider" />
                             <label className="table-switcher">
@@ -1249,6 +1311,7 @@ export default function RestaurantBillGenerator() {
                                 onClick={() => setView(key)}
                             >
                                 {key === 'kitchen' && <Icon name="chef" />}
+                                {key === 'bar' && <Icon name="receipt" />}
                                 {key === 'reports' && <Icon name="chart" />}
                                 {key === 'admin' && <Icon name="settings" />}
                                 {key === 'users' && <Icon name="users" />}
@@ -1327,11 +1390,32 @@ export default function RestaurantBillGenerator() {
                 {view === 'kitchen' && canAccessView(staff.role, 'kitchen') && (
                     <Suspense fallback={<ViewFallback />}>
                         <KitchenBoard
+                            board="kitchen"
                             tables={state.tables}
                             menuById={menuById}
                             bumpAfterMinutes={state.settings.bumpAfterMinutes}
                             canDeleteTickets={
                                 canDeleteTickets(staff.role) && staff.role !== 'kitchen'
+                            }
+                            onStatus={setKitchenStatus}
+                            onDeleteTicket={deleteKitchenTicket}
+                            onBump={bumpTicket}
+                            onRecall={recallTicket}
+                            onCourseFire={setCourseFireOnLine}
+                            onFireAllHeld={fireAllHeld}
+                        />
+                    </Suspense>
+                )}
+
+                {view === 'bar' && canAccessView(staff.role, 'bar') && (
+                    <Suspense fallback={<ViewFallback />}>
+                        <KitchenBoard
+                            board="bar"
+                            tables={state.tables}
+                            menuById={menuById}
+                            bumpAfterMinutes={state.settings.bumpAfterMinutes}
+                            canDeleteTickets={
+                                canDeleteTickets(staff.role) && staff.role !== 'bartender'
                             }
                             onStatus={setKitchenStatus}
                             onDeleteTicket={deleteKitchenTicket}
@@ -1593,11 +1677,13 @@ export default function RestaurantBillGenerator() {
                         bill={bill}
                         itemCount={itemCount}
                         draftCount={draftCount}
+                        drinkDraftCount={drinkDraftCount}
                         isPaid={isPaid}
                         isPartial={isPartial}
                         shareFeedback={shareFeedback}
                         canClear={canClearOrder(staff.role)}
                         canSendKitchen={canSendToKitchen(staff.role)}
+                        canSendBar={canSendToBar(staff.role)}
                         canGenerateBill={canGenerateBill(staff.role)}
                         canTakePayment={canTakePayment(staff.role)}
                         canReopen={canReopenTable(staff.role)}
@@ -1735,6 +1821,7 @@ export default function RestaurantBillGenerator() {
                             }))
                         }
                         onSendKitchen={sendToKitchen}
+                        onSendBar={sendToBar}
                         onGenerateBill={() => {
                             if (!canGenerateBill(staff.role)) return;
                             generateBill();

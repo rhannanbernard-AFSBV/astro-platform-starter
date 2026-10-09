@@ -3,6 +3,7 @@ import { Icon } from './Icons';
 import { isTicketLate, ticketWaitMinutes } from './posLogic';
 import StatusTabs, { StatusChip } from './StatusTabs';
 import {
+    isBeverageItem,
     isKitchenBoundItem,
     type ActiveKitchenStatus,
 } from './statusUi';
@@ -21,11 +22,15 @@ type Ticket = {
     item: MenuItem;
 };
 
+type BoardKind = 'kitchen' | 'bar';
+
 type Props = {
     tables: TableOrder[];
     menuById: Map<string, MenuItem>;
     bumpAfterMinutes: number;
     canDeleteTickets: boolean;
+    /** Kitchen expo (food) or bar rail (drinks). */
+    board?: BoardKind;
     onStatus: (tableId: string, lineId: string, status: KitchenStatus) => void;
     onDeleteTicket: (tableId: string, lineId: string) => void;
     onBump: (tableId: string, lineId: string) => void;
@@ -39,6 +44,7 @@ export default function KitchenBoard({
     menuById,
     bumpAfterMinutes,
     canDeleteTickets,
+    board = 'kitchen',
     onStatus,
     onDeleteTicket,
     onBump,
@@ -46,6 +52,7 @@ export default function KitchenBoard({
     onCourseFire,
     onFireAllHeld,
 }: Props) {
+    const isBar = board === 'bar';
     const [statusFilter, setStatusFilter] = useState<ActiveKitchenStatus | 'all'>('all');
     const [courseFilter, setCourseFilter] = useState<CourseFire | 'all'>('all');
     const [activeTableId, setActiveTableId] = useState<string>('');
@@ -63,7 +70,7 @@ export default function KitchenBoard({
                     .filter((line) => {
                         if (line.kitchenStatus === 'draft') return false;
                         const item = menuById.get(line.menuItemId);
-                        return isKitchenBoundItem(item);
+                        return isBar ? isBeverageItem(item) : isKitchenBoundItem(item);
                     })
                     .map((line) => {
                         const item = menuById.get(line.menuItemId);
@@ -131,11 +138,11 @@ export default function KitchenBoard({
     );
 
     return (
-        <section className="menu-panel kitchen-panel">
+        <section className={`menu-panel kitchen-panel ${isBar ? 'bar-panel' : ''}`}>
             <div className="menu-heading">
                 <div>
-                    <p className="eyebrow">Expo</p>
-                    <h1>Kitchen tickets</h1>
+                    <p className="eyebrow">{isBar ? 'Bar rail' : 'Expo'}</p>
+                    <h1>{isBar ? 'Bar tickets' : 'Kitchen tickets'}</h1>
                 </div>
                 <p className="ticket-count">{totalActive} active</p>
             </div>
@@ -146,33 +153,39 @@ export default function KitchenBoard({
                 onSelect={setStatusFilter}
             />
 
-            <div className="course-filter" role="group" aria-label="Course fire">
-                <button
-                    type="button"
-                    className={courseFilter === 'all' ? 'active' : ''}
-                    onClick={() => setCourseFilter('all')}
-                >
-                    All courses
-                </button>
-                {COURSE_FIRE_OPTIONS.map((course) => (
+            {!isBar && (
+                <div className="course-filter" role="group" aria-label="Course fire">
                     <button
-                        key={course}
                         type="button"
-                        className={courseFilter === course ? 'active' : ''}
-                        onClick={() => setCourseFilter(course)}
+                        className={courseFilter === 'all' ? 'active' : ''}
+                        onClick={() => setCourseFilter('all')}
                     >
-                        {COURSE_FIRE_LABELS[course]}
+                        All courses
                     </button>
-                ))}
-            </div>
+                    {COURSE_FIRE_OPTIONS.map((course) => (
+                        <button
+                            key={course}
+                            type="button"
+                            className={courseFilter === course ? 'active' : ''}
+                            onClick={() => setCourseFilter(course)}
+                        >
+                            {COURSE_FIRE_LABELS[course]}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {tableGroups.length === 0 ? (
                 <div className="empty-order">
                     <span>
-                        <Icon name="chef" />
+                        <Icon name={isBar ? 'receipt' : 'chef'} />
                     </span>
-                    <h3>No active kitchen tickets</h3>
-                    <p>Food tickets appear here after Service sends them. Beverages stay with the server.</p>
+                    <h3>{isBar ? 'No active bar tickets' : 'No active kitchen tickets'}</h3>
+                    <p>
+                        {isBar
+                            ? 'Drink tickets appear here after Service sends them to the bar.'
+                            : 'Food tickets appear here after Service sends them. Drinks go to the Bar rail.'}
+                    </p>
                 </div>
             ) : (
                 <>
@@ -209,7 +222,7 @@ export default function KitchenBoard({
                                     <h2>{activeGroup.table.label}</h2>
                                 </div>
                                 <div className="kitchen-header-actions">
-                                    {heldCount > 0 && (
+                                    {!isBar && heldCount > 0 && (
                                         <button
                                             type="button"
                                             className="secondary-button"
@@ -228,7 +241,11 @@ export default function KitchenBoard({
                             {filteredTickets.length === 0 ? (
                                 <div className="empty-order compact-empty">
                                     <h3>No tickets in this status</h3>
-                                    <p>Choose another color-coded status tab, course, or table.</p>
+                                    <p>
+                                        {isBar
+                                            ? 'Choose another status tab or table.'
+                                            : 'Choose another color-coded status tab, course, or table.'}
+                                    </p>
                                 </div>
                             ) : (
                                 <div className="ticket-grid">
@@ -251,11 +268,13 @@ export default function KitchenBoard({
                                                     <StatusChip status={ticket.line.kitchenStatus} />
                                                 </header>
                                                 <div className="ticket-meta-row">
-                                                    <span
-                                                        className={`course-chip course-${ticket.line.courseFire}`}
-                                                    >
-                                                        {COURSE_FIRE_LABELS[ticket.line.courseFire]}
-                                                    </span>
+                                                    {!isBar && (
+                                                        <span
+                                                            className={`course-chip course-${ticket.line.courseFire}`}
+                                                        >
+                                                            {COURSE_FIRE_LABELS[ticket.line.courseFire]}
+                                                        </span>
+                                                    )}
                                                     {ticket.line.kitchenStatus !== 'served' && (
                                                         <span className={`wait-chip${late ? ' late' : ''}`}>
                                                             {wait}m
@@ -283,28 +302,30 @@ export default function KitchenBoard({
                                                         Note: {ticket.line.note}
                                                     </p>
                                                 )}
-                                                <div className="course-filter compact" role="group">
-                                                    {COURSE_FIRE_OPTIONS.map((course) => (
-                                                        <button
-                                                            key={course}
-                                                            type="button"
-                                                            className={
-                                                                ticket.line.courseFire === course
-                                                                    ? 'active'
-                                                                    : ''
-                                                            }
-                                                            onClick={() =>
-                                                                onCourseFire(
-                                                                    ticket.table.id,
-                                                                    ticket.line.id,
-                                                                    course,
-                                                                )
-                                                            }
-                                                        >
-                                                            {COURSE_FIRE_LABELS[course]}
-                                                        </button>
-                                                    ))}
-                                                </div>
+                                                {!isBar && (
+                                                    <div className="course-filter compact" role="group">
+                                                        {COURSE_FIRE_OPTIONS.map((course) => (
+                                                            <button
+                                                                key={course}
+                                                                type="button"
+                                                                className={
+                                                                    ticket.line.courseFire === course
+                                                                        ? 'active'
+                                                                        : ''
+                                                                }
+                                                                onClick={() =>
+                                                                    onCourseFire(
+                                                                        ticket.table.id,
+                                                                        ticket.line.id,
+                                                                        course,
+                                                                    )
+                                                                }
+                                                            >
+                                                                {COURSE_FIRE_LABELS[course]}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
                                                 <div className="ticket-actions">
                                                     {ticket.line.kitchenStatus === 'queued' &&
                                                         ticket.line.courseFire !== 'hold' && (

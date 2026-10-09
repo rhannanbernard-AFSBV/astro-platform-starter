@@ -2832,6 +2832,26 @@ button.status-tab {
     }
 }
 
+.send-bar-button {
+    border-color: #2f6f8f !important;
+    color: #123047 !important;
+    background: linear-gradient(180deg, #d7eff8, #b9dceb) !important;
+}
+
+.bar-panel .eyebrow {
+    color: #2f6f8f;
+}
+
+.bar-panel .ticket-card {
+    border-color: #8eb9cd;
+    background: linear-gradient(180deg, #f4fafc, #e7f3f8);
+}
+
+.bar-panel .ticket-card.queued header strong,
+.bar-panel .ticket-card.preparing header strong {
+    color: #123047;
+}
+
 .lock-station-btn,
 .staff-chip {
     color: #f6e7c3;

@@ -311,7 +311,7 @@ async def post_staff(
 ) -> dict[str, Any]:
     _require_pin_changed(session)
     _require_manager(session)
-    if body.role not in ("kitchen", "server", "admin", "manager"):
+    if body.role not in ("kitchen", "bartender", "server", "admin", "manager"):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid role")
     if body.role == "manager" and session["staff"]["role"] != "manager":
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Only managers create managers")

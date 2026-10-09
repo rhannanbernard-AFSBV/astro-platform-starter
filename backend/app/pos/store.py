@@ -217,6 +217,7 @@ def _ensure_seed(conn: sqlite3.Connection) -> None:
     demo_staff = [
         ("staff_server", "Alex Morgan", "server", "AM", "1234"),
         ("staff_kitchen", "Casey Cook", "kitchen", "CC", "2222"),
+        ("staff_bartender", "Morgan Rum", "bartender", "MR", "3333"),
         ("staff_admin", "Riley Admin", "admin", "RA", "5555"),
         ("staff_manager", "Jordan Lee", "manager", "JL", "9999"),
     ]

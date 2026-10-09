@@ -24,11 +24,13 @@ type Props = {
     bill: BillResult;
     itemCount: number;
     draftCount: number;
+    drinkDraftCount: number;
     isPaid: boolean;
     isPartial: boolean;
     shareFeedback: string | null;
     canClear: boolean;
     canSendKitchen: boolean;
+    canSendBar: boolean;
     canGenerateBill: boolean;
     canTakePayment: boolean;
     canReopen: boolean;
@@ -49,6 +51,7 @@ type Props = {
     onServiceChargePercent: (value: number) => void;
     onBeverageStatus: (lineId: string, status: KitchenStatus) => void;
     onSendKitchen: () => void;
+    onSendBar: () => void;
     onGenerateBill: () => void;
     onGuestBill: () => void;
     onTakePayment: () => void;
@@ -62,11 +65,13 @@ export default function OrderPanel({
     bill,
     itemCount,
     draftCount,
+    drinkDraftCount,
     isPaid,
     isPartial,
     shareFeedback,
     canClear,
     canSendKitchen,
+    canSendBar,
     canGenerateBill,
     canTakePayment,
     canReopen,
@@ -87,6 +92,7 @@ export default function OrderPanel({
     onServiceChargePercent,
     onBeverageStatus,
     onSendKitchen,
+    onSendBar,
     onGenerateBill,
     onGuestBill,
     onTakePayment,
@@ -94,7 +100,6 @@ export default function OrderPanel({
     onReopen,
 }: Props) {
     const guestApproved = Boolean(activeTable.guestBillApprovedAt);
-    const guestTicketReady = Boolean(activeTable.billGeneratedAt);
     const locked = isPaid;
 
     const statusCounts = activeTable.lines.reduce(
@@ -202,7 +207,6 @@ export default function OrderPanel({
                         const canAdvanceBeverage =
                             beverage &&
                             canUpdateBeverageStatus &&
-                            guestTicketReady &&
                             !isPaid &&
                             line.kitchenStatus !== 'draft' &&
                             Boolean(next);
@@ -224,7 +228,7 @@ export default function OrderPanel({
                                             <Price cents={unitPriceCents(item, line)} compact /> each
                                             {line.orderNumber ? ` · #${line.orderNumber}` : ''}
                                             {beverage && line.kitchenStatus === 'draft'
-                                                ? ' · held for guest ticket'
+                                                ? ' · ready to send to bar'
                                                 : ''}
                                         </p>
                                         <StatusChip status={line.kitchenStatus} />
@@ -320,10 +324,9 @@ export default function OrderPanel({
                                         </button>
                                     </div>
                                 )}
-                                {beverage && !guestTicketReady && line.kitchenStatus === 'draft' && (
+                                {beverage && line.kitchenStatus === 'draft' && (
                                     <p className="pin-help bev-help">
-                                        Beverages stay with the server — generate a guest ticket to
-                                        queue and update status.
+                                        Use Send drinks to bar so the bartender can pour and bump.
                                     </p>
                                 )}
                             </div>
@@ -448,6 +451,19 @@ export default function OrderPanel({
                         >
                             <Icon name="chef" /> Send food to kitchen
                             {draftCount > 0 && <span className="count-badge">{draftCount}</span>}
+                        </button>
+                    )}
+                    {canSendBar && (
+                        <button
+                            className="secondary-button send-bar-button"
+                            type="button"
+                            disabled={!drinkDraftCount}
+                            onClick={onSendBar}
+                        >
+                            <Icon name="receipt" /> Send drinks to bar
+                            {drinkDraftCount > 0 && (
+                                <span className="count-badge">{drinkDraftCount}</span>
+                            )}
                         </button>
                     )}
                     {canGenerateBill && (

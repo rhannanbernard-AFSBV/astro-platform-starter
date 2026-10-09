@@ -6,9 +6,9 @@ export type FilterCategory = 'All' | MenuCategory;
 export const TIP_AMOUNT_PRESETS = [0, 200, 500, 1000, 1500] as const;
 export type TipAmountPreset = (typeof TIP_AMOUNT_PRESETS)[number] | 'custom';
 
-export const STAFF_ROLES = ['kitchen', 'server', 'admin', 'manager'] as const;
+export const STAFF_ROLES = ['kitchen', 'bartender', 'server', 'admin', 'manager'] as const;
 export type StaffRole = (typeof STAFF_ROLES)[number];
-export type AppView = 'service' | 'kitchen' | 'reports' | 'admin' | 'users';
+export type AppView = 'service' | 'kitchen' | 'bar' | 'reports' | 'admin' | 'users';
 export type PaymentMethod = 'cash' | 'card' | 'mixed';
 export type KitchenStatus = 'draft' | 'queued' | 'preparing' | 'ready' | 'served';
 export type TableStatus = 'open' | 'paid' | 'partial';
@@ -149,7 +149,7 @@ export type StaffUser = {
 
 export type AppNotification = {
     id: string;
-    kind: 'kitchen_ticket' | 'server_ack' | 'bump_alert';
+    kind: 'kitchen_ticket' | 'bar_ticket' | 'server_ack' | 'bump_alert';
     title: string;
     message: string;
     orderNumber: string | null;
