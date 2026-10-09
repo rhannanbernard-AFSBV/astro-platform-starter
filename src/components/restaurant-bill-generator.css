@@ -2387,6 +2387,31 @@ button.status-tab {
     font-size: 12px;
 }
 
+.receipt-overlay.session-lock {
+    background: rgba(18, 22, 20, 0.72);
+    backdrop-filter: blur(2px);
+}
+
+.lock-station-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.owner-ops-banner {
+    margin: 0 0 14px;
+    padding: 10px 14px;
+    border: 1px solid #d8d2c8;
+    border-radius: 12px;
+    background: #f7f4ef;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.owner-ops-banner p {
+    margin: 0;
+}
+
 .receipt-brand {
     align-items: flex-start !important;
 }

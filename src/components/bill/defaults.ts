@@ -25,6 +25,7 @@ export const DEFAULT_SETTINGS: PosSettings = {
     shiftOpenedAt: null,
     shiftClosedAt: null,
     bumpAfterMinutes: 8,
+    idleLockMinutes: 5,
 };
 /** @deprecated use DEFAULT_SERVICE_CHARGE_PERCENT */
 export const DEFAULT_TAX_PERCENT = DEFAULT_SERVICE_CHARGE_PERCENT;

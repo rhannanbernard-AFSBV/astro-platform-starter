@@ -3,24 +3,37 @@ import Price from './Price';
 import type { PosSettings, SaleRecord } from './types';
 import { summarizeSales } from './math';
 
+type OwnerOps = {
+    openTables?: number;
+    saleCount?: number;
+    recentBackups?: string[];
+    status?: string;
+};
+
 type Props = {
     sales: SaleRecord[];
     settings: PosSettings;
     canDeletePayments: boolean;
+    serverMode?: boolean;
+    ownerOps?: OwnerOps | null;
     onExport: () => void;
     onDeleteSale: (saleId: string) => void;
     onOpenShift: () => void;
     onCloseShift: () => void;
+    onBackup?: () => void;
 };
 
 export default function SalesReport({
     sales,
     settings,
     canDeletePayments,
+    serverMode = false,
+    ownerOps = null,
     onExport,
     onDeleteSale,
     onOpenShift,
     onCloseShift,
+    onBackup,
 }: Props) {
     const summary = summarizeSales(sales);
     const shiftOpen = Boolean(settings.shiftOpenedAt && !settings.shiftClosedAt);
@@ -45,8 +58,24 @@ export default function SalesReport({
                     <button type="button" className="secondary-button" onClick={onExport}>
                         <Icon name="download" /> Export CSV
                     </button>
+                    {serverMode && onBackup && canDeletePayments && (
+                        <button type="button" className="secondary-button" onClick={onBackup}>
+                            <Icon name="download" /> Backup DB
+                        </button>
+                    )}
                 </div>
             </div>
+            {serverMode && ownerOps && (
+                <div className="owner-ops-banner">
+                    <p>
+                        Owner ops · {ownerOps.openTables ?? 0} open tables · ledger{' '}
+                        {ownerOps.saleCount ?? 0} sales
+                        {ownerOps.recentBackups?.length
+                            ? ` · last backup ${ownerOps.recentBackups[0]}`
+                            : ' · no server backup yet'}
+                    </p>
+                </div>
+            )}
             <div className={`shift-banner ${shiftOpen ? 'open' : 'closed'}`}>
                 {shiftOpen ? (
                     <p>

@@ -27,6 +27,8 @@ test-results/
 backend/data/
 backend/.venv/
 backend/tests/_tmp_pos_data/
+backend/tests/_tmp_pos_hardening/
+backend/data/backups/
 .env
 
 **/__pycache__/

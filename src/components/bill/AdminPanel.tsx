@@ -127,9 +127,27 @@ export default function AdminPanel({
                             }
                         />
                     </label>
+                    <label>
+                        Station idle lock (minutes)
+                        <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={settings.idleLockMinutes}
+                            onChange={(event) =>
+                                onSettingsChange({
+                                    idleLockMinutes: Math.max(
+                                        0,
+                                        Number(event.target.value || 0),
+                                    ),
+                                })
+                            }
+                        />
+                    </label>
                 </div>
                 <p className="fx-note">
-                    FX, service charge, and bump timer sync across open tabs.
+                    FX, service charge, bump timer, and idle lock sync across open tabs. Set idle lock
+                    to 0 to disable the station lock screen.
                 </p>
                 <h2>Station deep-links</h2>
                 <p className="fx-note">

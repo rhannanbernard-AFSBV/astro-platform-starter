@@ -310,6 +310,10 @@ function normalizeState(value: unknown): PersistedState | null {
             1,
             Number(rawSettings.bumpAfterMinutes ?? DEFAULT_SETTINGS.bumpAfterMinutes),
         ),
+        idleLockMinutes: Math.max(
+            0,
+            Number(rawSettings.idleLockMinutes ?? DEFAULT_SETTINGS.idleLockMinutes),
+        ),
     };
 
     return {

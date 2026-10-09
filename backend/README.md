@@ -19,7 +19,15 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
+# For local demos without forced PIN rotation:
+# echo POS_FORCE_PIN_CHANGE=0 >> .env
 uvicorn app.main:app --reload --port 8000
+```
+
+Or from the repo root (persistent volume, production-like defaults):
+
+```bash
+docker compose up -d --build
 ```
 
 Health: `GET http://localhost:8000/health`  
@@ -43,7 +51,15 @@ Then `npm run dev`. Staff must PIN-login against the API. Demo seed PINs:
 | Admin   | 5555 |
 | Manager | 9999 |
 
-**Change these before any real customer traffic.**
+**With `POS_FORCE_PIN_CHANGE=1` (Docker default) the UI blocks the floor until each user sets a private PIN.** Rate limits lock an IP after repeated failures; idle sessions revoke server-side and the SPA locks the station.
+
+### Owner reliability
+
+- `GET /pos/ops/summary` — open tables, sales totals, recent backups (manager/admin)
+- `POST /pos/ops/backup` — checkpoint + copy SQLite under `POS_DATA_DIR/backups`
+- `GET /pos/ops/backup/latest` — download newest backup
+- `GET /pos/ops/sales.csv` — ledger CSV
+- `./scripts/backup-pos.sh` — local or `--remote` cron helper
 
 ### Stripe (optional card rails)
 

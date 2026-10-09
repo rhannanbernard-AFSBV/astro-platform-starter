@@ -13,7 +13,14 @@ from pathlib import Path
 from typing import Any, Iterator
 from uuid import uuid4
 
-from app.pos.security import hash_pin, hash_session, session_expiry, verify_pin
+from app.pos.security import (
+    force_seed_pin_change,
+    hash_pin,
+    hash_session,
+    session_expiry,
+    session_idle_minutes,
+    verify_pin,
+)
 
 DEFAULT_TENANT_ID = os.getenv(
     "POS_DEFAULT_TENANT_ID",
@@ -77,7 +84,8 @@ def init_db() -> None:
                 tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
                 staff_id TEXT NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
                 expires_at TEXT NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL DEFAULT ''
             );
 
             CREATE TABLE IF NOT EXISTS pos_snapshots (
@@ -111,7 +119,29 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at);
             """
         )
+        _migrate_schema(conn)
         _ensure_seed(conn)
+
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return {row["name"] for row in rows}
+
+
+def _migrate_schema(conn: sqlite3.Connection) -> None:
+    staff_cols = _table_columns(conn, "staff")
+    if "must_change_pin" not in staff_cols:
+        conn.execute(
+            "ALTER TABLE staff ADD COLUMN must_change_pin INTEGER NOT NULL DEFAULT 0"
+        )
+    session_cols = _table_columns(conn, "sessions")
+    if "last_seen_at" not in session_cols:
+        conn.execute(
+            "ALTER TABLE sessions ADD COLUMN last_seen_at TEXT NOT NULL DEFAULT ''"
+        )
+        conn.execute(
+            "UPDATE sessions SET last_seen_at = created_at WHERE last_seen_at = '' OR last_seen_at IS NULL"
+        )
 
 
 def _now_iso() -> str:
@@ -167,6 +197,7 @@ def _seed_snapshot() -> dict[str, Any]:
             "shiftOpenedAt": None,
             "shiftClosedAt": None,
             "bumpAfterMinutes": 8,
+            "idleLockMinutes": 5,
         },
         "auditLog": [],
         "updatedAt": now,
@@ -182,6 +213,7 @@ def _ensure_seed(conn: sqlite3.Connection) -> None:
         "INSERT INTO tenants (id, company_name, country_code, created_at) VALUES (?, ?, ?, ?)",
         (DEFAULT_TENANT_ID, "Savory Kitchen & Bar", "SXM", created),
     )
+    must_change = 1 if force_seed_pin_change() else 0
     demo_staff = [
         ("staff_server", "Alex Morgan", "server", "AM", "1234"),
         ("staff_kitchen", "Casey Cook", "kitchen", "CC", "2222"),
@@ -191,10 +223,20 @@ def _ensure_seed(conn: sqlite3.Connection) -> None:
     for staff_id, name, role, initials, pin in demo_staff:
         conn.execute(
             """
-            INSERT INTO staff (id, tenant_id, name, role, initials, pin_hash, active, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+            INSERT INTO staff
+              (id, tenant_id, name, role, initials, pin_hash, active, created_at, must_change_pin)
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
             """,
-            (staff_id, DEFAULT_TENANT_ID, name, role, initials, hash_pin(pin), created),
+            (
+                staff_id,
+                DEFAULT_TENANT_ID,
+                name,
+                role,
+                initials,
+                hash_pin(pin),
+                created,
+                must_change,
+            ),
         )
     snap = _seed_snapshot()
     snap["activeStaffId"] = "staff_server"
@@ -223,7 +265,10 @@ def list_public_staff(tenant_id: str) -> list[dict[str, Any]]:
 def authenticate(tenant_id: str, pin: str) -> dict[str, Any] | None:
     with _lock, connect() as conn:
         rows = conn.execute(
-            "SELECT id, name, role, initials, pin_hash FROM staff WHERE tenant_id = ? AND active = 1",
+            """
+            SELECT id, name, role, initials, pin_hash, must_change_pin
+            FROM staff WHERE tenant_id = ? AND active = 1
+            """,
             (tenant_id,),
         ).fetchall()
         match = None
@@ -237,16 +282,19 @@ def authenticate(tenant_id: str, pin: str) -> dict[str, Any] | None:
 
         token = new_session_token()
         expires = session_expiry()
+        now = _now_iso()
         conn.execute(
             """
-            INSERT INTO sessions (token_hash, tenant_id, staff_id, expires_at, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO sessions
+              (token_hash, tenant_id, staff_id, expires_at, created_at, last_seen_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (hash_session(token), tenant_id, match["id"], expires.isoformat(), _now_iso()),
+            (hash_session(token), tenant_id, match["id"], expires.isoformat(), now, now),
         )
         return {
             "token": token,
             "expiresAt": expires.isoformat(),
+            "mustChangePin": bool(match["must_change_pin"]),
             "staff": {
                 "id": match["id"],
                 "name": match["name"],
@@ -261,12 +309,14 @@ def resolve_session(token: str) -> dict[str, Any] | None:
     if not token:
         return None
     th = hash_session(token)
-    now = datetime.now(timezone.utc).isoformat()
+    now_dt = datetime.now(timezone.utc)
+    now = now_dt.isoformat()
+    idle_minutes = session_idle_minutes()
     with _lock, connect() as conn:
         row = conn.execute(
             """
-            SELECT s.tenant_id, s.staff_id, s.expires_at,
-                   st.name, st.role, st.initials
+            SELECT s.tenant_id, s.staff_id, s.expires_at, s.last_seen_at,
+                   st.name, st.role, st.initials, st.must_change_pin
             FROM sessions s
             JOIN staff st ON st.id = s.staff_id
             WHERE s.token_hash = ? AND st.active = 1
@@ -278,8 +328,25 @@ def resolve_session(token: str) -> dict[str, Any] | None:
         if row["expires_at"] < now:
             conn.execute("DELETE FROM sessions WHERE token_hash = ?", (th,))
             return None
+        last_seen_raw = row["last_seen_at"] or row["expires_at"]
+        try:
+            last_seen = datetime.fromisoformat(last_seen_raw.replace("Z", "+00:00"))
+            if last_seen.tzinfo is None:
+                last_seen = last_seen.replace(tzinfo=timezone.utc)
+        except ValueError:
+            last_seen = now_dt
+        if idle_minutes > 0:
+            idle_seconds = (now_dt - last_seen).total_seconds()
+            if idle_seconds > idle_minutes * 60:
+                conn.execute("DELETE FROM sessions WHERE token_hash = ?", (th,))
+                return None
+        conn.execute(
+            "UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?",
+            (now, th),
+        )
         return {
             "tenantId": row["tenant_id"],
+            "mustChangePin": bool(row["must_change_pin"]),
             "staff": {
                 "id": row["staff_id"],
                 "name": row["name"],
@@ -287,6 +354,42 @@ def resolve_session(token: str) -> dict[str, Any] | None:
                 "initials": row["initials"],
             },
         }
+
+
+def change_staff_pin(
+    tenant_id: str,
+    staff_id: str,
+    *,
+    current_pin: str,
+    new_pin: str,
+) -> dict[str, Any]:
+    if current_pin == new_pin:
+        raise ValueError("New PIN must differ from the current PIN")
+    # Block well-known demo PINs after rotation so pilots are not left on defaults
+    demo_pins = {"1234", "2222", "5555", "9999"}
+    if new_pin in demo_pins:
+        raise ValueError("Choose a PIN that is not a published demo default")
+    with _lock, connect() as conn:
+        row = conn.execute(
+            """
+            SELECT pin_hash FROM staff
+            WHERE id = ? AND tenant_id = ? AND active = 1
+            """,
+            (staff_id, tenant_id),
+        ).fetchone()
+        if not row:
+            raise KeyError("staff not found")
+        if not verify_pin(current_pin, row["pin_hash"]):
+            raise PermissionError("Current PIN is incorrect")
+        conn.execute(
+            """
+            UPDATE staff
+            SET pin_hash = ?, must_change_pin = 0
+            WHERE id = ? AND tenant_id = ?
+            """,
+            (hash_pin(new_pin), staff_id, tenant_id),
+        )
+    return {"status": "ok", "mustChangePin": False}
 
 
 def revoke_session(token: str) -> None:

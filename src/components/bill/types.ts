@@ -135,6 +135,8 @@ export type PosSettings = {
     shiftClosedAt: string | null;
     /** Minutes in Queued before visual bump escalation */
     bumpAfterMinutes: number;
+    /** Minutes without activity before the station UI locks (0 = off) */
+    idleLockMinutes: number;
 };
 
 export type StaffUser = {

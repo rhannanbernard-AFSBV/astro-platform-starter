@@ -5,6 +5,11 @@ type Props = {
     pinInput: string;
     pinError: string | null;
     helpText?: string;
+    title?: string;
+    eyebrow?: string;
+    submitLabel?: string;
+    /** When true, close is hidden and overlay uses session-lock styling. */
+    lockMode?: boolean;
     demoCredentials?: string;
     onPinInput: (value: string) => void;
     onSubmit: () => void;
@@ -15,6 +20,10 @@ export default function PinGate({
     pinInput,
     pinError,
     helpText = 'Enter your staff PIN',
+    title = 'Enter PIN',
+    eyebrow = 'Staff access',
+    submitLabel = 'Sign in',
+    lockMode = false,
     demoCredentials,
     onPinInput,
     onSubmit,
@@ -23,16 +32,24 @@ export default function PinGate({
     const [showDemo, setShowDemo] = useState(false);
 
     return (
-        <div className="receipt-overlay" role="dialog" aria-modal="true" aria-label="Staff PIN">
+        <div
+            className={`receipt-overlay${lockMode ? ' session-lock' : ''}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label={lockMode ? 'Station locked' : 'Staff PIN'}
+        >
             <div className="receipt-sheet modifier-sheet">
                 <div className="receipt-toolbar">
                     <div>
-                        <p className="eyebrow">Staff access</p>
-                        <h2>Enter PIN</h2>
+                        <p className="eyebrow">{eyebrow}</p>
+                        <h2>{title}</h2>
                     </div>
-                    <button type="button" className="ghost" onClick={onClose} aria-label="Close PIN">
-                        <Icon name="close" />
-                    </button>
+                    {!lockMode && (
+                        <button type="button" className="ghost" onClick={onClose} aria-label="Close PIN">
+                            <Icon name="close" />
+                        </button>
+                    )}
+                    {lockMode && <Icon name="lock" />}
                 </div>
                 <div className="modifier-body">
                     <p className="pin-help">{helpText}</p>
@@ -51,9 +68,9 @@ export default function PinGate({
                     </label>
                     {pinError && <p className="share-feedback">{pinError}</p>}
                     <button type="button" className="generate-button" onClick={onSubmit}>
-                        Sign in
+                        {submitLabel}
                     </button>
-                    {demoCredentials && (
+                    {demoCredentials && !lockMode && (
                         <div className="demo-credentials">
                             <button
                                 type="button"

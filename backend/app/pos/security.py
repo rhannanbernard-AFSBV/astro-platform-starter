@@ -52,3 +52,23 @@ def hash_session(token: str) -> str:
 def session_expiry(hours: float | None = None) -> datetime:
     ttl = hours if hours is not None else float(os.getenv("POS_SESSION_TTL_HOURS", "12"))
     return datetime.now(timezone.utc) + timedelta(hours=ttl)
+
+
+def session_idle_minutes() -> int:
+    """Minutes of inactivity before a session is revoked (0 disables)."""
+    return max(0, int(os.getenv("POS_SESSION_IDLE_MINUTES", "30")))
+
+
+def hide_demo_credentials() -> bool:
+    raw = os.getenv("POS_HIDE_DEMO_CREDENTIALS", "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
+def force_seed_pin_change() -> bool:
+    """When true, seeded demo staff must rotate PINs before floor use.
+
+    Defaults on so fresh pilot DBs are not left on published demo PINs.
+    Set POS_FORCE_PIN_CHANGE=0 for local demos / automated tests.
+    """
+    raw = os.getenv("POS_FORCE_PIN_CHANGE", "1").strip().lower()
+    return raw in ("1", "true", "yes", "on")

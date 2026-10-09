@@ -11,6 +11,7 @@ export type PosSession = {
     token: string;
     expiresAt: string;
     tenantId: string;
+    mustChangePin?: boolean;
     staff: Pick<StaffUser, 'id' | 'name' | 'role' | 'initials'>;
 };
 
@@ -19,6 +20,21 @@ export type PosConfig = {
     stripeConfigured: boolean;
     stripePublishableKey: string | null;
     requiresLogin: boolean;
+    idleMinutes?: number;
+    hideDemoCredentials?: boolean;
+    pinMaxAttempts?: number;
+};
+
+export type OwnerSummary = {
+    status: string;
+    restaurant?: string;
+    openTables?: number;
+    saleCount?: number;
+    salesTotalCents?: number;
+    shiftOpenedAt?: string | null;
+    shiftClosedAt?: string | null;
+    staffCount?: number;
+    recentBackups?: string[];
 };
 
 function apiBase(): string | null {
@@ -106,6 +122,7 @@ export async function loginWithPin(pin: string, tenantId?: string): Promise<PosS
         token: string;
         expiresAt: string;
         tenantId: string;
+        mustChangePin?: boolean;
         staff: PosSession['staff'];
     }>('/pos/auth/login', {
         method: 'POST',
@@ -116,6 +133,74 @@ export async function loginWithPin(pin: string, tenantId?: string): Promise<PosS
     return data;
 }
 
+export async function changePin(currentPin: string, newPin: string): Promise<void> {
+    await request('/pos/auth/change-pin', {
+        method: 'POST',
+        body: JSON.stringify({ currentPin, newPin }),
+    });
+}
+
+export async function fetchOwnerSummary(): Promise<OwnerSummary> {
+    return request<OwnerSummary>('/pos/ops/summary');
+}
+
+export async function createOwnerBackup(): Promise<{ filename: string; bytes: number }> {
+    return request('/pos/ops/backup', { method: 'POST' });
+}
+
+export async function downloadLatestBackup(): Promise<void> {
+    const base = apiBase();
+    if (!base) throw new Error('POS API URL not configured');
+    const token = getStoredToken();
+    const res = await fetch(`${base}/pos/ops/backup/latest`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error(`Backup download failed (${res.status})`);
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match = /filename="?([^"]+)"?/i.exec(disposition);
+    const filename = match?.[1] || `pos-backup-${Date.now()}.db`;
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+}
+
+function formatApiError(err: unknown): string {
+    if (!(err instanceof Error)) return 'Request failed.';
+    const withStatus = err as Error & { status?: number; detail?: unknown };
+    const body = withStatus.detail;
+    const nested =
+        body && typeof body === 'object' && 'detail' in body
+            ? (body as { detail: unknown }).detail
+            : body;
+    if (withStatus.status === 429) {
+        const seconds =
+            nested && typeof nested === 'object' && 'retryAfterSeconds' in nested
+                ? Number((nested as { retryAfterSeconds?: number }).retryAfterSeconds)
+                : NaN;
+        return Number.isFinite(seconds)
+            ? `Too many failed PIN attempts. Try again in ${seconds}s.`
+            : 'Too many failed PIN attempts. Try again later.';
+    }
+    if (typeof nested === 'string') return nested;
+    if (nested && typeof nested === 'object' && 'message' in nested) {
+        return String((nested as { message: string }).message);
+    }
+    try {
+        const parsed = JSON.parse(err.message) as { message?: string } | string;
+        if (typeof parsed === 'string') return parsed;
+        if (parsed?.message) return parsed.message;
+    } catch {
+        /* use raw */
+    }
+    return err.message || 'Request failed.';
+}
+
+export { formatApiError };
+
 export async function logoutSession(): Promise<void> {
     try {
         await request('/pos/auth/logout', { method: 'POST' });
@@ -125,7 +210,11 @@ export async function logoutSession(): Promise<void> {
     setStoredToken(null);
 }
 
-export async function fetchPosState(): Promise<{ state: PersistedState; revision: number }> {
+export async function fetchPosState(): Promise<{
+    state: PersistedState;
+    revision: number;
+    mustChangePin?: boolean;
+}> {
     return request('/pos/state');
 }
 

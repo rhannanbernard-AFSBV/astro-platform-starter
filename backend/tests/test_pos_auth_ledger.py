@@ -12,6 +12,8 @@ from fastapi.testclient import TestClient
 TEST_DIR = Path(__file__).resolve().parent / "_tmp_pos_data"
 TEST_DIR.mkdir(exist_ok=True)
 os.environ["POS_DATA_DIR"] = str(TEST_DIR)
+os.environ["POS_FORCE_PIN_CHANGE"] = "0"
+os.environ["POS_SESSION_IDLE_MINUTES"] = "0"
 db_file = TEST_DIR / "pos.db"
 if db_file.exists():
     db_file.unlink()
@@ -22,6 +24,8 @@ from app.pos import store  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def fresh_db():
+    os.environ["POS_FORCE_PIN_CHANGE"] = "0"
+    os.environ["POS_SESSION_IDLE_MINUTES"] = "0"
     if db_file.exists():
         db_file.unlink()
     store.init_db()

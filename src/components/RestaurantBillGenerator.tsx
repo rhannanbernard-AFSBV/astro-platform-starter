@@ -26,6 +26,7 @@ import PaymentModal, {
     paymentInputsToUsd,
     type TenderCurrency,
 } from './bill/PaymentModal';
+import ChangePinModal from './bill/ChangePinModal';
 import PinGate from './bill/PinGate';
 import {
     allGuestsPaid,
@@ -70,7 +71,13 @@ import {
     touchState,
 } from './bill/storage';
 import {
+    changePin,
+    createOwnerBackup,
+    downloadLatestBackup,
+    fetchOwnerSummary,
+    fetchPosConfig,
     fetchPosState,
+    formatApiError,
     getStoredToken,
     isServerMode,
     loginWithPin,
@@ -79,11 +86,13 @@ import {
     recordSale,
     setStoredToken,
     voidSaleRemote,
+    type OwnerSummary,
     type PosSession,
 } from './bill/posApi';
 import { isBeverageItem, isKitchenBoundItem } from './bill/statusUi';
 import TableMap from './bill/TableMap';
 import { useDebouncedSave } from './bill/useDebouncedSave';
+import { useIdleLock } from './bill/useIdleLock';
 import { usePosServer } from './bill/usePosServer';
 import { usePosSync } from './bill/usePosSync';
 import { useReadyAlerts } from './bill/useReadyAlerts';
@@ -173,17 +182,27 @@ export default function RestaurantBillGenerator() {
     }>(null);
     const [posSession, setPosSession] = useState<PosSession | null>(null);
     const [serverRevision, setServerRevision] = useState<number | null>(null);
+    const [mustChangePin, setMustChangePin] = useState(false);
+    const [changePinError, setChangePinError] = useState<string | null>(null);
+    const [changePinBusy, setChangePinBusy] = useState(false);
+    const [hideDemoCredentials, setHideDemoCredentials] = useState(false);
+    const [ownerOps, setOwnerOps] = useState<OwnerSummary | null>(null);
     const serverMode = isServerMode();
 
     useDebouncedSave(state, hydrated && !serverMode, 400);
     usePosSync(state, setState, hydrated && !serverMode);
     const { serverOnline, syncError } = usePosServer({
         hydrated,
-        session: posSession,
+        session: posSession && !mustChangePin ? posSession : null,
         state,
         setState,
         revision: serverRevision,
         setRevision: setServerRevision,
+    });
+
+    const { locked: idleLocked, unlock: unlockIdle, lockNow } = useIdleLock({
+        enabled: hydrated && Boolean(posSession || !serverMode) && !mustChangePin && !showPinGate,
+        idleMinutes: state.settings.idleLockMinutes,
     });
 
     const commit = (updater: (current: PersistedState) => PersistedState) => {
@@ -210,6 +229,8 @@ export default function RestaurantBillGenerator() {
             }
 
             if (serverMode) {
+                const config = await fetchPosConfig();
+                if (config?.hideDemoCredentials) setHideDemoCredentials(true);
                 const healthy = await probePosHealth();
                 if (!healthy) {
                     setShareFeedback(
@@ -230,6 +251,7 @@ export default function RestaurantBillGenerator() {
                         const remote = await fetchPosState();
                         if (cancelled) return;
                         setServerRevision(remote.revision);
+                        setMustChangePin(Boolean(remote.mustChangePin));
                         const staffId =
                             remote.state.staff.find((s) => s.id === remote.state.activeStaffId)?.id ??
                             remote.state.staff[0]?.id;
@@ -247,6 +269,7 @@ export default function RestaurantBillGenerator() {
                                 token,
                                 expiresAt: '',
                                 tenantId: '',
+                                mustChangePin: Boolean(remote.mustChangePin),
                                 staff: {
                                     id: active.id,
                                     name: active.name,
@@ -395,6 +418,19 @@ export default function RestaurantBillGenerator() {
         setShowPinGate(true);
     };
 
+    const refreshOwnerOps = () => {
+        if (!serverMode || !posSession || mustChangePin) return;
+        if (staff.role !== 'manager' && staff.role !== 'admin') return;
+        void fetchOwnerSummary()
+            .then(setOwnerOps)
+            .catch(() => setOwnerOps(null));
+    };
+
+    useEffect(() => {
+        if (view === 'reports') refreshOwnerOps();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [view, serverMode, posSession?.token, mustChangePin, staff.role]);
+
     const submitPin = () => {
         const pin = pinInput.trim();
         if (serverMode) {
@@ -402,8 +438,10 @@ export default function RestaurantBillGenerator() {
                 try {
                     const session = await loginWithPin(pin);
                     setPosSession(session);
+                    setMustChangePin(Boolean(session.mustChangePin));
                     const remote = await fetchPosState();
                     setServerRevision(remote.revision);
+                    setMustChangePin(Boolean(session.mustChangePin || remote.mustChangePin));
                     setState(
                         touchState({
                             ...remote.state,
@@ -413,6 +451,7 @@ export default function RestaurantBillGenerator() {
                     setActiveXcgRate(remote.state.settings.xcgPerUsd);
                     setView(DEFAULT_VIEW_BY_ROLE[session.staff.role]);
                     setShowPinGate(false);
+                    unlockIdle();
                     if (pendingManagerAction && session.staff.role === 'manager') {
                         pendingManagerAction();
                     } else if (pendingManagerAction && session.staff.role !== 'manager') {
@@ -424,10 +463,12 @@ export default function RestaurantBillGenerator() {
                     setPinInput('');
                     setPinError(null);
                     setShareFeedback(
-                        `Signed in as ${session.staff.name} (${ROLE_LABELS[session.staff.role]}) · server mode`,
+                        session.mustChangePin
+                            ? `Signed in as ${session.staff.name} — change the demo PIN to continue.`
+                            : `Signed in as ${session.staff.name} (${ROLE_LABELS[session.staff.role]}) · server mode`,
                     );
-                } catch {
-                    setPinError('Invalid PIN or server error.');
+                } catch (err) {
+                    setPinError(formatApiError(err));
                 }
             })();
             return;
@@ -445,11 +486,40 @@ export default function RestaurantBillGenerator() {
         setState((current) => ({ ...current, activeStaffId: match.id }));
         setView(DEFAULT_VIEW_BY_ROLE[match.role]);
         setShowPinGate(false);
+        unlockIdle();
         if (pendingManagerAction && match.role === 'manager') pendingManagerAction();
         setPendingManagerAction(null);
         setPinInput('');
         setPinError(null);
         setShareFeedback(`Signed in as ${match.name} (${ROLE_LABELS[match.role]}).`);
+    };
+
+    const submitChangePin = (current: string, next: string) => {
+        setChangePinBusy(true);
+        setChangePinError(null);
+        void changePin(current, next)
+            .then(() => {
+                setMustChangePin(false);
+                setPosSession((session) =>
+                    session ? { ...session, mustChangePin: false } : session,
+                );
+                setShareFeedback('PIN updated. Station unlocked for trusted floor use.');
+            })
+            .catch((err) => setChangePinError(formatApiError(err)))
+            .finally(() => setChangePinBusy(false));
+    };
+
+    const runOwnerBackup = () => {
+        void (async () => {
+            try {
+                const meta = await createOwnerBackup();
+                await downloadLatestBackup();
+                setShareFeedback(`Backup saved · ${meta.filename} (${meta.bytes} bytes)`);
+                refreshOwnerOps();
+            } catch (err) {
+                setShareFeedback(formatApiError(err));
+            }
+        })();
     };
 
     const openModifierModal = (item: MenuItem) => {
@@ -1158,6 +1228,19 @@ export default function RestaurantBillGenerator() {
                     </div>
                     <button
                         type="button"
+                        className="ghost lock-station-btn"
+                        title="Lock this station"
+                        onClick={() => {
+                            setPendingManagerAction(null);
+                            setPinInput('');
+                            setPinError(null);
+                            lockNow();
+                        }}
+                    >
+                        <Icon name="lock" /> Lock
+                    </button>
+                    <button
+                        type="button"
                         className="staff-chip"
                         onClick={() => {
                             setPendingManagerAction(null);
@@ -1236,8 +1319,15 @@ export default function RestaurantBillGenerator() {
                             sales={todaySales}
                             settings={state.settings}
                             canDeletePayments={canDeletePayments(staff.role)}
+                            serverMode={serverMode}
+                            ownerOps={ownerOps}
                             onExport={exportSales}
                             onDeleteSale={deleteSale}
+                            onBackup={
+                                serverMode && (staff.role === 'manager' || staff.role === 'admin')
+                                    ? runOwnerBackup
+                                    : undefined
+                            }
                             onOpenShift={() =>
                                 commit((current) => ({
                                     ...current,
@@ -1777,23 +1867,41 @@ export default function RestaurantBillGenerator() {
                 />
             )}
 
-            {showPinGate && (
+            {mustChangePin && posSession && (
+                <ChangePinModal
+                    staffName={posSession.staff.name}
+                    error={changePinError}
+                    busy={changePinBusy}
+                    onSubmit={submitChangePin}
+                />
+            )}
+
+            {(showPinGate || idleLocked) && !mustChangePin && (
                 <PinGate
                     pinInput={pinInput}
                     pinError={pinError}
+                    lockMode={idleLocked && !showPinGate}
+                    title={idleLocked && !showPinGate ? 'Station locked' : 'Enter PIN'}
+                    eyebrow={idleLocked && !showPinGate ? 'Idle timeout' : 'Staff access'}
+                    submitLabel={idleLocked && !showPinGate ? 'Unlock' : 'Sign in'}
                     helpText={
-                        serverMode
-                            ? 'Enter your staff PIN to sign in to the POS server.'
-                            : 'Enter your staff PIN to switch users or authorize a manager action.'
+                        idleLocked && !showPinGate
+                            ? `Enter a staff PIN to unlock this station for ${staff.name}.`
+                            : serverMode
+                              ? 'Enter your staff PIN to sign in to the POS server.'
+                              : 'Enter your staff PIN to switch users or authorize a manager action.'
                     }
                     demoCredentials={
-                        serverMode
-                            ? 'Server mode: PINs are hashed on the API. Demo seeds: server 1234 · kitchen 2222 · admin 5555 · manager 9999 — change these before go-live.'
-                            : roleHelpText(state.staff)
+                        hideDemoCredentials
+                            ? undefined
+                            : serverMode
+                              ? 'Server mode: PINs are hashed on the API. Demo seeds: server 1234 · kitchen 2222 · admin 5555 · manager 9999 — change these before go-live.'
+                              : roleHelpText(state.staff)
                     }
                     onPinInput={setPinInput}
                     onSubmit={submitPin}
                     onClose={() => {
+                        if (idleLocked) return;
                         if (serverMode && !posSession) return;
                         setShowPinGate(false);
                         setPendingManagerAction(null);
