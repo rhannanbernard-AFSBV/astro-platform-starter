@@ -7,6 +7,7 @@ type Props = {
     staff: StaffUser[];
     activeStaffId: string;
     currentRole: StaffRole;
+    hidePins?: boolean;
     onCreate: (input: { name: string; role: StaffRole; pin: string }) => string | null;
     onDelete: (id: string) => string | null;
     onSwitchUser: (id: string) => void;
@@ -16,6 +17,7 @@ export default function UsersPanel({
     staff,
     activeStaffId,
     currentRole,
+    hidePins = false,
     onCreate,
     onDelete,
     onSwitchUser,
@@ -111,7 +113,8 @@ export default function UsersPanel({
                             <div>
                                 <strong>{user.name}</strong>
                                 <p>
-                                    {ROLE_LABELS[user.role]} · PIN {user.pin}
+                                    {ROLE_LABELS[user.role]}
+                                    {hidePins ? ' · PIN set' : ` · PIN ${user.pin}`}
                                     {user.id === activeStaffId ? ' · signed in' : ''}
                                 </p>
                             </div>

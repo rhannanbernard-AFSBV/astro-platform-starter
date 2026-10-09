@@ -69,9 +69,22 @@ import {
     notificationsForStaff,
     touchState,
 } from './bill/storage';
+import {
+    fetchPosState,
+    getStoredToken,
+    isServerMode,
+    loginWithPin,
+    postAuditRemote,
+    probePosHealth,
+    recordSale,
+    setStoredToken,
+    voidSaleRemote,
+    type PosSession,
+} from './bill/posApi';
 import { isBeverageItem, isKitchenBoundItem } from './bill/statusUi';
 import TableMap from './bill/TableMap';
 import { useDebouncedSave } from './bill/useDebouncedSave';
+import { usePosServer } from './bill/usePosServer';
 import { usePosSync } from './bill/usePosSync';
 import { useReadyAlerts } from './bill/useReadyAlerts';
 import VoidReasonModal from './bill/VoidReasonModal';
@@ -87,6 +100,7 @@ import {
     type PersistedState,
     type PosSettings,
     type ReceiptTemplate,
+    type SaleRecord,
     type SelectedModifier,
     type StaffRole,
     type TableOrder,
@@ -155,66 +169,155 @@ export default function RestaurantBillGenerator() {
         title: string;
         details: string;
         tableLabel: string | null;
-        apply: () => void;
+        apply: (reason: string) => void;
     }>(null);
+    const [posSession, setPosSession] = useState<PosSession | null>(null);
+    const [serverRevision, setServerRevision] = useState<number | null>(null);
+    const serverMode = isServerMode();
 
-    useDebouncedSave(state, hydrated, 400);
-    usePosSync(state, setState, hydrated);
+    useDebouncedSave(state, hydrated && !serverMode, 400);
+    usePosSync(state, setState, hydrated && !serverMode);
+    const { serverOnline, syncError } = usePosServer({
+        hydrated,
+        session: posSession,
+        state,
+        setState,
+        revision: serverRevision,
+        setRevision: setServerRevision,
+    });
 
     const commit = (updater: (current: PersistedState) => PersistedState) => {
         setState((current) => touchState(updater(current)));
     };
 
     useEffect(() => {
-        const initial = loadState();
-        setState(initial);
-        setActiveXcgRate(initial.settings.xcgPerUsd);
-        let nextState = initial;
-        const params = new URLSearchParams(window.location.search);
-        const station = parseStationParam(params.get('station'));
-        if (station) {
-            const preferredRole =
-                station === 'kitchen'
-                    ? 'kitchen'
-                    : station === 'admin' || station === 'users' || station === 'reports'
-                      ? 'manager'
-                      : 'server';
-            const stationStaff =
-                initial.staff.find((entry) => entry.role === preferredRole) ??
-                initial.staff.find((entry) => canAccessView(entry.role, station)) ??
-                null;
-            if (stationStaff) {
-                nextState = { ...initial, activeStaffId: stationStaff.id };
-                setState(nextState);
-                setView(station);
+        let cancelled = false;
+        const boot = async () => {
+            const local = loadState();
+            setOnline(navigator.onLine);
+            const onOnline = () => setOnline(true);
+            const onOffline = () => setOnline(false);
+            window.addEventListener('online', onOnline);
+            window.addEventListener('offline', onOffline);
+
+            const hash = window.location.hash;
+            if (hash.startsWith('#bill=')) {
+                const snapshot = decodeSnapshot(hash.slice(6));
+                if (snapshot) {
+                    setReceipt(snapshot);
+                    setReceiptTemplate(snapshot.template ?? 'guest');
+                }
+            }
+
+            if (serverMode) {
+                const healthy = await probePosHealth();
+                if (!healthy) {
+                    setShareFeedback(
+                        'POS server unreachable. Start the API (see backend/README) or unset PUBLIC_POS_API_URL for local demo mode.',
+                    );
+                    setState(local);
+                    setActiveXcgRate(local.settings.xcgPerUsd);
+                    setShowPinGate(true);
+                    setHydrated(true);
+                    return () => {
+                        window.removeEventListener('online', onOnline);
+                        window.removeEventListener('offline', onOffline);
+                    };
+                }
+                const token = getStoredToken();
+                if (token) {
+                    try {
+                        const remote = await fetchPosState();
+                        if (cancelled) return;
+                        setServerRevision(remote.revision);
+                        const staffId =
+                            remote.state.staff.find((s) => s.id === remote.state.activeStaffId)?.id ??
+                            remote.state.staff[0]?.id;
+                        setState(
+                            touchState({
+                                ...remote.state,
+                                activeStaffId: staffId ?? remote.state.activeStaffId,
+                            }),
+                        );
+                        setActiveXcgRate(remote.state.settings.xcgPerUsd);
+                        const active =
+                            remote.state.staff.find((s) => s.id === staffId) ?? remote.state.staff[0];
+                        if (active) {
+                            setPosSession({
+                                token,
+                                expiresAt: '',
+                                tenantId: '',
+                                staff: {
+                                    id: active.id,
+                                    name: active.name,
+                                    role: active.role,
+                                    initials: active.initials,
+                                },
+                            });
+                            setView(DEFAULT_VIEW_BY_ROLE[active.role]);
+                        }
+                        setShowPinGate(false);
+                    } catch {
+                        setStoredToken(null);
+                        setShowPinGate(true);
+                        setState(local);
+                    }
+                } else {
+                    setState(local);
+                    setShowPinGate(true);
+                }
+                setHydrated(true);
+                return () => {
+                    window.removeEventListener('online', onOnline);
+                    window.removeEventListener('offline', onOffline);
+                };
+            }
+
+            // Local demo mode
+            setState(local);
+            setActiveXcgRate(local.settings.xcgPerUsd);
+            let nextState = local;
+            const params = new URLSearchParams(window.location.search);
+            const station = parseStationParam(params.get('station'));
+            if (station) {
+                const preferredRole =
+                    station === 'kitchen'
+                        ? 'kitchen'
+                        : station === 'admin' || station === 'users' || station === 'reports'
+                          ? 'manager'
+                          : 'server';
+                const stationStaff =
+                    local.staff.find((entry) => entry.role === preferredRole) ??
+                    local.staff.find((entry) => canAccessView(entry.role, station)) ??
+                    null;
+                if (stationStaff) {
+                    nextState = { ...local, activeStaffId: stationStaff.id };
+                    setState(nextState);
+                    setView(station);
+                } else {
+                    setView(DEFAULT_VIEW_BY_ROLE[local.staff[0]?.role ?? 'server']);
+                }
             } else {
-                setView(DEFAULT_VIEW_BY_ROLE[initial.staff[0]?.role ?? 'server']);
+                const initialStaff =
+                    local.staff.find((entry) => entry.id === local.activeStaffId) ?? local.staff[0];
+                setView(DEFAULT_VIEW_BY_ROLE[initialStaff.role]);
             }
-        } else {
-            const initialStaff =
-                initial.staff.find((entry) => entry.id === initial.activeStaffId) ??
-                initial.staff[0];
-            setView(DEFAULT_VIEW_BY_ROLE[initialStaff.role]);
-        }
-        setHydrated(true);
-        setOnline(navigator.onLine);
-        const onOnline = () => setOnline(true);
-        const onOffline = () => setOnline(false);
-        window.addEventListener('online', onOnline);
-        window.addEventListener('offline', onOffline);
-        const hash = window.location.hash;
-        if (hash.startsWith('#bill=')) {
-            const snapshot = decodeSnapshot(hash.slice(6));
-            if (snapshot) {
-                setReceipt(snapshot);
-                setReceiptTemplate(snapshot.template ?? 'guest');
-            }
-        }
-        return () => {
-            window.removeEventListener('online', onOnline);
-            window.removeEventListener('offline', onOffline);
+            setHydrated(true);
+            return () => {
+                window.removeEventListener('online', onOnline);
+                window.removeEventListener('offline', onOffline);
+            };
         };
-    }, []);
+
+        let cleanup: (() => void) | undefined;
+        void boot().then((fn) => {
+            cleanup = fn;
+        });
+        return () => {
+            cancelled = true;
+            cleanup?.();
+        };
+    }, [serverMode]);
 
     const staff =
         state.staff.find((entry) => entry.id === state.activeStaffId) ?? state.staff[0];
@@ -293,7 +396,44 @@ export default function RestaurantBillGenerator() {
     };
 
     const submitPin = () => {
-        const match = findStaffByPin(state.staff, pinInput.trim());
+        const pin = pinInput.trim();
+        if (serverMode) {
+            void (async () => {
+                try {
+                    const session = await loginWithPin(pin);
+                    setPosSession(session);
+                    const remote = await fetchPosState();
+                    setServerRevision(remote.revision);
+                    setState(
+                        touchState({
+                            ...remote.state,
+                            activeStaffId: session.staff.id,
+                        }),
+                    );
+                    setActiveXcgRate(remote.state.settings.xcgPerUsd);
+                    setView(DEFAULT_VIEW_BY_ROLE[session.staff.role]);
+                    setShowPinGate(false);
+                    if (pendingManagerAction && session.staff.role === 'manager') {
+                        pendingManagerAction();
+                    } else if (pendingManagerAction && session.staff.role !== 'manager') {
+                        setPinError('Manager PIN required for that action.');
+                        setShowPinGate(true);
+                        return;
+                    }
+                    setPendingManagerAction(null);
+                    setPinInput('');
+                    setPinError(null);
+                    setShareFeedback(
+                        `Signed in as ${session.staff.name} (${ROLE_LABELS[session.staff.role]}) · server mode`,
+                    );
+                } catch {
+                    setPinError('Invalid PIN or server error.');
+                }
+            })();
+            return;
+        }
+
+        const match = findStaffByPin(state.staff, pin);
         if (!match) {
             setPinError('Invalid PIN. Check Users for available staff PINs.');
             return;
@@ -396,7 +536,7 @@ export default function RestaurantBillGenerator() {
         title: string,
         details: string,
         tableLabel: string | null,
-        apply: () => void,
+        apply: (reason: string) => void,
         needsManager: boolean,
     ) => {
         const openVoid = () =>
@@ -412,7 +552,17 @@ export default function RestaurantBillGenerator() {
         if (!voidPending) return;
         const pending = voidPending;
         setVoidPending(null);
-        pending.apply();
+        pending.apply(reason);
+        const entry = {
+            id: createId('audit'),
+            kind: pending.kind,
+            reason,
+            staffId: staff.id,
+            staffName: staff.name,
+            createdAt: new Date().toISOString(),
+            details: pending.details,
+            tableLabel: pending.tableLabel,
+        };
         commit((current) =>
             appendAudit(current, {
                 kind: pending.kind,
@@ -423,6 +573,11 @@ export default function RestaurantBillGenerator() {
                 tableLabel: pending.tableLabel,
             }),
         );
+        if (serverMode && posSession && pending.kind !== 'void_payment') {
+            void postAuditRemote(entry).catch(() => {
+                setShareFeedback('Void applied locally; audit sync failed — check server.');
+            });
+        }
         setShareFeedback(`Void recorded: ${reason}`);
     };
 
@@ -447,7 +602,7 @@ export default function RestaurantBillGenerator() {
                 'Void line quantity',
                 `${item?.name ?? 'Item'} on ${activeTable.label}`,
                 activeTable.label,
-                apply,
+                () => apply(),
                 !canVoidKitchenItems(staff.role),
             );
             return;
@@ -472,7 +627,7 @@ export default function RestaurantBillGenerator() {
                 'Void kitchen ticket',
                 `${item?.name ?? 'Item'} · ${line.orderNumber ?? 'no order #'}`,
                 activeTable.label,
-                apply,
+                () => apply(),
                 !canDeleteTickets(staff.role),
             );
             return;
@@ -560,7 +715,7 @@ export default function RestaurantBillGenerator() {
             'Void kitchen ticket',
             `${item?.name ?? 'Item'} · ${targetLine?.orderNumber ?? 'no order #'}`,
             targetTable?.label ?? null,
-            apply,
+            () => apply(),
             !canDeleteTickets(staff.role),
         );
     };
@@ -673,99 +828,120 @@ export default function RestaurantBillGenerator() {
             setShareFeedback('Mixed tender does not cover the total.');
             return;
         }
+        if (serverMode && payMethod !== 'cash' && !serverOnline) {
+            setShareFeedback('Server offline — card/mixed payments require the POS API.');
+            return;
+        }
         const paidAt = payment.paidAt;
         const orderNumbers = collectOrderNumbers(activeTable.lines);
         const guestMeta = payGuestId
             ? bill.guestBreakdown.find((guest) => guest.id === payGuestId)
             : null;
+        const saleGuest = guestMeta;
+        const sale: SaleRecord = {
+            id: createId('sale'),
+            tableId: activeTable.id,
+            tableLabel: activeTable.label,
+            paidAt,
+            subtotalCents: saleGuest?.subtotalCents ?? bill.subtotalCents,
+            serviceChargeCents: saleGuest?.serviceChargeCents ?? bill.serviceChargeCents,
+            tipCents: saleGuest?.tipCents ?? bill.tipCents,
+            totalCents: dueCents,
+            payment,
+            serverName: staff.name,
+            itemCount: saleGuest
+                ? activeTable.lines
+                      .filter((line) => line.guestId === saleGuest.id)
+                      .reduce((sum, line) => sum + line.quantity, 0)
+                : itemCount,
+            orderNumbers,
+            guestName: saleGuest?.name ?? null,
+            guestId: saleGuest?.id ?? null,
+        };
 
-        commit((current) => {
-            const tables = current.tables.map((table) => {
-                if (table.id !== current.activeTableId) return table;
+        const applyLocal = () => {
+            commit((current) => {
+                const tables = current.tables.map((table) => {
+                    if (table.id !== current.activeTableId) return table;
 
-                if (payGuestId) {
-                    const guests = table.guests.map((guest) =>
-                        guest.id === payGuestId
-                            ? { ...guest, paidAt, payment }
-                            : guest,
-                    );
-                    const nextTable = { ...table, guests, billGeneratedAt: table.billGeneratedAt ?? paidAt };
-                    const fullyPaid = allGuestsPaid(nextTable);
-                    if (fullyPaid) {
+                    if (payGuestId) {
+                        const guests = table.guests.map((guest) =>
+                            guest.id === payGuestId
+                                ? { ...guest, paidAt, payment }
+                                : guest,
+                        );
+                        const nextTable = {
+                            ...table,
+                            guests,
+                            billGeneratedAt: table.billGeneratedAt ?? paidAt,
+                        };
+                        const fullyPaid = allGuestsPaid(nextTable);
+                        if (fullyPaid) {
+                            return {
+                                ...nextTable,
+                                status: 'paid' as const,
+                                paidAt,
+                                payment,
+                                lines: nextTable.lines.map((line) =>
+                                    line.kitchenStatus === 'draft'
+                                        ? line
+                                        : { ...line, kitchenStatus: 'served' as const },
+                                ),
+                            };
+                        }
                         return {
                             ...nextTable,
-                            status: 'paid' as const,
-                            paidAt,
-                            payment,
-                            lines: nextTable.lines.map((line) =>
-                                line.kitchenStatus === 'draft'
-                                    ? line
-                                    : { ...line, kitchenStatus: 'served' as const },
-                            ),
+                            status: 'partial' as const,
+                            paidAt: null,
+                            payment: null,
                         };
                     }
+
                     return {
-                        ...nextTable,
-                        status: 'partial' as const,
-                        paidAt: null,
-                        payment: null,
+                        ...table,
+                        status: 'paid' as const,
+                        paidAt,
+                        payment,
+                        billGeneratedAt: table.billGeneratedAt ?? paidAt,
+                        guests: table.guests.map((guest) =>
+                            guest.paidAt ? guest : { ...guest, paidAt, payment },
+                        ),
+                        lines: table.lines.map((line) =>
+                            line.kitchenStatus === 'draft'
+                                ? line
+                                : { ...line, kitchenStatus: 'served' as const },
+                        ),
                     };
-                }
+                });
 
                 return {
-                    ...table,
-                    status: 'paid' as const,
-                    paidAt,
-                    payment,
-                    billGeneratedAt: table.billGeneratedAt ?? paidAt,
-                    guests: table.guests.map((guest) =>
-                        guest.paidAt ? guest : { ...guest, paidAt, payment },
-                    ),
-                    lines: table.lines.map((line) =>
-                        line.kitchenStatus === 'draft'
-                            ? line
-                            : { ...line, kitchenStatus: 'served' as const },
-                    ),
+                    ...current,
+                    tables,
+                    sales: serverMode ? current.sales : [sale, ...current.sales],
                 };
             });
+        };
 
-            const saleGuest = guestMeta;
-            return {
-                ...current,
-                tables,
-                sales: [
-                    {
-                        id: createId('sale'),
-                        tableId: activeTable.id,
-                        tableLabel: activeTable.label,
-                        paidAt,
-                        subtotalCents: saleGuest?.subtotalCents ?? bill.subtotalCents,
-                        serviceChargeCents:
-                            saleGuest?.serviceChargeCents ?? bill.serviceChargeCents,
-                        tipCents: saleGuest?.tipCents ?? bill.tipCents,
-                        totalCents: dueCents,
-                        payment,
-                        serverName: staff.name,
-                        itemCount: saleGuest
-                            ? activeTable.lines
-                                  .filter((line) => line.guestId === saleGuest.id)
-                                  .reduce((sum, line) => sum + line.quantity, 0)
-                            : itemCount,
-                        orderNumbers,
-                        guestName: saleGuest?.name ?? null,
-                        guestId: saleGuest?.id ?? null,
-                    },
-                    ...current.sales,
-                ],
-            };
-        });
-        setPaymentOpen(false);
-        setGuestBillOpen(false);
-        const label = guestMeta ? guestMeta.name : 'table';
-        setShareFeedback(
-            `Paid ${label} with ${payment.method} (${tenderCurrency}). Change due: ${formatDual(payment.changeDueCents)}.`,
-        );
-        setPayGuestId(null);
+        const finish = () => {
+            applyLocal();
+            setPaymentOpen(false);
+            setGuestBillOpen(false);
+            const label = guestMeta ? guestMeta.name : 'table';
+            setShareFeedback(
+                `Paid ${label} with ${payment.method} (${tenderCurrency}). Change due: ${formatDual(payment.changeDueCents)}.`,
+            );
+            setPayGuestId(null);
+        };
+
+        if (serverMode && posSession) {
+            void recordSale(sale)
+                .then(() => finish())
+                .catch(() => {
+                    setShareFeedback('Payment not recorded on server — try again.');
+                });
+            return;
+        }
+        finish();
     };
 
     const sendToKitchen = () => {
@@ -830,17 +1006,30 @@ export default function RestaurantBillGenerator() {
 
     const deleteSale = (saleId: string) => {
         const sale = state.sales.find((entry) => entry.id === saleId);
-        const apply = () =>
-            setState((current) => ({
-                ...current,
-                sales: current.sales.filter((entry) => entry.id !== saleId),
-            }));
         requestVoid(
             'void_payment',
             'Void payment / sale',
             `${sale?.tableLabel ?? 'Sale'} · ${formatDual(sale?.totalCents ?? 0)}`,
             sale?.tableLabel ?? null,
-            apply,
+            (reason) => {
+                if (serverMode && posSession) {
+                    void voidSaleRemote(saleId, reason)
+                        .then(() =>
+                            setState((current) => ({
+                                ...current,
+                                sales: current.sales.filter((entry) => entry.id !== saleId),
+                            })),
+                        )
+                        .catch(() => {
+                            setShareFeedback('Server void failed — sale kept on ledger.');
+                        });
+                    return;
+                }
+                setState((current) => ({
+                    ...current,
+                    sales: current.sales.filter((entry) => entry.id !== saleId),
+                }));
+            },
             !canDeletePayments(staff.role),
         );
     };
@@ -920,9 +1109,27 @@ export default function RestaurantBillGenerator() {
                         <Icon name="wifi" /> {online ? 'Online' : 'Offline'}
                     </span>
                     <span className="status-divider" />
-                    <span className="sync-pill" title="Open Kitchen in another tab to demo multi-station sync">
-                        Tabs sync
-                    </span>
+                    {serverMode ? (
+                        <span
+                            className={`sync-pill ${serverOnline ? '' : 'off'}`}
+                            title={
+                                syncError
+                                    ? syncError
+                                    : serverOnline
+                                      ? 'Connected to POS API — multi-device sync on'
+                                      : 'POS API offline'
+                            }
+                        >
+                            {serverOnline ? 'Server sync' : 'Server offline'}
+                        </span>
+                    ) : (
+                        <span
+                            className="sync-pill"
+                            title="Local demo mode — set PUBLIC_POS_API_URL for production server"
+                        >
+                            Local demo
+                        </span>
+                    )}
                 </div>
                 <div className="top-actions">
                     <NotificationCenter
@@ -1060,6 +1267,7 @@ export default function RestaurantBillGenerator() {
                             staff={state.staff}
                             activeStaffId={staff.id}
                             currentRole={staff.role}
+                            hidePins={serverMode}
                             onCreate={({ name, role, pin }) => {
                                 if (!canManageUsers(staff.role)) return 'Not allowed.';
                                 const trimmedName = name.trim();
@@ -1068,11 +1276,54 @@ export default function RestaurantBillGenerator() {
                                 if (!/^\d{4,8}$/.test(trimmedPin)) {
                                     return 'PIN must be 4–8 digits.';
                                 }
-                                if (state.staff.some((user) => user.pin === trimmedPin)) {
+                                if (
+                                    !serverMode &&
+                                    state.staff.some((user) => user.pin === trimmedPin)
+                                ) {
                                     return 'That PIN is already in use.';
                                 }
                                 if (role === 'manager' && staff.role !== 'manager') {
                                     return 'Only a manager can create another manager.';
+                                }
+                                if (serverMode && posSession) {
+                                    void fetch(
+                                        `${(import.meta as ImportMeta & { env?: Record<string, string> }).env?.PUBLIC_POS_API_URL?.replace(/\/$/, '')}/pos/staff`,
+                                        {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                                Authorization: `Bearer ${posSession.token}`,
+                                            },
+                                            body: JSON.stringify({
+                                                name: trimmedName,
+                                                role,
+                                                pin: trimmedPin,
+                                                initials: trimmedName
+                                                    .split(/\s+/)
+                                                    .map((p) => p[0] ?? '')
+                                                    .join('')
+                                                    .slice(0, 3)
+                                                    .toUpperCase(),
+                                            }),
+                                        },
+                                    )
+                                        .then((res) => {
+                                            if (!res.ok) throw new Error('create failed');
+                                            return fetchPosState();
+                                        })
+                                        .then((remote) => {
+                                            setServerRevision(remote.revision);
+                                            setState(
+                                                touchState({
+                                                    ...remote.state,
+                                                    activeStaffId: staff.id,
+                                                }),
+                                            );
+                                        })
+                                        .catch(() =>
+                                            setShareFeedback('Could not create user on server.'),
+                                        );
+                                    return null;
                                 }
                                 const user = createStaffUser({
                                     name: trimmedName,
@@ -1530,11 +1781,20 @@ export default function RestaurantBillGenerator() {
                 <PinGate
                     pinInput={pinInput}
                     pinError={pinError}
-                    helpText="Enter your staff PIN to switch users or authorize a manager action."
-                    demoCredentials={roleHelpText(state.staff)}
+                    helpText={
+                        serverMode
+                            ? 'Enter your staff PIN to sign in to the POS server.'
+                            : 'Enter your staff PIN to switch users or authorize a manager action.'
+                    }
+                    demoCredentials={
+                        serverMode
+                            ? 'Server mode: PINs are hashed on the API. Demo seeds: server 1234 · kitchen 2222 · admin 5555 · manager 9999 — change these before go-live.'
+                            : roleHelpText(state.staff)
+                    }
                     onPinInput={setPinInput}
                     onSubmit={submitPin}
                     onClose={() => {
+                        if (serverMode && !posSession) return;
                         setShowPinGate(false);
                         setPendingManagerAction(null);
                     }}
