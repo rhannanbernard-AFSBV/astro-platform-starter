@@ -52,21 +52,63 @@ function withModifiers(menu: MenuItem[]): MenuItem[] {
         }));
     }
     const defaults = new Map(DEFAULT_MENU.map((item) => [item.id, item]));
-    return menu.map((item) => {
+    const migrated = menu.map((item) => {
         const seed = defaults.get(item.id);
         const baseGroups = item.modifierGroups?.length
             ? item.modifierGroups
             : seed?.modifierGroups ?? [];
+        const category =
+            item.category === 'Mains' ||
+            item.category === 'Starters' ||
+            item.category === 'Drinks' ||
+            item.category === 'Wine' ||
+            item.category === 'Champagne' ||
+            item.category === 'Rum' ||
+            item.category === 'Desserts'
+                ? item.category
+                : (seed?.category ?? 'Mains');
         return {
             ...item,
+            category,
             eightySixed: item.eightySixed === true,
             happyHour:
                 item.happyHour && typeof item.happyHour === 'object'
                     ? item.happyHour
                     : (seed?.happyHour ?? null),
-            modifierGroups: ensureCoreModifierGroups(baseGroups),
+            origin:
+                typeof item.origin === 'string'
+                    ? item.origin
+                    : (seed?.origin ?? null),
+            vintageYear:
+                typeof item.vintageYear === 'number'
+                    ? item.vintageYear
+                    : (seed?.vintageYear ?? null),
+            modifierGroups:
+                category === 'Mains' || category === 'Starters' || category === 'Desserts'
+                    ? ensureCoreModifierGroups(baseGroups)
+                    : baseGroups.length
+                      ? baseGroups
+                      : seed?.modifierGroups ?? [],
         };
     });
+
+    // Merge in any missing seed beverages / dishes so catalog upgrades land for existing saves.
+    for (const seed of DEFAULT_MENU) {
+        if (!migrated.some((item) => item.id === seed.id)) {
+            migrated.push({
+                ...seed,
+                eightySixed: seed.eightySixed === true,
+                happyHour: seed.happyHour ?? null,
+                origin: seed.origin ?? null,
+                vintageYear: seed.vintageYear ?? null,
+                modifierGroups: seed.modifierGroups.map((group) => ({
+                    ...group,
+                    options: group.options.map((option) => ({ ...option })),
+                })),
+            });
+        }
+    }
+    return migrated;
 }
 
 function migrateLegacyLines(lines: Array<Record<string, unknown>>): OrderLine[] {

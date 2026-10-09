@@ -6,6 +6,7 @@ import Price from './Price';
 import { stationDeepLink, type StationKey } from './posLogic';
 import {
     MENU_CATEGORIES,
+    MENU_CATEGORY_LABELS,
     type AuditEntry,
     type MenuCategory,
     type MenuItem,
@@ -385,7 +386,7 @@ export default function AdminPanel({
                             >
                                 {MENU_CATEGORIES.map((entry) => (
                                     <option key={entry} value={entry}>
-                                        {entry}
+                                        {MENU_CATEGORY_LABELS[entry]}
                                     </option>
                                 ))}
                             </select>

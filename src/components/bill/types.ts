@@ -1,6 +1,32 @@
-export const MENU_CATEGORIES = ['Mains', 'Starters', 'Drinks', 'Desserts'] as const;
+export const MENU_CATEGORIES = [
+    'Mains',
+    'Starters',
+    'Drinks',
+    'Wine',
+    'Champagne',
+    'Rum',
+    'Desserts',
+] as const;
 export type MenuCategory = (typeof MENU_CATEGORIES)[number];
 export type FilterCategory = 'All' | MenuCategory;
+
+/** Short labels for category chips (Wine → Wine List). */
+export const MENU_CATEGORY_LABELS: Record<MenuCategory, string> = {
+    Mains: 'Mains',
+    Starters: 'Starters',
+    Drinks: 'Drinks',
+    Wine: 'Wine List',
+    Champagne: 'Champagne',
+    Rum: 'Rum',
+    Desserts: 'Desserts',
+};
+
+export const BEVERAGE_CATEGORIES: readonly MenuCategory[] = [
+    'Drinks',
+    'Wine',
+    'Champagne',
+    'Rum',
+] as const;
 
 /** Tip presets in USD cents (not percentages). */
 export const TIP_AMOUNT_PRESETS = [0, 200, 500, 1000, 1500] as const;
@@ -58,6 +84,10 @@ export type MenuItem = {
     eightySixed?: boolean;
     /** Optional time-window pour price */
     happyHour?: HappyHourWindow | null;
+    /** Wine / champagne / spirit origin */
+    origin?: string | null;
+    /** Vintage year when applicable */
+    vintageYear?: number | null;
     modifierGroups: ModifierGroup[];
 };
 

@@ -2969,6 +2969,19 @@ button.status-tab {
     gap: 0.5rem;
 }
 
+.bar-strip-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.75rem;
+}
+
+.wine-meta {
+    margin: 0.25rem 0 0;
+    font-size: 0.85rem;
+    color: #2f6f8f;
+    font-weight: 600;
+}
+
 .lock-station-btn,
 .staff-chip {
     color: #f6e7c3;

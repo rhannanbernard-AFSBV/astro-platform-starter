@@ -16,6 +16,16 @@ describe('persisted state v6', () => {
         expect(state.tables[0].lines[0].courseFire).toBe('fire');
         expect(state.tables[0].lines[0].compReason).toBeNull();
         expect(state.tables[0].guests[0].paidAt).toBeNull();
-        expect(state.menu.find((item) => item.id === '13')?.happyHour?.priceCents).toBe(750);
+        expect(state.menu.find((item) => item.id === 'x01')?.happyHour?.priceCents).toBe(750);
+        expect(state.menu.filter((item) => item.category === 'Drinks')).toHaveLength(25);
+        expect(state.menu.filter((item) => item.category === 'Wine').length).toBeGreaterThanOrEqual(6);
+        expect(state.menu.filter((item) => item.category === 'Champagne').length).toBeGreaterThanOrEqual(
+            4,
+        );
+        expect(
+            state.menu.filter(
+                (item) => item.category === 'Rum' && item.id.startsWith('x'),
+            ),
+        ).toHaveLength(25);
     });
 });

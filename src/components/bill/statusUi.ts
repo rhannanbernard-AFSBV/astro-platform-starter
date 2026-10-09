@@ -1,4 +1,9 @@
-import type { KitchenStatus, MenuCategory, MenuItem } from './types';
+import {
+    BEVERAGE_CATEGORIES,
+    type KitchenStatus,
+    type MenuCategory,
+    type MenuItem,
+} from './types';
 
 export const ACTIVE_KITCHEN_STATUSES = ['queued', 'preparing', 'ready', 'served'] as const;
 export type ActiveKitchenStatus = (typeof ACTIVE_KITCHEN_STATUSES)[number];
@@ -14,7 +19,7 @@ export const STATUS_META: Record<
 };
 
 export function isBeverageCategory(category: MenuCategory | string): boolean {
-    return category === 'Drinks';
+    return (BEVERAGE_CATEGORIES as readonly string[]).includes(category);
 }
 
 export function isBeverageItem(item: Pick<MenuItem, 'category'> | undefined | null): boolean {

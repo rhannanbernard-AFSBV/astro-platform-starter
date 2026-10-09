@@ -3,8 +3,9 @@ import { optimizeImageUrl } from './images';
 import { effectiveMenuPriceCents, isHappyHourActive } from './math';
 import Price from './Price';
 import { Icon } from './Icons';
+import { isBeverageItem } from './statusUi';
 import type { FilterCategory, MenuItem, TableOrder } from './types';
-import { MENU_CATEGORIES } from './types';
+import { MENU_CATEGORIES, MENU_CATEGORY_LABELS } from './types';
 
 const FILTERS: FilterCategory[] = ['All', ...MENU_CATEGORIES];
 
@@ -52,7 +53,13 @@ export default function ServiceMenu({
         [menu],
     );
 
-    const drinks = useMemo(() => menu.filter((item) => item.category === 'Drinks'), [menu]);
+    const barFavorites = useMemo(
+        () =>
+            menu
+                .filter((item) => isBeverageItem(item) && (item.popular || item.category === 'Drinks'))
+                .slice(0, 10),
+        [menu],
+    );
 
     const filteredItems = useMemo(() => {
         const query = search.trim().toLowerCase();
@@ -115,12 +122,27 @@ export default function ServiceMenu({
             <div className="bar-strip" aria-label="Bar beverages">
                 <div className="bar-strip-head">
                     <p className="billing-label">Bar / beverages</p>
-                    <button type="button" className="ghost-text" onClick={() => onCategory('Drinks')}>
-                        View all drinks
-                    </button>
+                    <div className="bar-strip-links">
+                        <button type="button" className="ghost-text" onClick={() => onCategory('Drinks')}>
+                            Drinks
+                        </button>
+                        <button type="button" className="ghost-text" onClick={() => onCategory('Wine')}>
+                            Wine List
+                        </button>
+                        <button
+                            type="button"
+                            className="ghost-text"
+                            onClick={() => onCategory('Champagne')}
+                        >
+                            Champagne
+                        </button>
+                        <button type="button" className="ghost-text" onClick={() => onCategory('Rum')}>
+                            Rum
+                        </button>
+                    </div>
                 </div>
                 <div className="bar-chips">
-                    {drinks.map((item) => {
+                    {barFavorites.map((item) => {
                         const eighty = Boolean(item.eightySixed);
                         const hh = isHappyHourActive(item);
                         return (
@@ -130,7 +152,13 @@ export default function ServiceMenu({
                                 className={`bar-chip${eighty ? ' eighty-sixed' : ''}${hh ? ' happy-hour' : ''}`}
                                 disabled={isPaid || eighty}
                                 onClick={() => addOrBlock(item, true)}
-                                title={eighty ? '86’d — out of stock' : hh ? 'Happy hour price' : undefined}
+                                title={
+                                    eighty
+                                        ? '86’d — out of stock'
+                                        : hh
+                                          ? 'Happy hour price'
+                                          : undefined
+                                }
                             >
                                 <strong>
                                     {item.name}
@@ -151,7 +179,7 @@ export default function ServiceMenu({
                         className={category === item ? 'active' : ''}
                         onClick={() => onCategory(item)}
                     >
-                        {item}
+                        {item === 'All' ? 'All' : MENU_CATEGORY_LABELS[item]}
                     </button>
                 ))}
             </div>
@@ -162,7 +190,7 @@ export default function ServiceMenu({
                     const hh = isHappyHourActive(item);
                     return (
                         <article
-                            className={`menu-card ${item.category === 'Drinks' ? 'drink-card' : ''}${eighty ? ' eighty-sixed' : ''}`}
+                            className={`menu-card ${isBeverageItem(item) ? 'drink-card' : ''}${eighty ? ' eighty-sixed' : ''}`}
                             key={item.id}
                         >
                             <div className="food-image">
@@ -180,9 +208,16 @@ export default function ServiceMenu({
                                 {quantity > 0 && <span className="in-order">{quantity} in order</span>}
                             </div>
                             <div className="card-copy">
-                                <p className="item-category">{item.category}</p>
+                                <p className="item-category">{MENU_CATEGORY_LABELS[item.category]}</p>
                                 <h2>{item.name}</h2>
                                 <p className="description">{item.description}</p>
+                                {(item.origin || item.vintageYear) && (
+                                    <p className="wine-meta">
+                                        {[item.origin, item.vintageYear ? String(item.vintageYear) : null]
+                                            .filter(Boolean)
+                                            .join(' · ')}
+                                    </p>
+                                )}
                                 <div className="card-footer">
                                     <div className="price-stack">
                                         <Price cents={priceFor(item)} />

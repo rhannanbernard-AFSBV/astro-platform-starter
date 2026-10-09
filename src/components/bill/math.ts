@@ -11,7 +11,7 @@ import type {
     TableOrder,
     TipAmountPreset,
 } from './types';
-import { isKitchenBoundItem } from './statusUi';
+import { isBeverageCategory } from './statusUi';
 
 /** Default display rate: 1.80 XCG = 1 USD (override via settings / setActiveXcgRate) */
 export const XCG_PER_USD = 1.8;
@@ -247,7 +247,7 @@ export function buildSnapshot(
     const bill = computeBill(table, menu);
     const kitchenItems =
         template === 'kitchen'
-            ? bill.items.filter((item) => item.category !== 'Drinks')
+            ? bill.items.filter((item) => !item.category || !isBeverageCategory(item.category))
             : bill.items;
     return {
         restaurant,

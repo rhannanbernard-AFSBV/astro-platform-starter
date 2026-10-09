@@ -1,3 +1,4 @@
+import { BEVERAGE_MENU } from './beverageMenu';
 import type {
     MenuItem,
     ModifierGroup,
@@ -189,76 +190,7 @@ export const DEFAULT_MENU: MenuItem[] = [
         popular: true,
         modifierGroups: [],
     },
-    {
-        id: '7',
-        name: 'Sorrel Punch',
-        description: 'Homemade sorrel, ginger, clove, over ice',
-        category: 'Drinks',
-        priceCents: 750,
-        image: '/menu/7.svg',
-        modifierGroups: [
-            {
-                id: 'drink',
-                name: 'Drink options',
-                multi: true,
-                options: [
-                    { id: 'less-ice', name: 'Less ice', priceDeltaCents: 0 },
-                    { id: 'extra-ginger', name: 'Extra ginger', priceDeltaCents: 0 },
-                ],
-            },
-        ],
-    },
-    {
-        id: '8',
-        name: 'Jelly Coconut Water',
-        description: 'Fresh coconut water from the husk',
-        category: 'Drinks',
-        priceCents: 600,
-        image: '/menu/8.svg',
-        modifierGroups: [],
-    },
-    {
-        id: '13',
-        name: 'Rum Punch',
-        description: 'Appleton blend, fruit juices, grenadine, nutmeg',
-        category: 'Drinks',
-        priceCents: 950,
-        image: '/menu/7.svg',
-        popular: true,
-        happyHour: { ...DEFAULT_HAPPY_HOUR, priceCents: 750 },
-        modifierGroups: [
-            {
-                id: 'drink',
-                name: 'Drink options',
-                multi: true,
-                options: [
-                    { id: 'less-ice', name: 'Less ice', priceDeltaCents: 0 },
-                    { id: 'strong', name: 'Strong pour', priceDeltaCents: 150 },
-                ],
-            },
-        ],
-    },
-    {
-        id: '14',
-        name: 'Red Stripe',
-        description: 'Ice-cold Jamaican lager, bottle',
-        category: 'Drinks',
-        priceCents: 550,
-        image: '/menu/8.svg',
-        popular: true,
-        happyHour: { ...DEFAULT_HAPPY_HOUR, priceCents: 400 },
-        modifierGroups: [],
-    },
-    {
-        id: '15',
-        name: 'Dragon Stout',
-        description: 'Dark sweet stout, bottle',
-        category: 'Drinks',
-        priceCents: 600,
-        image: '/menu/8.svg',
-        happyHour: { ...DEFAULT_HAPPY_HOUR, priceCents: 450 },
-        modifierGroups: [],
-    },
+    ...BEVERAGE_MENU,
     {
         id: '9',
         name: 'Sweet Potato Pudding',
@@ -357,7 +289,7 @@ export function createDefaultState(): PersistedState {
         },
         {
             id: createId('line'),
-            menuItemId: '7',
+            menuItemId: 'm23',
             quantity: 2,
             guestId: tables[0].guests[0].id,
             note: 'Extra ginger',
