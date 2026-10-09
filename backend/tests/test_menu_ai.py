@@ -1,3 +1,5 @@
+import asyncio
+
 from app.pos.ai import MenuEnrichRequest, enrich_menu_item, openai_configured
 
 
@@ -5,9 +7,7 @@ def test_local_enrich_wine_pairs_jamaican_meals(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     assert openai_configured() is False
 
-    import asyncio
-
-    result = asyncio.get_event_loop().run_until_complete(
+    result = asyncio.run(
         enrich_menu_item(
             MenuEnrichRequest(
                 name="Cloudy Bay Sauvignon Blanc",

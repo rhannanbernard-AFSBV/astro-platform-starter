@@ -2991,6 +2991,35 @@ button.status-tab {
     background: linear-gradient(180deg, #f4fafc, #e7f3f8);
 }
 
+.catalog-kind-toggle {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem;
+    margin: 0.75rem 0 0.35rem;
+}
+
+.catalog-kind-toggle button {
+    border: 1px solid #2b1c12;
+    background: #fff8e8;
+    color: #24180f;
+    padding: 0.65rem 0.75rem;
+    font-weight: 600;
+}
+
+.catalog-kind-toggle button.active {
+    background: linear-gradient(180deg, #d7eff8, #b9dceb);
+    border-color: #2f6f8f;
+    color: #123047;
+}
+
+.catalog-kind-help {
+    margin: 0 0 0.75rem;
+}
+
+.admin-form.bar-catalog-form {
+    border-color: #8eb9cd;
+}
+
 .menu-intel {
     margin: 0.45rem 0 0.2rem;
     font-size: 0.85rem;

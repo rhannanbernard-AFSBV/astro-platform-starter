@@ -99,7 +99,11 @@ import {
     type OwnerSummary,
     type PosSession,
 } from './bill/posApi';
-import { isBeverageItem, isKitchenBoundItem } from './bill/statusUi';
+import {
+    isBeverageCategory,
+    isBeverageItem,
+    isKitchenBoundItem,
+} from './bill/statusUi';
 import TableMap from './bill/TableMap';
 import { useDebouncedSave } from './bill/useDebouncedSave';
 import { useIdleLock } from './bill/useIdleLock';
@@ -108,6 +112,8 @@ import { usePosSync } from './bill/usePosSync';
 import { useReadyAlerts } from './bill/useReadyAlerts';
 import VoidReasonModal from './bill/VoidReasonModal';
 import {
+    BEVERAGE_CATEGORIES,
+    FOOD_CATEGORIES,
     type AppView,
     type AuditEntry,
     type BillSnapshot,
@@ -160,7 +166,18 @@ function emptyMenuForm(): Omit<MenuItem, 'id'> {
 }
 
 function sanitizeMenuForm(form: Omit<MenuItem, 'id'>): Omit<MenuItem, 'id'> {
-    const groups = ensureCoreModifierGroups(form.modifierGroups).map((group) => {
+    const isBar = isBeverageCategory(form.category);
+    const category = isBar
+        ? (BEVERAGE_CATEGORIES as readonly string[]).includes(form.category)
+            ? form.category
+            : 'Wine'
+        : (FOOD_CATEGORIES as readonly string[]).includes(form.category)
+          ? form.category
+          : 'Mains';
+
+    const groups = (
+        isBar ? form.modifierGroups : ensureCoreModifierGroups(form.modifierGroups)
+    ).map((group) => {
         const options = group.options
             .map((option) => ({ ...option, name: option.name.trim() }))
             .filter((option) => option.name.length > 0);
@@ -169,17 +186,20 @@ function sanitizeMenuForm(form: Omit<MenuItem, 'id'>): Omit<MenuItem, 'id'> {
             options:
                 options.length > 0
                     ? options
-                    : [
-                          {
-                              id: createId(group.id),
-                              name: group.id === 'prep' ? 'As prepared' : 'House side',
-                              priceDeltaCents: 0,
-                          },
-                      ],
+                    : isBar
+                      ? []
+                      : [
+                            {
+                                id: createId(group.id),
+                                name: group.id === 'prep' ? 'As prepared' : 'House side',
+                                priceDeltaCents: 0,
+                            },
+                        ],
         };
     });
     const hh = form.happyHour;
     const happyHour =
+        isBar &&
         hh &&
         Number.isFinite(hh.priceCents) &&
         hh.priceCents >= 0 &&
@@ -196,17 +216,20 @@ function sanitizeMenuForm(form: Omit<MenuItem, 'id'>): Omit<MenuItem, 'id'> {
         ...form,
         name: form.name.trim(),
         description: form.description.trim(),
+        category,
         eightySixed: form.eightySixed === true,
         happyHour,
-        origin: form.origin?.trim() || null,
+        origin: isBar ? form.origin?.trim() || null : null,
         vintageYear:
-            typeof form.vintageYear === 'number' && Number.isFinite(form.vintageYear)
+            isBar && typeof form.vintageYear === 'number' && Number.isFinite(form.vintageYear)
                 ? Math.round(form.vintageYear)
                 : null,
         prepGuide: form.prepGuide?.trim() || null,
         pairingNotes: form.pairingNotes?.trim() || null,
         ingredients: form.ingredients?.trim() || null,
-        modifierGroups: groups,
+        modifierGroups: isBar
+            ? groups.filter((group) => group.id !== 'prep' && group.id !== 'sides')
+            : groups,
     };
 }
 

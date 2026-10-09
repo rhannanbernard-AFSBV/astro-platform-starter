@@ -1,13 +1,16 @@
-import { useRef, useState } from 'react';
-import { createId, ensureCoreModifierGroups } from './defaults';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createId, ensureCoreModifierGroups, PLACEHOLDER_IMAGE } from './defaults';
 import { fileToMenuImageDataUrl, optimizeImageUrl } from './images';
 import { Icon } from './Icons';
 import Price from './Price';
 import { stationDeepLink, type StationKey } from './posLogic';
+import { isBeverageCategory, isBeverageItem } from './statusUi';
 import {
-    MENU_CATEGORIES,
+    BEVERAGE_CATEGORIES,
+    FOOD_CATEGORIES,
     MENU_CATEGORY_LABELS,
     type AuditEntry,
+    type MenuCatalogKind,
     type MenuCategory,
     type MenuItem,
     type ModifierGroup,
@@ -187,10 +190,76 @@ export default function AdminPanel({
     const fileRef = useRef<HTMLInputElement | null>(null);
     const [imageError, setImageError] = useState<string | null>(null);
     const [imageBusy, setImageBusy] = useState(false);
+    const [catalogKind, setCatalogKind] = useState<MenuCatalogKind>(() =>
+        isBeverageCategory(menuForm.category) ? 'bar' : 'meals',
+    );
+
+    useEffect(() => {
+        if (editingId) {
+            setCatalogKind(isBeverageCategory(menuForm.category) ? 'bar' : 'meals');
+        }
+    }, [editingId, menuForm.category]);
+
+    const isBarCatalog = catalogKind === 'bar';
+    const categoryOptions = isBarCatalog ? BEVERAGE_CATEGORIES : FOOD_CATEGORIES;
+    const listedMenu = useMemo(
+        () =>
+            menu.filter((item) =>
+                isBarCatalog ? isBeverageItem(item) : !isBeverageItem(item),
+            ),
+        [menu, isBarCatalog],
+    );
 
     const groups = ensureCoreModifierGroups(menuForm.modifierGroups);
     const prep = groups.find((group) => group.id === 'prep')!;
     const sides = groups.find((group) => group.id === 'sides')!;
+
+    const resetFormForKind = (kind: MenuCatalogKind) => {
+        onCancelEdit();
+        onFormChange(() =>
+            kind === 'bar'
+                ? {
+                      name: '',
+                      description: '',
+                      category: 'Wine',
+                      priceCents: 0,
+                      image: '/menu/8.svg',
+                      popular: false,
+                      eightySixed: false,
+                      happyHour: null,
+                      origin: null,
+                      vintageYear: null,
+                      prepGuide: null,
+                      pairingNotes: null,
+                      ingredients: null,
+                      modifierGroups: [],
+                  }
+                : {
+                      name: '',
+                      description: '',
+                      category: 'Mains',
+                      priceCents: 0,
+                      image: PLACEHOLDER_IMAGE,
+                      popular: false,
+                      eightySixed: false,
+                      happyHour: null,
+                      origin: null,
+                      vintageYear: null,
+                      prepGuide: null,
+                      pairingNotes: null,
+                      ingredients: null,
+                      modifierGroups: ensureCoreModifierGroups([]),
+                  },
+        );
+    };
+
+    const switchCatalog = (kind: MenuCatalogKind) => {
+        if (kind === catalogKind) return;
+        setCatalogKind(kind);
+        if (!editingId || (kind === 'bar') !== isBeverageCategory(menuForm.category)) {
+            resetFormForKind(kind);
+        }
+    };
 
     const copyStation = async (station: StationKey) => {
         const url = stationDeepLink(station);
@@ -346,15 +415,45 @@ export default function AdminPanel({
                     </ul>
                 )}
             </div>
+            <div className="catalog-kind-toggle" role="group" aria-label="Menu catalog">
+                <button
+                    type="button"
+                    className={!isBarCatalog ? 'active' : ''}
+                    onClick={() => switchCatalog('meals')}
+                >
+                    Meals / kitchen
+                </button>
+                <button
+                    type="button"
+                    className={isBarCatalog ? 'active' : ''}
+                    onClick={() => switchCatalog('bar')}
+                >
+                    Bar / beverages
+                </button>
+            </div>
+            <p className="fx-note catalog-kind-help">
+                {isBarCatalog
+                    ? 'Add Wine, Champagne, Rum, and mixers here — separate from kitchen meals.'
+                    : 'Add Mains, Starters, and Desserts here — kitchen food only.'}
+            </p>
+
             <div className="admin-grid">
                 <form
-                    className="admin-form"
+                    className={`admin-form ${isBarCatalog ? 'bar-catalog-form' : 'meal-catalog-form'}`}
                     onSubmit={(event) => {
                         event.preventDefault();
                         onSaveItem();
                     }}
                 >
-                    <h2>{editingId ? 'Edit item' : 'Add item'}</h2>
+                    <h2>
+                        {editingId
+                            ? isBarCatalog
+                                ? 'Edit beverage'
+                                : 'Edit meal'
+                            : isBarCatalog
+                              ? 'Add beverage'
+                              : 'Add meal'}
+                    </h2>
                     <label>
                         Name
                         <input
@@ -440,17 +539,37 @@ export default function AdminPanel({
                     </div>
                     <div className="admin-row">
                         <label>
-                            Category
+                            {isBarCatalog ? 'Beverage type' : 'Course'}
                             <select
-                                value={menuForm.category}
+                                value={
+                                    categoryOptions.includes(menuForm.category)
+                                        ? menuForm.category
+                                        : categoryOptions[0]
+                                }
                                 onChange={(event) =>
                                     onFormChange((current) => ({
                                         ...current,
                                         category: event.target.value as MenuCategory,
+                                        // Clear meal modifiers when switching into bar types
+                                        modifierGroups: isBeverageCategory(event.target.value)
+                                            ? current.modifierGroups.filter(
+                                                  (group) =>
+                                                      group.id !== 'prep' && group.id !== 'sides',
+                                              )
+                                            : ensureCoreModifierGroups(current.modifierGroups),
+                                        origin: isBeverageCategory(event.target.value)
+                                            ? current.origin
+                                            : null,
+                                        vintageYear: isBeverageCategory(event.target.value)
+                                            ? current.vintageYear
+                                            : null,
+                                        happyHour: isBeverageCategory(event.target.value)
+                                            ? current.happyHour
+                                            : null,
                                     }))
                                 }
                             >
-                                {MENU_CATEGORIES.map((entry) => (
+                                {categoryOptions.map((entry) => (
                                     <option key={entry} value={entry}>
                                         {MENU_CATEGORY_LABELS[entry]}
                                     </option>
@@ -474,45 +593,47 @@ export default function AdminPanel({
                             />
                         </label>
                     </div>
-                    <div className="admin-row">
-                        <label>
-                            Origin / made in
-                            <input
-                                value={menuForm.origin ?? ''}
-                                onChange={(event) =>
-                                    onFormChange((current) => ({
-                                        ...current,
-                                        origin: event.target.value,
-                                    }))
-                                }
-                                placeholder="e.g. Marlborough, New Zealand"
-                            />
-                        </label>
-                        <label>
-                            Vintage year
-                            <input
-                                type="number"
-                                min="1900"
-                                max="2100"
-                                value={menuForm.vintageYear ?? ''}
-                                onChange={(event) =>
-                                    onFormChange((current) => ({
-                                        ...current,
-                                        vintageYear: event.target.value
-                                            ? Number(event.target.value)
-                                            : null,
-                                    }))
-                                }
-                                placeholder="e.g. 2022"
-                            />
-                        </label>
-                    </div>
+                    {isBarCatalog && (
+                        <div className="admin-row">
+                            <label>
+                                Origin / made in
+                                <input
+                                    value={menuForm.origin ?? ''}
+                                    onChange={(event) =>
+                                        onFormChange((current) => ({
+                                            ...current,
+                                            origin: event.target.value,
+                                        }))
+                                    }
+                                    placeholder="e.g. Marlborough, New Zealand"
+                                />
+                            </label>
+                            <label>
+                                Vintage year
+                                <input
+                                    type="number"
+                                    min="1900"
+                                    max="2100"
+                                    value={menuForm.vintageYear ?? ''}
+                                    onChange={(event) =>
+                                        onFormChange((current) => ({
+                                            ...current,
+                                            vintageYear: event.target.value
+                                                ? Number(event.target.value)
+                                                : null,
+                                        }))
+                                    }
+                                    placeholder="e.g. 2022"
+                                />
+                            </label>
+                        </div>
+                    )}
                     <p className="fx-note">
                         XCG preview: shown on menu at {settings.xcgPerUsd.toFixed(2)} × USD
                     </p>
 
                     <div className="meal-photo-editor">
-                        <h3>Meal picture</h3>
+                        <h3>{isBarCatalog ? 'Beverage picture' : 'Meal picture'}</h3>
                         <div className="meal-photo-preview">
                             <img
                                 src={optimizeImageUrl(menuForm.image, 320)}
@@ -579,36 +700,40 @@ export default function AdminPanel({
                         </div>
                     </div>
 
-                    <ModifierGroupEditor
-                        title="Prep"
-                        help="Extras and prep notes guests can multi-select."
-                        group={prep}
-                        onChange={(group) =>
-                            onFormChange((current) => ({
-                                ...current,
-                                modifierGroups: updateGroup(
-                                    current.modifierGroups,
-                                    'prep',
-                                    () => group,
-                                ),
-                            }))
-                        }
-                    />
-                    <ModifierGroupEditor
-                        title="Side swap"
-                        help="One side choice per plate (rice & peas, festival, plantain…)."
-                        group={sides}
-                        onChange={(group) =>
-                            onFormChange((current) => ({
-                                ...current,
-                                modifierGroups: updateGroup(
-                                    current.modifierGroups,
-                                    'sides',
-                                    () => group,
-                                ),
-                            }))
-                        }
-                    />
+                    {!isBarCatalog && (
+                        <>
+                            <ModifierGroupEditor
+                                title="Prep"
+                                help="Extras and prep notes guests can multi-select."
+                                group={prep}
+                                onChange={(group) =>
+                                    onFormChange((current) => ({
+                                        ...current,
+                                        modifierGroups: updateGroup(
+                                            current.modifierGroups,
+                                            'prep',
+                                            () => group,
+                                        ),
+                                    }))
+                                }
+                            />
+                            <ModifierGroupEditor
+                                title="Side swap"
+                                help="One side choice per plate (rice & peas, festival, plantain…)."
+                                group={sides}
+                                onChange={(group) =>
+                                    onFormChange((current) => ({
+                                        ...current,
+                                        modifierGroups: updateGroup(
+                                            current.modifierGroups,
+                                            'sides',
+                                            () => group,
+                                        ),
+                                    }))
+                                }
+                            />
+                        </>
+                    )}
 
                     <label className="checkbox">
                         <input
@@ -636,111 +761,122 @@ export default function AdminPanel({
                         />
                         86’d / out of stock
                     </label>
-                    <div className="happy-hour-editor">
-                        <label className="checkbox">
-                            <input
-                                type="checkbox"
-                                checked={Boolean(menuForm.happyHour)}
-                                onChange={(event) =>
-                                    onFormChange((current) => ({
-                                        ...current,
-                                        happyHour: event.target.checked
-                                            ? {
-                                                  priceCents: Math.max(
-                                                      0,
-                                                      Math.round(current.priceCents * 0.8),
-                                                  ),
-                                                  startHour: 16,
-                                                  endHour: 19,
-                                              }
-                                            : null,
-                                    }))
-                                }
-                            />
-                            Happy hour / pour price
-                        </label>
-                        {menuForm.happyHour && (
-                            <div className="admin-row">
-                                <label>
-                                    HH price (USD)
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={(menuForm.happyHour.priceCents / 100).toFixed(2)}
-                                        onChange={(event) =>
-                                            onFormChange((current) => ({
-                                                ...current,
-                                                happyHour: current.happyHour
-                                                    ? {
-                                                          ...current.happyHour,
-                                                          priceCents: Math.round(
-                                                              Number(event.target.value || 0) * 100,
-                                                          ),
-                                                      }
-                                                    : null,
-                                            }))
-                                        }
-                                    />
-                                </label>
-                                <label>
-                                    Start hour (0–23)
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        max="23"
-                                        value={menuForm.happyHour.startHour}
-                                        onChange={(event) =>
-                                            onFormChange((current) => ({
-                                                ...current,
-                                                happyHour: current.happyHour
-                                                    ? {
-                                                          ...current.happyHour,
-                                                          startHour: Math.min(
-                                                              23,
-                                                              Math.max(
-                                                                  0,
-                                                                  Number(event.target.value || 0),
+                    {isBarCatalog && (
+                        <div className="happy-hour-editor">
+                            <label className="checkbox">
+                                <input
+                                    type="checkbox"
+                                    checked={Boolean(menuForm.happyHour)}
+                                    onChange={(event) =>
+                                        onFormChange((current) => ({
+                                            ...current,
+                                            happyHour: event.target.checked
+                                                ? {
+                                                      priceCents: Math.max(
+                                                          0,
+                                                          Math.round(current.priceCents * 0.8),
+                                                      ),
+                                                      startHour: 16,
+                                                      endHour: 19,
+                                                  }
+                                                : null,
+                                        }))
+                                    }
+                                />
+                                Happy hour / pour price
+                            </label>
+                            {menuForm.happyHour && (
+                                <div className="admin-row">
+                                    <label>
+                                        HH price (USD)
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={(menuForm.happyHour.priceCents / 100).toFixed(2)}
+                                            onChange={(event) =>
+                                                onFormChange((current) => ({
+                                                    ...current,
+                                                    happyHour: current.happyHour
+                                                        ? {
+                                                              ...current.happyHour,
+                                                              priceCents: Math.round(
+                                                                  Number(event.target.value || 0) *
+                                                                      100,
                                                               ),
-                                                          ),
-                                                      }
-                                                    : null,
-                                            }))
-                                        }
-                                    />
-                                </label>
-                                <label>
-                                    End hour (0–23)
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        max="23"
-                                        value={menuForm.happyHour.endHour}
-                                        onChange={(event) =>
-                                            onFormChange((current) => ({
-                                                ...current,
-                                                happyHour: current.happyHour
-                                                    ? {
-                                                          ...current.happyHour,
-                                                          endHour: Math.min(
-                                                              23,
-                                                              Math.max(
-                                                                  0,
-                                                                  Number(event.target.value || 0),
+                                                          }
+                                                        : null,
+                                                }))
+                                            }
+                                        />
+                                    </label>
+                                    <label>
+                                        Start hour (0–23)
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max="23"
+                                            value={menuForm.happyHour.startHour}
+                                            onChange={(event) =>
+                                                onFormChange((current) => ({
+                                                    ...current,
+                                                    happyHour: current.happyHour
+                                                        ? {
+                                                              ...current.happyHour,
+                                                              startHour: Math.min(
+                                                                  23,
+                                                                  Math.max(
+                                                                      0,
+                                                                      Number(
+                                                                          event.target.value || 0,
+                                                                      ),
+                                                                  ),
                                                               ),
-                                                          ),
-                                                      }
-                                                    : null,
-                                            }))
-                                        }
-                                    />
-                                </label>
-                            </div>
-                        )}
-                    </div>
+                                                          }
+                                                        : null,
+                                                }))
+                                            }
+                                        />
+                                    </label>
+                                    <label>
+                                        End hour (0–23)
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max="23"
+                                            value={menuForm.happyHour.endHour}
+                                            onChange={(event) =>
+                                                onFormChange((current) => ({
+                                                    ...current,
+                                                    happyHour: current.happyHour
+                                                        ? {
+                                                              ...current.happyHour,
+                                                              endHour: Math.min(
+                                                                  23,
+                                                                  Math.max(
+                                                                      0,
+                                                                      Number(
+                                                                          event.target.value || 0,
+                                                                      ),
+                                                                  ),
+                                                              ),
+                                                          }
+                                                        : null,
+                                                }))
+                                            }
+                                        />
+                                    </label>
+                                </div>
+                            )}
+                        </div>
+                    )}
                     <div className="admin-actions">
                         <button className="generate-button" type="submit">
-                            {editingId ? 'Save changes' : 'Add to menu'}
+                            {editingId
+                                ? 'Save changes'
+                                : isBarCatalog
+                                  ? 'Add beverage'
+                                  : 'Add meal'}
                         </button>
                         {editingId && (
                             <button type="button" className="secondary-button" onClick={onCancelEdit}>
@@ -778,23 +914,38 @@ export default function AdminPanel({
                             ))}
                         </ul>
                     </div>
-                    <h2>Current menu</h2>
-                    {menu.map((item) => (
+                    <h2>{isBarCatalog ? 'Bar beverages' : 'Kitchen meals'}</h2>
+                    <p className="fx-note">
+                        {isBarCatalog
+                            ? `${listedMenu.length} drinks / wine / champagne / rum`
+                            : `${listedMenu.length} mains / starters / desserts`}
+                    </p>
+                    {listedMenu.map((item) => (
                         <div className="admin-item" key={item.id}>
                             <img src={optimizeImageUrl(item.image, 112)} alt="" loading="lazy" />
                             <div>
                                 <strong>{item.name}</strong>
                                 <p>
-                                    {item.category} · <Price cents={item.priceCents} compact />
+                                    {MENU_CATEGORY_LABELS[item.category]} ·{' '}
+                                    <Price cents={item.priceCents} compact />
+                                    {item.origin ? ` · ${item.origin}` : ''}
+                                    {item.vintageYear ? ` · ${item.vintageYear}` : ''}
                                     {item.happyHour
                                         ? ` · HH $${(item.happyHour.priceCents / 100).toFixed(2)} ${item.happyHour.startHour}–${item.happyHour.endHour}h`
                                         : ''}
-                                    {item.eightySixed ? ' · 86’d' : ''} ·{' '}
-                                    {item.modifierGroups.length} modifier groups
+                                    {item.eightySixed ? ' · 86’d' : ''}
                                 </p>
                             </div>
                             <div className="admin-item-actions">
-                                <button type="button" onClick={() => onEditItem(item)}>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setCatalogKind(
+                                            isBeverageItem(item) ? 'bar' : 'meals',
+                                        );
+                                        onEditItem(item);
+                                    }}
+                                >
                                     Edit
                                 </button>
                                 <button type="button" onClick={() => onDeleteItem(item.id)}>
@@ -803,6 +954,13 @@ export default function AdminPanel({
                             </div>
                         </div>
                     ))}
+                    {listedMenu.length === 0 && (
+                        <p className="fx-note">
+                            {isBarCatalog
+                                ? 'No beverages yet — add Wine, Champagne, Rum, or Drinks.'
+                                : 'No meals yet — add a Main, Starter, or Dessert.'}
+                        </p>
+                    )}
                 </div>
             </div>
         </section>

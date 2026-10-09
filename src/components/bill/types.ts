@@ -28,6 +28,14 @@ export const BEVERAGE_CATEGORIES: readonly MenuCategory[] = [
     'Rum',
 ] as const;
 
+export const FOOD_CATEGORIES: readonly MenuCategory[] = [
+    'Mains',
+    'Starters',
+    'Desserts',
+] as const;
+
+export type MenuCatalogKind = 'meals' | 'bar';
+
 /** Tip presets in USD cents (not percentages). */
 export const TIP_AMOUNT_PRESETS = [0, 200, 500, 1000, 1500] as const;
 export type TipAmountPreset = (typeof TIP_AMOUNT_PRESETS)[number] | 'custom';
