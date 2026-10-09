@@ -1,102 +1,124 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import './restaurant-bill-generator.css';
-import { createId, createTable, DEFAULT_TAX_PERCENT, PLACEHOLDER_IMAGE } from './bill/defaults';
+import {
+    createId,
+    createTable,
+    PLACEHOLDER_IMAGE,
+} from './bill/defaults';
+import GuestBillModal from './bill/GuestBillModal';
+import { Icon } from './bill/Icons';
 import {
     buildSnapshot,
+    collectOrderNumbers,
     computeBill,
+    computePayment,
     decodeSnapshot,
-    encodeSnapshot,
-    money,
-    tipLabel,
+    formatDual,
+    salesForDay,
+    salesToCsv,
+    setActiveXcgRate,
+    usdCentsToXcgCents,
 } from './bill/math';
-import { loadState, saveState } from './bill/storage';
+import ModifierModal from './bill/ModifierModal';
+import NotificationCenter from './bill/NotificationCenter';
+import OrderPanel from './bill/OrderPanel';
+import PaymentModal, {
+    paymentInputsToUsd,
+    type TenderCurrency,
+} from './bill/PaymentModal';
+import PinGate from './bill/PinGate';
 import {
-    MENU_CATEGORIES,
-    TIP_PRESETS,
+    allGuestsPaid,
+    appendAudit,
+    applySendFoodToKitchen,
+    bumpKitchenLine,
+    canGuestTakePayment,
+    fireHeldLines,
+    parseStationParam,
+    queueDraftBeverages,
+    recallKitchenLine,
+    setLineCourseFire,
+} from './bill/posLogic';
+import ReceiptView from './bill/ReceiptView';
+import {
+    canAccessView,
+    canClearOrder,
+    canCreateOrders,
+    canDeleteMenuItems,
+    canDeletePayments,
+    canDeleteTickets,
+    canGenerateBill,
+    canManageMenu,
+    canManageUsers,
+    canReopenTable,
+    canRunKitchenBoard,
+    canSendToKitchen,
+    canTakePayment,
+    canUpdateBeverageStatus,
+    canVoidKitchenItems,
+    DEFAULT_VIEW_BY_ROLE,
+    ROLE_LABELS,
+    roleHelpText,
+    viewsForRole,
+} from './bill/roles';
+import ServiceMenu from './bill/ServiceMenu';
+import {
+    createStaffUser,
+    findStaffByPin,
+    loadState,
+    notificationsForStaff,
+    touchState,
+} from './bill/storage';
+import {
+    fetchPosState,
+    getStoredToken,
+    isServerMode,
+    loginWithPin,
+    postAuditRemote,
+    probePosHealth,
+    recordSale,
+    setStoredToken,
+    voidSaleRemote,
+    type PosSession,
+} from './bill/posApi';
+import { isBeverageItem, isKitchenBoundItem } from './bill/statusUi';
+import TableMap from './bill/TableMap';
+import { useDebouncedSave } from './bill/useDebouncedSave';
+import { usePosServer } from './bill/usePosServer';
+import { usePosSync } from './bill/usePosSync';
+import { useReadyAlerts } from './bill/useReadyAlerts';
+import VoidReasonModal from './bill/VoidReasonModal';
+import {
+    type AppView,
+    type AuditEntry,
     type BillSnapshot,
+    type CourseFire,
     type FilterCategory,
-    type MenuCategory,
+    type KitchenStatus,
     type MenuItem,
+    type PaymentMethod,
     type PersistedState,
+    type PosSettings,
+    type ReceiptTemplate,
+    type SaleRecord,
+    type SelectedModifier,
+    type StaffRole,
     type TableOrder,
-    type TipPreset,
+    type TipAmountPreset,
 } from './bill/types';
 
-const FILTERS: FilterCategory[] = ['All', ...MENU_CATEGORIES];
+const KitchenBoard = lazy(() => import('./bill/KitchenBoard'));
+const SalesReport = lazy(() => import('./bill/SalesReport'));
+const AdminPanel = lazy(() => import('./bill/AdminPanel'));
+const UsersPanel = lazy(() => import('./bill/UsersPanel'));
 
-type ViewMode = 'service' | 'admin';
-
-function Icon({
-    name,
-}: {
-    name: 'search' | 'receipt' | 'trash' | 'check' | 'clock' | 'print' | 'share' | 'download' | 'users' | 'settings' | 'plus' | 'close';
-}) {
-    const paths: Record<string, ReactNode> = {
-        search: (
-            <>
-                <circle cx="11" cy="11" r="7" />
-                <path d="m20 20-4-4" />
-            </>
-        ),
-        receipt: (
-            <>
-                <path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z" />
-                <path d="M9 8h6M9 12h6" />
-            </>
-        ),
-        trash: (
-            <>
-                <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13" />
-            </>
-        ),
-        check: <path d="m5 12 4 4L19 6" />,
-        clock: (
-            <>
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 7v5l3 2" />
-            </>
-        ),
-        print: (
-            <>
-                <path d="M6 9V3h12v6M6 17H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
-                <rect x="6" y="13" width="12" height="8" />
-            </>
-        ),
-        share: (
-            <>
-                <circle cx="18" cy="5" r="3" />
-                <circle cx="6" cy="12" r="3" />
-                <circle cx="18" cy="19" r="3" />
-                <path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" />
-            </>
-        ),
-        download: (
-            <>
-                <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
-            </>
-        ),
-        users: (
-            <>
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-            </>
-        ),
-        settings: (
-            <>
-                <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9c.3.6.9 1 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
-            </>
-        ),
-        plus: <path d="M12 5v14M5 12h14" />,
-        close: <path d="M18 6 6 18M6 6l12 12" />,
-    };
-    return (
-        <svg aria-hidden="true" viewBox="0 0 24 24">
-            {paths[name]}
-        </svg>
-    );
-}
+const VIEW_LABELS: Record<AppView, string> = {
+    service: 'Service',
+    kitchen: 'Kitchen',
+    reports: 'Sales',
+    admin: 'Menu',
+    users: 'Users',
+};
 
 function emptyMenuForm(): Omit<MenuItem, 'id'> {
     return {
@@ -106,214 +128,242 @@ function emptyMenuForm(): Omit<MenuItem, 'id'> {
         priceCents: 0,
         image: PLACEHOLDER_IMAGE,
         popular: false,
+        modifierGroups: [],
     };
 }
 
-function ReceiptView({
-    snapshot,
-    onClose,
-    shareFeedback,
-    onShareFeedback,
-}: {
-    snapshot: BillSnapshot;
-    onClose: () => void;
-    shareFeedback: string | null;
-    onShareFeedback: (message: string) => void;
-}) {
-    const printReceipt = () => window.print();
-
-    const downloadReceipt = () => {
-        const lines = [
-            snapshot.restaurant,
-            snapshot.tableLabel,
-            `Generated: ${new Date(snapshot.generatedAt).toLocaleString()}`,
-            `Status: ${snapshot.status}`,
-            '',
-            ...snapshot.items.map(
-                (item) =>
-                    `${item.quantity}x ${item.name}${item.guestName ? ` (${item.guestName})` : ''}  ${money(item.lineTotalCents)}`,
-            ),
-            '',
-            `Subtotal: ${money(snapshot.subtotalCents)}`,
-            snapshot.taxEnabled
-                ? `Tax (${snapshot.taxPercent}%): ${money(snapshot.taxCents)}`
-                : 'Tax: —',
-            `Tip (${snapshot.tipPercent}%): ${money(snapshot.tipCents)}`,
-            `Total: ${money(snapshot.totalCents)}`,
-        ];
-        if (snapshot.guests.filter((guest) => guest.subtotalCents > 0).length > 1) {
-            lines.push('', 'Split check:');
-            snapshot.guests
-                .filter((guest) => guest.subtotalCents > 0)
-                .forEach((guest) => {
-                    lines.push(`${guest.name}: ${money(guest.totalCents)}`);
-                });
-        }
-        const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = `${snapshot.tableLabel.replace(/\s+/g, '-').toLowerCase()}-receipt.txt`;
-        anchor.click();
-        URL.revokeObjectURL(url);
-        onShareFeedback('Receipt downloaded. Use Print / PDF to save a PDF copy.');
-    };
-
-    const shareReceipt = async () => {
-        const encoded = encodeSnapshot(snapshot);
-        const url = `${window.location.origin}${window.location.pathname}#bill=${encoded}`;
-        try {
-            if (navigator.share) {
-                await navigator.share({
-                    title: `${snapshot.restaurant} — ${snapshot.tableLabel}`,
-                    text: `Bill total ${money(snapshot.totalCents)}`,
-                    url,
-                });
-                onShareFeedback('Share sheet opened.');
-            } else {
-                await navigator.clipboard.writeText(url);
-                onShareFeedback('Shareable bill link copied to clipboard.');
-            }
-        } catch {
-            try {
-                await navigator.clipboard.writeText(url);
-                onShareFeedback('Shareable bill link copied to clipboard.');
-            } catch {
-                onShareFeedback('Could not share this bill automatically.');
-            }
-        }
-    };
-
-    return (
-        <div className="receipt-overlay" role="dialog" aria-modal="true" aria-label="Receipt">
-            <div className="receipt-sheet">
-                <div className="receipt-toolbar no-print">
-                    <div>
-                        <p className="eyebrow">Guest receipt</p>
-                        <h2>{snapshot.tableLabel}</h2>
-                    </div>
-                    <div className="receipt-actions">
-                        <button type="button" onClick={printReceipt}>
-                            <Icon name="print" /> Print / PDF
-                        </button>
-                        <button type="button" onClick={downloadReceipt}>
-                            <Icon name="download" /> Download
-                        </button>
-                        <button type="button" onClick={shareReceipt}>
-                            <Icon name="share" /> Share link
-                        </button>
-                        <button type="button" className="ghost" onClick={onClose} aria-label="Close receipt">
-                            <Icon name="close" />
-                        </button>
-                    </div>
-                </div>
-                {shareFeedback && <p className="share-feedback no-print">{shareFeedback}</p>}
-
-                <div className="receipt-body" id="printable-receipt">
-                    <header>
-                        <strong>{snapshot.restaurant}</strong>
-                        <span>{snapshot.tableLabel}</span>
-                        <span>{new Date(snapshot.generatedAt).toLocaleString()}</span>
-                        <span className={`status-chip ${snapshot.status}`}>{snapshot.status}</span>
-                    </header>
-                    <ul>
-                        {snapshot.items.map((item, index) => (
-                            <li key={`${item.name}-${index}`}>
-                                <div>
-                                    <strong>
-                                        {item.quantity}× {item.name}
-                                    </strong>
-                                    {item.guestName && <small>{item.guestName}</small>}
-                                </div>
-                                <span>{money(item.lineTotalCents)}</span>
-                            </li>
-                        ))}
-                    </ul>
-                    <div className="receipt-totals">
-                        <div>
-                            <span>Subtotal</span>
-                            <strong>{money(snapshot.subtotalCents)}</strong>
-                        </div>
-                        <div>
-                            <span>{snapshot.taxEnabled ? `Tax (${snapshot.taxPercent}%)` : 'Tax'}</span>
-                            <strong>{snapshot.taxEnabled ? money(snapshot.taxCents) : '—'}</strong>
-                        </div>
-                        <div>
-                            <span>Tip ({snapshot.tipPercent}%)</span>
-                            <strong>{money(snapshot.tipCents)}</strong>
-                        </div>
-                        <div className="grand">
-                            <span>Total</span>
-                            <strong>{money(snapshot.totalCents)}</strong>
-                        </div>
-                    </div>
-                    {snapshot.guests.filter((guest) => guest.subtotalCents > 0).length > 1 && (
-                        <div className="split-block">
-                            <p>Split check</p>
-                            {snapshot.guests
-                                .filter((guest) => guest.subtotalCents > 0)
-                                .map((guest) => (
-                                    <div key={guest.name}>
-                                        <span>{guest.name}</span>
-                                        <strong>{money(guest.totalCents)}</strong>
-                                    </div>
-                                ))}
-                        </div>
-                    )}
-                    <footer>Thank you for dining with us.</footer>
-                </div>
-            </div>
-        </div>
-    );
+function ViewFallback() {
+    return <div className="view-fallback">Loading view…</div>;
 }
 
 export default function RestaurantBillGenerator() {
     const [hydrated, setHydrated] = useState(false);
+    const [online, setOnline] = useState(true);
     const [state, setState] = useState<PersistedState>(() => loadState());
-    const [view, setView] = useState<ViewMode>('service');
+    const [view, setView] = useState<AppView>('service');
     const [category, setCategory] = useState<FilterCategory>('All');
     const [search, setSearch] = useState('');
     const [receipt, setReceipt] = useState<BillSnapshot | null>(null);
+    const [guestBillOpen, setGuestBillOpen] = useState(false);
     const [shareFeedback, setShareFeedback] = useState<string | null>(null);
     const [menuForm, setMenuForm] = useState(emptyMenuForm());
     const [editingId, setEditingId] = useState<string | null>(null);
     const [newTableLabel, setNewTableLabel] = useState('');
+    const [pinInput, setPinInput] = useState('');
+    const [pinError, setPinError] = useState<string | null>(null);
+    const [showPinGate, setShowPinGate] = useState(false);
+    const [pendingManagerAction, setPendingManagerAction] = useState<null | (() => void)>(null);
+    const [modifierItem, setModifierItem] = useState<MenuItem | null>(null);
+    const [selectedMods, setSelectedMods] = useState<Record<string, string[]>>({});
+    const [lineNote, setLineNote] = useState('');
+    const [paymentOpen, setPaymentOpen] = useState(false);
+    const [payMethod, setPayMethod] = useState<PaymentMethod>('card');
+    const [tenderCurrency, setTenderCurrency] = useState<TenderCurrency>('USD');
+    const [cashInput, setCashInput] = useState('');
+    const [cardInput, setCardInput] = useState('');
+    const [payGuestId, setPayGuestId] = useState<string | null>(null);
+    const [notifOpen, setNotifOpen] = useState(false);
+    const [receiptTemplate, setReceiptTemplate] = useState<ReceiptTemplate>('guest');
+    const [voidPending, setVoidPending] = useState<null | {
+        kind: AuditEntry['kind'];
+        title: string;
+        details: string;
+        tableLabel: string | null;
+        apply: (reason: string) => void;
+    }>(null);
+    const [posSession, setPosSession] = useState<PosSession | null>(null);
+    const [serverRevision, setServerRevision] = useState<number | null>(null);
+    const serverMode = isServerMode();
+
+    useDebouncedSave(state, hydrated && !serverMode, 400);
+    usePosSync(state, setState, hydrated && !serverMode);
+    const { serverOnline, syncError } = usePosServer({
+        hydrated,
+        session: posSession,
+        state,
+        setState,
+        revision: serverRevision,
+        setRevision: setServerRevision,
+    });
+
+    const commit = (updater: (current: PersistedState) => PersistedState) => {
+        setState((current) => touchState(updater(current)));
+    };
 
     useEffect(() => {
-        const initial = loadState();
-        setState(initial);
-        setHydrated(true);
+        let cancelled = false;
+        const boot = async () => {
+            const local = loadState();
+            setOnline(navigator.onLine);
+            const onOnline = () => setOnline(true);
+            const onOffline = () => setOnline(false);
+            window.addEventListener('online', onOnline);
+            window.addEventListener('offline', onOffline);
 
-        const hash = window.location.hash;
-        if (hash.startsWith('#bill=')) {
-            const snapshot = decodeSnapshot(hash.slice(6));
-            if (snapshot) setReceipt(snapshot);
+            const hash = window.location.hash;
+            if (hash.startsWith('#bill=')) {
+                const snapshot = decodeSnapshot(hash.slice(6));
+                if (snapshot) {
+                    setReceipt(snapshot);
+                    setReceiptTemplate(snapshot.template ?? 'guest');
+                }
+            }
+
+            if (serverMode) {
+                const healthy = await probePosHealth();
+                if (!healthy) {
+                    setShareFeedback(
+                        'POS server unreachable. Start the API (see backend/README) or unset PUBLIC_POS_API_URL for local demo mode.',
+                    );
+                    setState(local);
+                    setActiveXcgRate(local.settings.xcgPerUsd);
+                    setShowPinGate(true);
+                    setHydrated(true);
+                    return () => {
+                        window.removeEventListener('online', onOnline);
+                        window.removeEventListener('offline', onOffline);
+                    };
+                }
+                const token = getStoredToken();
+                if (token) {
+                    try {
+                        const remote = await fetchPosState();
+                        if (cancelled) return;
+                        setServerRevision(remote.revision);
+                        const staffId =
+                            remote.state.staff.find((s) => s.id === remote.state.activeStaffId)?.id ??
+                            remote.state.staff[0]?.id;
+                        setState(
+                            touchState({
+                                ...remote.state,
+                                activeStaffId: staffId ?? remote.state.activeStaffId,
+                            }),
+                        );
+                        setActiveXcgRate(remote.state.settings.xcgPerUsd);
+                        const active =
+                            remote.state.staff.find((s) => s.id === staffId) ?? remote.state.staff[0];
+                        if (active) {
+                            setPosSession({
+                                token,
+                                expiresAt: '',
+                                tenantId: '',
+                                staff: {
+                                    id: active.id,
+                                    name: active.name,
+                                    role: active.role,
+                                    initials: active.initials,
+                                },
+                            });
+                            setView(DEFAULT_VIEW_BY_ROLE[active.role]);
+                        }
+                        setShowPinGate(false);
+                    } catch {
+                        setStoredToken(null);
+                        setShowPinGate(true);
+                        setState(local);
+                    }
+                } else {
+                    setState(local);
+                    setShowPinGate(true);
+                }
+                setHydrated(true);
+                return () => {
+                    window.removeEventListener('online', onOnline);
+                    window.removeEventListener('offline', onOffline);
+                };
+            }
+
+            // Local demo mode
+            setState(local);
+            setActiveXcgRate(local.settings.xcgPerUsd);
+            let nextState = local;
+            const params = new URLSearchParams(window.location.search);
+            const station = parseStationParam(params.get('station'));
+            if (station) {
+                const preferredRole =
+                    station === 'kitchen'
+                        ? 'kitchen'
+                        : station === 'admin' || station === 'users' || station === 'reports'
+                          ? 'manager'
+                          : 'server';
+                const stationStaff =
+                    local.staff.find((entry) => entry.role === preferredRole) ??
+                    local.staff.find((entry) => canAccessView(entry.role, station)) ??
+                    null;
+                if (stationStaff) {
+                    nextState = { ...local, activeStaffId: stationStaff.id };
+                    setState(nextState);
+                    setView(station);
+                } else {
+                    setView(DEFAULT_VIEW_BY_ROLE[local.staff[0]?.role ?? 'server']);
+                }
+            } else {
+                const initialStaff =
+                    local.staff.find((entry) => entry.id === local.activeStaffId) ?? local.staff[0];
+                setView(DEFAULT_VIEW_BY_ROLE[initialStaff.role]);
+            }
+            setHydrated(true);
+            return () => {
+                window.removeEventListener('online', onOnline);
+                window.removeEventListener('offline', onOffline);
+            };
+        };
+
+        let cleanup: (() => void) | undefined;
+        void boot().then((fn) => {
+            cleanup = fn;
+        });
+        return () => {
+            cancelled = true;
+            cleanup?.();
+        };
+    }, [serverMode]);
+
+    const staff =
+        state.staff.find((entry) => entry.id === state.activeStaffId) ?? state.staff[0];
+    const allowedViews = useMemo(() => viewsForRole(staff.role), [staff.role]);
+    const visibleNotifications = useMemo(
+        () => notificationsForStaff(state.notifications, staff),
+        [state.notifications, staff],
+    );
+
+    useEffect(() => {
+        if (!canAccessView(staff.role, view)) {
+            setView(DEFAULT_VIEW_BY_ROLE[staff.role]);
         }
-    }, []);
+    }, [staff.role, view]);
 
-    useEffect(() => {
-        if (!hydrated) return;
-        saveState(state);
-    }, [state, hydrated]);
-
-    const activeTable = state.tables.find((table) => table.id === state.activeTableId) ?? state.tables[0];
+    const activeTable =
+        state.tables.find((table) => table.id === state.activeTableId) ?? state.tables[0];
     const menuById = useMemo(() => new Map(state.menu.map((item) => [item.id, item])), [state.menu]);
     const bill = useMemo(() => computeBill(activeTable, state.menu), [activeTable, state.menu]);
-
-    const filteredItems = useMemo(() => {
-        const query = search.trim().toLowerCase();
-        return state.menu.filter(
-            (item) =>
-                (category === 'All' || item.category === category) &&
-                (!query || `${item.name} ${item.description}`.toLowerCase().includes(query)),
-        );
-    }, [state.menu, category, search]);
-
-    const itemCount = activeTable.lines.reduce((total, line) => total + line.quantity, 0);
+    const todaySales = useMemo(() => salesForDay(state.sales), [state.sales]);
+    const itemCount = useMemo(
+        () => activeTable.lines.reduce((total, line) => total + line.quantity, 0),
+        [activeTable.lines],
+    );
+    const draftCount = useMemo(
+        () =>
+            activeTable.lines.filter((line) => {
+                if (line.kitchenStatus !== 'draft') return false;
+                return isKitchenBoundItem(menuById.get(line.menuItemId));
+            }).length,
+        [activeTable.lines, menuById],
+    );
     const isPaid = activeTable.status === 'paid';
+    const isPartial = activeTable.status === 'partial';
+    const { flashIds, banner: readyBanner } = useReadyAlerts(
+        state.tables,
+        menuById,
+        hydrated && staff.role !== 'kitchen',
+    );
+
+    useEffect(() => {
+        setActiveXcgRate(state.settings.xcgPerUsd);
+    }, [state.settings.xcgPerUsd]);
 
     const updateActiveTable = (updater: (table: TableOrder) => TableOrder) => {
-        setState((current) => ({
+        commit((current) => ({
             ...current,
             tables: current.tables.map((table) =>
                 table.id === current.activeTableId ? updater(table) : table,
@@ -321,224 +371,684 @@ export default function RestaurantBillGenerator() {
         }));
     };
 
-    const changeQuantity = (menuItemId: string, change: number) => {
-        if (isPaid) return;
-        updateActiveTable((table) => {
-            const existing = table.lines.find((line) => line.menuItemId === menuItemId);
-            let lines = [...table.lines];
-            if (!existing && change > 0) {
-                lines.push({
-                    menuItemId,
-                    quantity: change,
-                    guestId: table.guests[0]?.id ?? null,
-                });
-            } else if (existing) {
-                const nextQuantity = existing.quantity + change;
-                lines =
-                    nextQuantity <= 0
-                        ? lines.filter((line) => line.menuItemId !== menuItemId)
-                        : lines.map((line) =>
-                              line.menuItemId === menuItemId ? { ...line, quantity: nextQuantity } : line,
-                          );
+    const switchStaff = (staffId: string) => {
+        const next = state.staff.find((entry) => entry.id === staffId);
+        if (!next) return;
+        setState((current) => ({ ...current, activeStaffId: staffId }));
+        setView(DEFAULT_VIEW_BY_ROLE[next.role]);
+        setReceipt(null);
+        setPaymentOpen(false);
+        setGuestBillOpen(false);
+        setModifierItem(null);
+        setNotifOpen(false);
+        setShareFeedback(`Signed in as ${next.name} (${ROLE_LABELS[next.role]}).`);
+    };
+
+    const requireManager = (action: () => void) => {
+        if (staff.role === 'manager') {
+            action();
+            return;
+        }
+        setPendingManagerAction(() => action);
+        setPinInput('');
+        setPinError(null);
+        setShowPinGate(true);
+    };
+
+    const submitPin = () => {
+        const pin = pinInput.trim();
+        if (serverMode) {
+            void (async () => {
+                try {
+                    const session = await loginWithPin(pin);
+                    setPosSession(session);
+                    const remote = await fetchPosState();
+                    setServerRevision(remote.revision);
+                    setState(
+                        touchState({
+                            ...remote.state,
+                            activeStaffId: session.staff.id,
+                        }),
+                    );
+                    setActiveXcgRate(remote.state.settings.xcgPerUsd);
+                    setView(DEFAULT_VIEW_BY_ROLE[session.staff.role]);
+                    setShowPinGate(false);
+                    if (pendingManagerAction && session.staff.role === 'manager') {
+                        pendingManagerAction();
+                    } else if (pendingManagerAction && session.staff.role !== 'manager') {
+                        setPinError('Manager PIN required for that action.');
+                        setShowPinGate(true);
+                        return;
+                    }
+                    setPendingManagerAction(null);
+                    setPinInput('');
+                    setPinError(null);
+                    setShareFeedback(
+                        `Signed in as ${session.staff.name} (${ROLE_LABELS[session.staff.role]}) · server mode`,
+                    );
+                } catch {
+                    setPinError('Invalid PIN or server error.');
+                }
+            })();
+            return;
+        }
+
+        const match = findStaffByPin(state.staff, pin);
+        if (!match) {
+            setPinError('Invalid PIN. Check Users for available staff PINs.');
+            return;
+        }
+        if (pendingManagerAction && match.role !== 'manager') {
+            setPinError('Manager PIN required for that action.');
+            return;
+        }
+        setState((current) => ({ ...current, activeStaffId: match.id }));
+        setView(DEFAULT_VIEW_BY_ROLE[match.role]);
+        setShowPinGate(false);
+        if (pendingManagerAction && match.role === 'manager') pendingManagerAction();
+        setPendingManagerAction(null);
+        setPinInput('');
+        setPinError(null);
+        setShareFeedback(`Signed in as ${match.name} (${ROLE_LABELS[match.role]}).`);
+    };
+
+    const openModifierModal = (item: MenuItem) => {
+        if (isPaid || !canCreateOrders(staff.role)) return;
+        const defaults: Record<string, string[]> = {};
+        item.modifierGroups.forEach((group) => {
+            defaults[group.id] = group.multi ? [] : group.options[0] ? [group.options[0].id] : [];
+        });
+        setSelectedMods(defaults);
+        setLineNote('');
+        setModifierItem(item);
+    };
+
+    const cancelAddOrder = () => {
+        setModifierItem(null);
+        setLineNote('');
+        setSelectedMods({});
+        setShareFeedback('Add order cancelled.');
+    };
+
+    const toggleMod = (groupId: string, optionId: string, multi: boolean) => {
+        setSelectedMods((current) => {
+            const existing = current[groupId] ?? [];
+            if (multi) {
+                return {
+                    ...current,
+                    [groupId]: existing.includes(optionId)
+                        ? existing.filter((id) => id !== optionId)
+                        : [...existing, optionId],
+                };
             }
-            return { ...table, lines, billGeneratedAt: null };
+            return { ...current, [groupId]: [optionId] };
         });
     };
 
-    const assignGuest = (menuItemId: string, guestId: string) => {
-        if (isPaid) return;
-        updateActiveTable((table) => ({
-            ...table,
-            billGeneratedAt: null,
-            lines: table.lines.map((line) =>
-                line.menuItemId === menuItemId ? { ...line, guestId } : line,
+    const confirmAddItem = () => {
+        if (!modifierItem) return;
+        const modifiers: SelectedModifier[] = modifierItem.modifierGroups.flatMap((group) => {
+            const selected = selectedMods[group.id] ?? [];
+            return selected
+                .map((optionId) => group.options.find((option) => option.id === optionId))
+                .filter((option): option is NonNullable<typeof option> => Boolean(option))
+                .map((option) => ({
+                    groupId: group.id,
+                    optionId: option.id,
+                    name: option.name,
+                    priceDeltaCents: option.priceDeltaCents,
+                }));
+        });
+        updateActiveTable((table) => {
+            const unpaidGuest =
+                table.guests.find((guest) => !guest.paidAt) ?? table.guests[0] ?? null;
+            return {
+                ...table,
+                billGeneratedAt: null,
+                guestBillApprovedAt: null,
+                guestSignatureDataUrl: null,
+                guestPreferredPayment: null,
+                lines: [
+                    ...table.lines,
+                    {
+                        id: createId('line'),
+                        menuItemId: modifierItem.id,
+                        quantity: 1,
+                        guestId: unpaidGuest?.id ?? null,
+                        note: lineNote.trim(),
+                        modifiers,
+                        kitchenStatus: 'draft',
+                        sentToKitchenAt: null,
+                        orderNumber: null,
+                        sentByStaffId: null,
+                        courseFire: 'fire',
+                        bumpedAt: null,
+                        bumpCount: 0,
+                    },
+                ],
+            };
+        });
+        setModifierItem(null);
+    };
+
+    const requestVoid = (
+        kind: AuditEntry['kind'],
+        title: string,
+        details: string,
+        tableLabel: string | null,
+        apply: (reason: string) => void,
+        needsManager: boolean,
+    ) => {
+        const openVoid = () =>
+            setVoidPending({ kind, title, details, tableLabel, apply });
+        if (needsManager) {
+            requireManager(openVoid);
+            return;
+        }
+        openVoid();
+    };
+
+    const confirmVoid = (reason: string) => {
+        if (!voidPending) return;
+        const pending = voidPending;
+        setVoidPending(null);
+        pending.apply(reason);
+        const entry = {
+            id: createId('audit'),
+            kind: pending.kind,
+            reason,
+            staffId: staff.id,
+            staffName: staff.name,
+            createdAt: new Date().toISOString(),
+            details: pending.details,
+            tableLabel: pending.tableLabel,
+        };
+        commit((current) =>
+            appendAudit(current, {
+                kind: pending.kind,
+                reason,
+                staffId: staff.id,
+                staffName: staff.name,
+                details: pending.details,
+                tableLabel: pending.tableLabel,
+            }),
+        );
+        if (serverMode && posSession && pending.kind !== 'void_payment') {
+            void postAuditRemote(entry).catch(() => {
+                setShareFeedback('Void applied locally; audit sync failed — check server.');
+            });
+        }
+        setShareFeedback(`Void recorded: ${reason}`);
+    };
+
+    const changeQuantity = (lineId: string, change: number) => {
+        if (isPaid || !canCreateOrders(staff.role)) return;
+        const line = activeTable.lines.find((entry) => entry.id === lineId);
+        const item = line ? menuById.get(line.menuItemId) : null;
+        const apply = () =>
+            updateActiveTable((table) => ({
+                ...table,
+                billGeneratedAt: null,
+                guestBillApprovedAt: null,
+                lines: table.lines
+                    .map((entry) =>
+                        entry.id === lineId ? { ...entry, quantity: entry.quantity + change } : entry,
+                    )
+                    .filter((entry) => entry.quantity > 0),
+            }));
+        if (line && line.kitchenStatus !== 'draft' && change < 0) {
+            requestVoid(
+                'void_line',
+                'Void line quantity',
+                `${item?.name ?? 'Item'} on ${activeTable.label}`,
+                activeTable.label,
+                () => apply(),
+                !canVoidKitchenItems(staff.role),
+            );
+            return;
+        }
+        apply();
+    };
+
+    const deleteLine = (lineId: string) => {
+        const line = activeTable.lines.find((entry) => entry.id === lineId);
+        if (!line) return;
+        const item = menuById.get(line.menuItemId);
+        const apply = () =>
+            updateActiveTable((table) => ({
+                ...table,
+                billGeneratedAt: null,
+                guestBillApprovedAt: null,
+                lines: table.lines.filter((entry) => entry.id !== lineId),
+            }));
+        if (line.kitchenStatus !== 'draft') {
+            requestVoid(
+                'void_ticket',
+                'Void kitchen ticket',
+                `${item?.name ?? 'Item'} · ${line.orderNumber ?? 'no order #'}`,
+                activeTable.label,
+                () => apply(),
+                !canDeleteTickets(staff.role),
+            );
+            return;
+        }
+        if (canCreateOrders(staff.role)) apply();
+    };
+
+    const setKitchenStatus = (tableId: string, lineId: string, kitchenStatus: KitchenStatus) => {
+        if (!canRunKitchenBoard(staff.role)) {
+            setShareFeedback('Kitchen role required to update ticket status.');
+            return;
+        }
+        const targetTable = state.tables.find((table) => table.id === tableId);
+        const targetLine = targetTable?.lines.find((line) => line.id === lineId);
+        const targetItem = targetLine ? menuById.get(targetLine.menuItemId) : null;
+        if (isBeverageItem(targetItem)) {
+            setShareFeedback('Beverages are managed by the server, not the kitchen board.');
+            return;
+        }
+        setState((current) => ({
+            ...current,
+            tables: current.tables.map((table) =>
+                table.id !== tableId
+                    ? table
+                    : {
+                          ...table,
+                          lines: table.lines.map((line) =>
+                              line.id === lineId ? { ...line, kitchenStatus } : line,
+                          ),
+                      },
             ),
         }));
     };
 
-    const clearOrder = () => {
-        if (isPaid) return;
+    const setBeverageStatus = (lineId: string, kitchenStatus: KitchenStatus) => {
+        if (!canUpdateBeverageStatus(staff.role)) {
+            setShareFeedback('Server role required to update beverage status.');
+            return;
+        }
+        if (!activeTable.billGeneratedAt) {
+            setShareFeedback('Generate a guest ticket before updating beverage status.');
+            return;
+        }
+        const line = activeTable.lines.find((entry) => entry.id === lineId);
+        const item = line ? menuById.get(line.menuItemId) : null;
+        if (!isBeverageItem(item)) {
+            setShareFeedback('Only beverages can be updated this way.');
+            return;
+        }
         updateActiveTable((table) => ({
             ...table,
-            lines: [],
-            billGeneratedAt: null,
+            lines: table.lines.map((entry) =>
+                entry.id === lineId ? { ...entry, kitchenStatus } : entry,
+            ),
+        }));
+        setShareFeedback(`Beverage marked ${kitchenStatus}.`);
+    };
+
+    const deleteKitchenTicket = (tableId: string, lineId: string) => {
+        if (staff.role === 'kitchen') {
+            setShareFeedback('Kitchen staff cannot delete tickets. Ask a Manager.');
+            return;
+        }
+        const targetTable = state.tables.find((table) => table.id === tableId);
+        const targetLine = targetTable?.lines.find((line) => line.id === lineId);
+        const item = targetLine ? menuById.get(targetLine.menuItemId) : null;
+        const apply = () =>
+            setState((current) =>
+                touchState({
+                    ...current,
+                    tables: current.tables.map((table) =>
+                        table.id !== tableId
+                            ? table
+                            : {
+                                  ...table,
+                                  billGeneratedAt: null,
+                                  guestBillApprovedAt: null,
+                                  lines: table.lines.filter((line) => line.id !== lineId),
+                              },
+                    ),
+                }),
+            );
+        requestVoid(
+            'void_ticket',
+            'Void kitchen ticket',
+            `${item?.name ?? 'Item'} · ${targetLine?.orderNumber ?? 'no order #'}`,
+            targetTable?.label ?? null,
+            () => apply(),
+            !canDeleteTickets(staff.role),
+        );
+    };
+
+    const bumpTicket = (tableId: string, lineId: string) => {
+        if (!canRunKitchenBoard(staff.role)) return;
+        commit((current) => bumpKitchenLine(current, tableId, lineId, staff));
+        setShareFeedback('Ticket bumped — wait timer reset and kitchen notified.');
+    };
+
+    const recallTicket = (tableId: string, lineId: string) => {
+        if (!canRunKitchenBoard(staff.role)) return;
+        commit((current) => recallKitchenLine(current, tableId, lineId));
+        setShareFeedback('Ticket recalled to Ready.');
+    };
+
+    const setCourseFireOnLine = (tableId: string, lineId: string, courseFire: CourseFire) => {
+        commit((current) => ({
+            ...current,
+            tables: current.tables.map((table) =>
+                table.id !== tableId ? table : setLineCourseFire(table, lineId, courseFire),
+            ),
         }));
     };
 
-    const setTipPreset = (preset: TipPreset) => {
-        if (isPaid) return;
-        updateActiveTable((table) => ({
-            ...table,
-            tipPreset: preset,
-            tipCustomPercent: preset === 'custom' ? table.tipCustomPercent : preset,
-            billGeneratedAt: null,
+    const fireAllHeld = (tableId: string) => {
+        commit((current) => ({
+            ...current,
+            tables: current.tables.map((table) =>
+                table.id !== tableId ? table : fireHeldLines(table),
+            ),
         }));
+        setShareFeedback('Held courses fired.');
+    };
+
+    const paymentTotalCents = useMemo(() => {
+        if (!payGuestId) return bill.totalCents;
+        const guest = bill.guestBreakdown.find((entry) => entry.id === payGuestId);
+        return guest?.totalCents ?? bill.totalCents;
+    }, [bill, payGuestId]);
+
+    const fillPaymentDefaults = (currency: TenderCurrency, total = paymentTotalCents) => {
+        if (currency === 'XCG') {
+            const xcg = (usdCentsToXcgCents(total) / 100).toFixed(2);
+            setCashInput(xcg);
+            setCardInput(xcg);
+        } else {
+            const usd = (total / 100).toFixed(2);
+            setCashInput(usd);
+            setCardInput(usd);
+        }
+    };
+
+    const openGuestBill = () => {
+        if (!itemCount || isPaid || !canTakePayment(staff.role)) return;
+        const generatedAt = activeTable.billGeneratedAt ?? new Date().toISOString();
+        updateActiveTable((table) => {
+            const withTicket = {
+                ...table,
+                billGeneratedAt: table.billGeneratedAt ?? generatedAt,
+            };
+            return queueDraftBeverages(withTicket, menuById, staff.id);
+        });
+        setGuestBillOpen(true);
+        setShareFeedback('Guest ticket generated. Beverages queued for server status updates.');
+    };
+
+    const openPayment = () => {
+        if (!itemCount || isPaid) return;
+        if (!canGuestTakePayment(activeTable)) {
+            setShareFeedback('Guest must review, sign, and tick a payment option first.');
+            openGuestBill();
+            return;
+        }
+        const unpaid = bill.guestBreakdown.filter(
+            (guest) => guest.totalCents > 0 && !guest.paidAt,
+        );
+        const defaultGuest = unpaid.length > 1 ? unpaid[0].id : null;
+        setPayGuestId(defaultGuest);
+        setPayMethod(activeTable.guestPreferredPayment ?? 'card');
+        setTenderCurrency('USD');
+        const due =
+            defaultGuest == null
+                ? bill.totalCents
+                : unpaid.find((guest) => guest.id === defaultGuest)?.totalCents ?? bill.totalCents;
+        fillPaymentDefaults('USD', due);
+        setPaymentOpen(true);
+    };
+
+    const cancelPayment = () => {
+        setPaymentOpen(false);
+        setPayGuestId(null);
+        setShareFeedback('Payment cancelled.');
+    };
+
+    const completePayment = () => {
+        const dueCents = paymentTotalCents;
+        const { cashCents, cardCents } = paymentInputsToUsd(
+            payMethod,
+            tenderCurrency,
+            cashInput,
+            cardInput,
+        );
+        const payment = computePayment(dueCents, payMethod, cashCents, cardCents);
+        if (payMethod === 'cash' && cashCents < dueCents) {
+            setShareFeedback(`Cash tendered is less than the total (${formatDual(dueCents)}).`);
+            return;
+        }
+        if (payMethod === 'mixed' && cardCents + Math.max(cashCents, 0) < dueCents) {
+            setShareFeedback('Mixed tender does not cover the total.');
+            return;
+        }
+        if (serverMode && payMethod !== 'cash' && !serverOnline) {
+            setShareFeedback('Server offline — card/mixed payments require the POS API.');
+            return;
+        }
+        const paidAt = payment.paidAt;
+        const orderNumbers = collectOrderNumbers(activeTable.lines);
+        const guestMeta = payGuestId
+            ? bill.guestBreakdown.find((guest) => guest.id === payGuestId)
+            : null;
+        const saleGuest = guestMeta;
+        const sale: SaleRecord = {
+            id: createId('sale'),
+            tableId: activeTable.id,
+            tableLabel: activeTable.label,
+            paidAt,
+            subtotalCents: saleGuest?.subtotalCents ?? bill.subtotalCents,
+            serviceChargeCents: saleGuest?.serviceChargeCents ?? bill.serviceChargeCents,
+            tipCents: saleGuest?.tipCents ?? bill.tipCents,
+            totalCents: dueCents,
+            payment,
+            serverName: staff.name,
+            itemCount: saleGuest
+                ? activeTable.lines
+                      .filter((line) => line.guestId === saleGuest.id)
+                      .reduce((sum, line) => sum + line.quantity, 0)
+                : itemCount,
+            orderNumbers,
+            guestName: saleGuest?.name ?? null,
+            guestId: saleGuest?.id ?? null,
+        };
+
+        const applyLocal = () => {
+            commit((current) => {
+                const tables = current.tables.map((table) => {
+                    if (table.id !== current.activeTableId) return table;
+
+                    if (payGuestId) {
+                        const guests = table.guests.map((guest) =>
+                            guest.id === payGuestId
+                                ? { ...guest, paidAt, payment }
+                                : guest,
+                        );
+                        const nextTable = {
+                            ...table,
+                            guests,
+                            billGeneratedAt: table.billGeneratedAt ?? paidAt,
+                        };
+                        const fullyPaid = allGuestsPaid(nextTable);
+                        if (fullyPaid) {
+                            return {
+                                ...nextTable,
+                                status: 'paid' as const,
+                                paidAt,
+                                payment,
+                                lines: nextTable.lines.map((line) =>
+                                    line.kitchenStatus === 'draft'
+                                        ? line
+                                        : { ...line, kitchenStatus: 'served' as const },
+                                ),
+                            };
+                        }
+                        return {
+                            ...nextTable,
+                            status: 'partial' as const,
+                            paidAt: null,
+                            payment: null,
+                        };
+                    }
+
+                    return {
+                        ...table,
+                        status: 'paid' as const,
+                        paidAt,
+                        payment,
+                        billGeneratedAt: table.billGeneratedAt ?? paidAt,
+                        guests: table.guests.map((guest) =>
+                            guest.paidAt ? guest : { ...guest, paidAt, payment },
+                        ),
+                        lines: table.lines.map((line) =>
+                            line.kitchenStatus === 'draft'
+                                ? line
+                                : { ...line, kitchenStatus: 'served' as const },
+                        ),
+                    };
+                });
+
+                return {
+                    ...current,
+                    tables,
+                    sales: serverMode ? current.sales : [sale, ...current.sales],
+                };
+            });
+        };
+
+        const finish = () => {
+            applyLocal();
+            setPaymentOpen(false);
+            setGuestBillOpen(false);
+            const label = guestMeta ? guestMeta.name : 'table';
+            setShareFeedback(
+                `Paid ${label} with ${payment.method} (${tenderCurrency}). Change due: ${formatDual(payment.changeDueCents)}.`,
+            );
+            setPayGuestId(null);
+        };
+
+        if (serverMode && posSession) {
+            void recordSale(sale)
+                .then(() => finish())
+                .catch(() => {
+                    setShareFeedback('Payment not recorded on server — try again.');
+                });
+            return;
+        }
+        finish();
+    };
+
+    const sendToKitchen = () => {
+        if (!draftCount || isPaid || !canSendToKitchen(staff.role)) return;
+        let sentCount = 0;
+        commit((current) => {
+            const result = applySendFoodToKitchen(current, menuById);
+            sentCount = result.sentCount;
+            return result.state;
+        });
+        if (sentCount === 0) {
+            setShareFeedback('No food drafts to send. Beverages stay with the server.');
+            return;
+        }
+        setShareFeedback(
+            `${sentCount} food item(s) sent to kitchen. Beverages are not sent — queue them via guest ticket.`,
+        );
+        setNotifOpen(true);
     };
 
     const generateBill = () => {
         if (!itemCount || isPaid) return;
         const generatedAt = new Date().toISOString();
-        updateActiveTable((table) => ({ ...table, billGeneratedAt: generatedAt }));
-        const snapshot = buildSnapshot({ ...activeTable, billGeneratedAt: generatedAt }, state.menu);
-        setReceipt(snapshot);
-        setShareFeedback(null);
-    };
-
-    const markPaid = () => {
-        if (!itemCount) return;
-        const paidAt = new Date().toISOString();
-        updateActiveTable((table) => ({
-            ...table,
-            status: 'paid',
-            paidAt,
-            billGeneratedAt: table.billGeneratedAt ?? paidAt,
-        }));
-        const snapshot = buildSnapshot(
+        const nextTable = queueDraftBeverages(
             {
                 ...activeTable,
-                status: 'paid',
-                paidAt,
-                billGeneratedAt: activeTable.billGeneratedAt ?? paidAt,
+                billGeneratedAt: generatedAt,
             },
-            state.menu,
+            menuById,
+            staff.id,
         );
-        setReceipt(snapshot);
+        updateActiveTable(() => nextTable);
+        const template: ReceiptTemplate =
+            activeTable.status === 'paid' ? 'paid' : 'guest';
+        setReceiptTemplate(template);
+        setReceipt(buildSnapshot(nextTable, state.menu, state.restaurant, staff.name, template));
+        setShareFeedback('Guest ticket generated. Beverages queued for server status updates.');
     };
 
-    const reopenTable = () => {
-        updateActiveTable((table) => ({
-            ...table,
-            status: 'open',
-            paidAt: null,
-            billGeneratedAt: null,
-            lines: [],
-        }));
-    };
-
-    const addGuest = () => {
-        if (isPaid) return;
-        updateActiveTable((table) => ({
-            ...table,
-            guests: [
-                ...table.guests,
-                { id: createId('guest'), name: `Guest ${table.guests.length + 1}` },
-            ],
-        }));
-    };
-
-    const renameGuest = (guestId: string, name: string) => {
-        updateActiveTable((table) => ({
-            ...table,
-            guests: table.guests.map((guest) => (guest.id === guestId ? { ...guest, name } : guest)),
-        }));
-    };
-
-    const removeGuest = (guestId: string) => {
-        if (isPaid) return;
-        updateActiveTable((table) => {
-            if (table.guests.length <= 1) return table;
-            const fallback = table.guests.find((guest) => guest.id !== guestId)?.id ?? null;
-            return {
-                ...table,
-                guests: table.guests.filter((guest) => guest.id !== guestId),
-                lines: table.lines.map((line) =>
-                    line.guestId === guestId ? { ...line, guestId: fallback } : line,
-                ),
-                billGeneratedAt: null,
-            };
-        });
-    };
-
-    const switchTable = (tableId: string) => {
-        setState((current) => ({ ...current, activeTableId: tableId }));
-        setReceipt(null);
-    };
-
-    const addTable = () => {
-        const label = newTableLabel.trim() || `Table ${state.tables.length + 1}`;
-        const table = createTable(label, DEFAULT_TAX_PERCENT);
+    const markNotifRead = (id: string) => {
         setState((current) => ({
             ...current,
-            tables: [...current.tables, table],
-            activeTableId: table.id,
+            notifications: current.notifications.map((n) =>
+                n.id === id && !n.readBy.includes(staff.id)
+                    ? { ...n, readBy: [...n.readBy, staff.id] }
+                    : n,
+            ),
         }));
-        setNewTableLabel('');
     };
 
-    const saveMenuItem = () => {
-        if (!menuForm.name.trim() || menuForm.priceCents < 0) return;
-        if (editingId) {
-            setState((current) => ({
-                ...current,
-                menu: current.menu.map((item) =>
-                    item.id === editingId
-                        ? {
-                              ...item,
-                              ...menuForm,
-                              name: menuForm.name.trim(),
-                              description: menuForm.description.trim(),
-                          }
-                        : item,
-                ),
-            }));
-        } else {
-            const item: MenuItem = {
-                id: createId('menu'),
-                ...menuForm,
-                name: menuForm.name.trim(),
-                description: menuForm.description.trim(),
-            };
-            setState((current) => ({ ...current, menu: [...current.menu, item] }));
-        }
-        setMenuForm(emptyMenuForm());
-        setEditingId(null);
-    };
-
-    const editMenuItem = (item: MenuItem) => {
-        setEditingId(item.id);
-        setMenuForm({
-            name: item.name,
-            description: item.description,
-            category: item.category,
-            priceCents: item.priceCents,
-            image: item.image,
-            popular: Boolean(item.popular),
-        });
-        setView('admin');
-    };
-
-    const deleteMenuItem = (id: string) => {
+    const markAllNotifsRead = () => {
+        const visibleIds = new Set(visibleNotifications.map((n) => n.id));
         setState((current) => ({
             ...current,
-            menu: current.menu.filter((item) => item.id !== id),
-            tables: current.tables.map((table) => ({
-                ...table,
-                lines: table.lines.filter((line) => line.menuItemId !== id),
-            })),
+            notifications: current.notifications.map((n) =>
+                visibleIds.has(n.id) && !n.readBy.includes(staff.id)
+                    ? { ...n, readBy: [...n.readBy, staff.id] }
+                    : n,
+            ),
         }));
-        if (editingId === id) {
-            setEditingId(null);
-            setMenuForm(emptyMenuForm());
-        }
     };
 
-    const shareFromToolbar = async () => {
-        if (!itemCount) return;
-        const generatedAt = activeTable.billGeneratedAt ?? new Date().toISOString();
-        if (!activeTable.billGeneratedAt) {
-            updateActiveTable((table) => ({ ...table, billGeneratedAt: generatedAt }));
-        }
-        const snapshot = buildSnapshot({ ...activeTable, billGeneratedAt: generatedAt }, state.menu);
-        const encoded = encodeSnapshot(snapshot);
-        const url = `${window.location.origin}${window.location.pathname}#bill=${encoded}`;
-        try {
-            await navigator.clipboard.writeText(url);
-            setShareFeedback('Shareable bill link copied to clipboard.');
-        } catch {
-            setShareFeedback('Could not copy link. Open the receipt and try again.');
-        }
-        setReceipt(snapshot);
+    const deleteSale = (saleId: string) => {
+        const sale = state.sales.find((entry) => entry.id === saleId);
+        requestVoid(
+            'void_payment',
+            'Void payment / sale',
+            `${sale?.tableLabel ?? 'Sale'} · ${formatDual(sale?.totalCents ?? 0)}`,
+            sale?.tableLabel ?? null,
+            (reason) => {
+                if (serverMode && posSession) {
+                    void voidSaleRemote(saleId, reason)
+                        .then(() =>
+                            setState((current) => ({
+                                ...current,
+                                sales: current.sales.filter((entry) => entry.id !== saleId),
+                            })),
+                        )
+                        .catch(() => {
+                            setShareFeedback('Server void failed — sale kept on ledger.');
+                        });
+                    return;
+                }
+                setState((current) => ({
+                    ...current,
+                    sales: current.sales.filter((entry) => entry.id !== saleId),
+                }));
+            },
+            !canDeletePayments(staff.role),
+        );
     };
+
+    const exportSales = () => {
+        const csv = salesToCsv(todaySales);
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `savory-sales-${new Date().toISOString().slice(0, 10)}.csv`;
+        anchor.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const guestBillSnapshot = useMemo(
+        () => buildSnapshot(activeTable, state.menu, state.restaurant, staff.name, 'guest'),
+        [activeTable, state.menu, state.restaurant, staff.name],
+    );
 
     if (!hydrated) {
         return <div className="bistro-app loading-shell">Loading Savory…</div>;
@@ -551,634 +1061,772 @@ export default function RestaurantBillGenerator() {
                     <span className="brand-mark">S</span>
                     <span>
                         <strong>SAVORY</strong>
-                        <small>Kitchen &amp; Bar</small>
+                        <small>Kitchen &amp; Bar · USD/XCG</small>
                     </span>
                 </a>
                 <div className="service-status">
                     <span className={`status-dot ${isPaid ? 'paid' : ''}`} />
-                    <span>{isPaid ? 'Table paid' : 'Open for service'}</span>
+                    <span>
+                        {staff.role === 'kitchen'
+                            ? 'Kitchen station'
+                            : isPaid
+                              ? 'Table paid'
+                              : 'Open for service'}
+                    </span>
+                    {staff.role !== 'kitchen' && (
+                        <>
+                            <span className="status-divider" />
+                            <label className="table-switcher">
+                                <span className="sr-only">Active table</span>
+                                <select
+                                    value={activeTable.id}
+                                    onChange={(event) => {
+                                        setState((current) => ({
+                                            ...current,
+                                            activeTableId: event.target.value,
+                                        }));
+                                        setReceipt(null);
+                                        setGuestBillOpen(false);
+                                    }}
+                                    aria-label="Switch table"
+                                >
+                                    {state.tables.map((table) => (
+                                        <option key={table.id} value={table.id}>
+                                            {table.label}
+                                            {table.status === 'paid'
+                                                ? ' · paid'
+                                                : table.status === 'partial'
+                                                  ? ' · partial'
+                                                  : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                        </>
+                    )}
                     <span className="status-divider" />
-                    <label className="table-switcher">
-                        <span className="sr-only">Active table</span>
-                        <select
-                            value={activeTable.id}
-                            onChange={(event) => switchTable(event.target.value)}
-                            aria-label="Switch table"
+                    <span className={`online-pill ${online ? 'on' : 'off'}`}>
+                        <Icon name="wifi" /> {online ? 'Online' : 'Offline'}
+                    </span>
+                    <span className="status-divider" />
+                    {serverMode ? (
+                        <span
+                            className={`sync-pill ${serverOnline ? '' : 'off'}`}
+                            title={
+                                syncError
+                                    ? syncError
+                                    : serverOnline
+                                      ? 'Connected to POS API — multi-device sync on'
+                                      : 'POS API offline'
+                            }
                         >
-                            {state.tables.map((table) => (
-                                <option key={table.id} value={table.id}>
-                                    {table.label}
-                                    {table.status === 'paid' ? ' · paid' : ''}
-                                </option>
-                            ))}
-                        </select>
-                    </label>
+                            {serverOnline ? 'Server sync' : 'Server offline'}
+                        </span>
+                    ) : (
+                        <span
+                            className="sync-pill"
+                            title="Local demo mode — set PUBLIC_POS_API_URL for production server"
+                        >
+                            Local demo
+                        </span>
+                    )}
                 </div>
                 <div className="top-actions">
+                    <NotificationCenter
+                        notifications={visibleNotifications}
+                        staffId={staff.id}
+                        open={notifOpen}
+                        onToggle={() => setNotifOpen((open) => !open)}
+                        onMarkRead={markNotifRead}
+                        onMarkAllRead={markAllNotifsRead}
+                    />
                     <div className="mode-toggle" role="group" aria-label="Workspace mode">
-                        <button
-                            type="button"
-                            className={view === 'service' ? 'active' : ''}
-                            onClick={() => setView('service')}
-                        >
-                            Service
-                        </button>
-                        <button
-                            type="button"
-                            className={view === 'admin' ? 'active' : ''}
-                            onClick={() => setView('admin')}
-                        >
-                            <Icon name="settings" /> Menu
-                        </button>
+                        {allowedViews.map((key) => (
+                            <button
+                                key={key}
+                                type="button"
+                                className={view === key ? 'active' : ''}
+                                onClick={() => setView(key)}
+                            >
+                                {key === 'kitchen' && <Icon name="chef" />}
+                                {key === 'reports' && <Icon name="chart" />}
+                                {key === 'admin' && <Icon name="settings" />}
+                                {key === 'users' && <Icon name="users" />}
+                                {VIEW_LABELS[key]}
+                            </button>
+                        ))}
                     </div>
-                    <div className="staff">
-                        <span className="avatar">AM</span>
+                    <button
+                        type="button"
+                        className="staff-chip"
+                        onClick={() => {
+                            setPendingManagerAction(null);
+                            setShowPinGate(true);
+                            setPinInput('');
+                            setPinError(null);
+                        }}
+                    >
+                        <span className="avatar">{staff.initials}</span>
                         <span>
-                            <strong>Alex Morgan</strong>
-                            <small>Server</small>
+                            <strong>{staff.name}</strong>
+                            <small>
+                                {ROLE_LABELS[staff.role]} · switch
+                            </small>
                         </span>
-                    </div>
+                    </button>
                 </div>
             </header>
 
-            <main className="workspace">
-                {view === 'service' ? (
-                    <section className="menu-panel">
-                        <div className="menu-heading">
-                            <div>
-                                <p className="eyebrow">Today’s menu</p>
-                                <h1>What would you like?</h1>
-                            </div>
-                            <label className="search">
-                                <Icon name="search" />
-                                <input
-                                    type="search"
-                                    value={search}
-                                    onChange={(event) => setSearch(event.target.value)}
-                                    placeholder="Search menu"
-                                    aria-label="Search menu"
-                                />
-                            </label>
-                        </div>
+            {readyBanner && (
+                <div className="ready-banner" role="status">
+                    <strong>{readyBanner}</strong>
+                </div>
+            )}
 
-                        <div className="categories" aria-label="Menu categories">
-                            {FILTERS.map((item) => (
-                                <button
-                                    key={item}
-                                    type="button"
-                                    className={category === item ? 'active' : ''}
-                                    onClick={() => setCategory(item)}
-                                >
-                                    {item}
-                                </button>
-                            ))}
-                        </div>
-
-                        <div className="menu-grid">
-                            {filteredItems.map((item) => {
-                                const quantity =
-                                    activeTable.lines.find((line) => line.menuItemId === item.id)?.quantity ??
-                                    0;
-                                return (
-                                    <article className="menu-card" key={item.id}>
-                                        <div className="food-image">
-                                            <img src={item.image} alt="" />
-                                            {item.popular && <span className="popular">Popular</span>}
-                                            {quantity > 0 && (
-                                                <span className="in-order">{quantity} in order</span>
-                                            )}
-                                        </div>
-                                        <div className="card-copy">
-                                            <p className="item-category">{item.category}</p>
-                                            <h2>{item.name}</h2>
-                                            <p className="description">{item.description}</p>
-                                            <div className="card-footer">
-                                                <strong>{money(item.priceCents)}</strong>
-                                                {isPaid ? (
-                                                    <span className="paid-lock">Paid</span>
-                                                ) : quantity === 0 ? (
-                                                    <button
-                                                        className="add-button"
-                                                        type="button"
-                                                        onClick={() => changeQuantity(item.id, 1)}
-                                                    >
-                                                        <span>+</span> Add
-                                                    </button>
-                                                ) : (
-                                                    <div
-                                                        className="stepper compact"
-                                                        aria-label={`${item.name} quantity`}
-                                                    >
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => changeQuantity(item.id, -1)}
-                                                            aria-label={`Remove one ${item.name}`}
-                                                        >
-                                                            −
-                                                        </button>
-                                                        <span>{quantity}</span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => changeQuantity(item.id, 1)}
-                                                            aria-label={`Add one ${item.name}`}
-                                                        >
-                                                            +
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </article>
-                                );
-                            })}
-                        </div>
-                        {filteredItems.length === 0 && (
-                            <p className="empty-menu">No dishes match your search.</p>
-                        )}
-                    </section>
-                ) : (
-                    <section className="menu-panel admin-panel">
-                        <div className="menu-heading">
-                            <div>
-                                <p className="eyebrow">Menu editor</p>
-                                <h1>Manage dishes</h1>
-                            </div>
-                        </div>
-
-                        <div className="admin-grid">
-                            <form
-                                className="admin-form"
-                                onSubmit={(event) => {
-                                    event.preventDefault();
-                                    saveMenuItem();
+            <main className={`workspace ${view !== 'service' ? 'wide-main' : ''}`}>
+                {view === 'service' && canAccessView(staff.role, 'service') && (
+                    <>
+                        <div className="service-sidebar-tools">
+                            <TableMap
+                                tables={state.tables}
+                                activeTableId={activeTable.id}
+                                onSelect={(tableId) => {
+                                    commit((current) => ({ ...current, activeTableId: tableId }));
+                                    setReceipt(null);
+                                    setGuestBillOpen(false);
                                 }}
-                            >
-                                <h2>{editingId ? 'Edit item' : 'Add item'}</h2>
-                                <label>
-                                    Name
-                                    <input
-                                        value={menuForm.name}
-                                        onChange={(event) =>
-                                            setMenuForm((current) => ({
-                                                ...current,
-                                                name: event.target.value,
-                                            }))
-                                        }
-                                        required
-                                    />
-                                </label>
-                                <label>
-                                    Description
-                                    <textarea
-                                        value={menuForm.description}
-                                        onChange={(event) =>
-                                            setMenuForm((current) => ({
-                                                ...current,
-                                                description: event.target.value,
-                                            }))
-                                        }
-                                        rows={3}
-                                    />
-                                </label>
-                                <div className="admin-row">
-                                    <label>
-                                        Category
-                                        <select
-                                            value={menuForm.category}
-                                            onChange={(event) =>
-                                                setMenuForm((current) => ({
-                                                    ...current,
-                                                    category: event.target.value as MenuCategory,
-                                                }))
-                                            }
-                                        >
-                                            {MENU_CATEGORIES.map((entry) => (
-                                                <option key={entry} value={entry}>
-                                                    {entry}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </label>
-                                    <label>
-                                        Price (USD)
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            value={(menuForm.priceCents / 100).toFixed(2)}
-                                            onChange={(event) =>
-                                                setMenuForm((current) => ({
-                                                    ...current,
-                                                    priceCents: Math.round(
-                                                        Number(event.target.value || 0) * 100,
-                                                    ),
-                                                }))
-                                            }
-                                            required
-                                        />
-                                    </label>
-                                </div>
-                                <label>
-                                    Image URL
-                                    <input
-                                        value={menuForm.image}
-                                        onChange={(event) =>
-                                            setMenuForm((current) => ({
-                                                ...current,
-                                                image: event.target.value,
-                                            }))
-                                        }
-                                    />
-                                </label>
-                                <label className="checkbox">
-                                    <input
-                                        type="checkbox"
-                                        checked={Boolean(menuForm.popular)}
-                                        onChange={(event) =>
-                                            setMenuForm((current) => ({
-                                                ...current,
-                                                popular: event.target.checked,
-                                            }))
-                                        }
-                                    />
-                                    Mark as popular
-                                </label>
-                                <div className="admin-actions">
-                                    <button className="generate-button" type="submit">
-                                        {editingId ? 'Save changes' : 'Add to menu'}
-                                    </button>
-                                    {editingId && (
-                                        <button
-                                            type="button"
-                                            className="secondary-button"
-                                            onClick={() => {
-                                                setEditingId(null);
-                                                setMenuForm(emptyMenuForm());
-                                            }}
-                                        >
-                                            Cancel
-                                        </button>
-                                    )}
-                                </div>
-                            </form>
-
-                            <div className="admin-list">
-                                <div className="table-manager">
-                                    <h2>Tables</h2>
-                                    <div className="admin-row">
-                                        <input
-                                            value={newTableLabel}
-                                            onChange={(event) => setNewTableLabel(event.target.value)}
-                                            placeholder="New table label"
-                                            aria-label="New table label"
-                                        />
-                                        <button type="button" className="secondary-button" onClick={addTable}>
-                                            <Icon name="plus" /> Add table
-                                        </button>
-                                    </div>
-                                    <ul className="table-list">
-                                        {state.tables.map((table) => (
-                                            <li key={table.id}>
-                                                <button
-                                                    type="button"
-                                                    className={
-                                                        table.id === activeTable.id ? 'active' : ''
-                                                    }
-                                                    onClick={() => switchTable(table.id)}
-                                                >
-                                                    <strong>{table.label}</strong>
-                                                    <span>{table.status}</span>
-                                                </button>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-
-                                <h2>Current menu</h2>
-                                {state.menu.map((item) => (
-                                    <div className="admin-item" key={item.id}>
-                                        <img src={item.image} alt="" />
-                                        <div>
-                                            <strong>{item.name}</strong>
-                                            <p>
-                                                {item.category} · {money(item.priceCents)}
-                                            </p>
-                                        </div>
-                                        <div className="admin-item-actions">
-                                            <button type="button" onClick={() => editMenuItem(item)}>
-                                                Edit
-                                            </button>
-                                            <button type="button" onClick={() => deleteMenuItem(item.id)}>
-                                                Delete
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+                            />
                         </div>
-                    </section>
+                        <ServiceMenu
+                            menu={state.menu}
+                            activeTable={activeTable}
+                            category={category}
+                            search={search}
+                            isPaid={isPaid || !canCreateOrders(staff.role)}
+                            flashLineIds={flashIds}
+                            onCategory={setCategory}
+                            onSearch={setSearch}
+                            onAdd={openModifierModal}
+                        />
+                    </>
                 )}
 
-                <aside className="order-panel">
-                    <div className="order-title">
-                        <div>
-                            <p className="eyebrow">Current order</p>
-                            <h2>{activeTable.label}</h2>
-                        </div>
-                        <button
-                            className="clear-button"
-                            type="button"
-                            onClick={clearOrder}
-                            disabled={!itemCount || isPaid}
-                            aria-label="Clear order"
-                        >
-                            <Icon name="trash" />
-                        </button>
-                    </div>
-                    <div className="order-meta">
-                        <span>
-                            <Icon name="clock" /> {isPaid ? 'Paid' : 'Dine in'}
-                        </span>
-                        <span>
-                            {itemCount} {itemCount === 1 ? 'item' : 'items'}
-                        </span>
-                    </div>
+                {view === 'kitchen' && canAccessView(staff.role, 'kitchen') && (
+                    <Suspense fallback={<ViewFallback />}>
+                        <KitchenBoard
+                            tables={state.tables}
+                            menuById={menuById}
+                            bumpAfterMinutes={state.settings.bumpAfterMinutes}
+                            canDeleteTickets={
+                                canDeleteTickets(staff.role) && staff.role !== 'kitchen'
+                            }
+                            onStatus={setKitchenStatus}
+                            onDeleteTicket={deleteKitchenTicket}
+                            onBump={bumpTicket}
+                            onRecall={recallTicket}
+                            onCourseFire={setCourseFireOnLine}
+                            onFireAllHeld={fireAllHeld}
+                        />
+                    </Suspense>
+                )}
 
-                    <div className="guest-bar">
-                        <div className="guest-bar-title">
-                            <Icon name="users" />
-                            <span>Split check</span>
-                        </div>
-                        <div className="guest-chips">
-                            {activeTable.guests.map((guest) => (
-                                <div className="guest-chip" key={guest.id}>
-                                    <input
-                                        value={guest.name}
-                                        onChange={(event) => renameGuest(guest.id, event.target.value)}
-                                        aria-label="Guest name"
-                                        disabled={isPaid}
-                                    />
-                                    {activeTable.guests.length > 1 && !isPaid && (
-                                        <button
-                                            type="button"
-                                            onClick={() => removeGuest(guest.id)}
-                                            aria-label={`Remove ${guest.name}`}
-                                        >
-                                            ×
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
-                            {!isPaid && (
-                                <button type="button" className="add-guest" onClick={addGuest}>
-                                    <Icon name="plus" /> Guest
-                                </button>
-                            )}
-                        </div>
-                    </div>
+                {view === 'reports' && canAccessView(staff.role, 'reports') && (
+                    <Suspense fallback={<ViewFallback />}>
+                        <SalesReport
+                            sales={todaySales}
+                            settings={state.settings}
+                            canDeletePayments={canDeletePayments(staff.role)}
+                            onExport={exportSales}
+                            onDeleteSale={deleteSale}
+                            onOpenShift={() =>
+                                commit((current) => ({
+                                    ...current,
+                                    settings: {
+                                        ...current.settings,
+                                        shiftOpenedAt: new Date().toISOString(),
+                                        shiftClosedAt: null,
+                                    },
+                                }))
+                            }
+                            onCloseShift={() =>
+                                commit((current) => ({
+                                    ...current,
+                                    settings: {
+                                        ...current.settings,
+                                        shiftClosedAt: new Date().toISOString(),
+                                    },
+                                }))
+                            }
+                        />
+                    </Suspense>
+                )}
 
-                    <div className="order-list">
-                        {activeTable.lines.length ? (
-                            activeTable.lines.map((line) => {
-                                const item = menuById.get(line.menuItemId);
-                                if (!item) return null;
-                                return (
-                                    <div className="order-item" key={line.menuItemId}>
-                                        <div className="order-item-top">
-                                            <div>
-                                                <h3>{item.name}</h3>
-                                                <p>{money(item.priceCents)} each</p>
-                                            </div>
-                                            <strong>{money(item.priceCents * line.quantity)}</strong>
-                                        </div>
-                                        <div className="order-item-controls">
-                                            <div
-                                                className="stepper"
-                                                aria-label={`${item.name} quantity`}
-                                            >
-                                                <button
-                                                    type="button"
-                                                    onClick={() => changeQuantity(item.id, -1)}
-                                                    disabled={isPaid}
-                                                    aria-label={`Remove one ${item.name}`}
-                                                >
-                                                    −
-                                                </button>
-                                                <span>{line.quantity}</span>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => changeQuantity(item.id, 1)}
-                                                    disabled={isPaid}
-                                                    aria-label={`Add one ${item.name}`}
-                                                >
-                                                    +
-                                                </button>
-                                            </div>
-                                            <label className="guest-assign">
-                                                <span className="sr-only">Assign guest</span>
-                                                <select
-                                                    value={line.guestId ?? ''}
-                                                    onChange={(event) =>
-                                                        assignGuest(item.id, event.target.value)
-                                                    }
-                                                    disabled={isPaid}
-                                                >
-                                                    {activeTable.guests.map((guest) => (
-                                                        <option key={guest.id} value={guest.id}>
-                                                            {guest.name}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </label>
-                                        </div>
-                                    </div>
-                                );
-                            })
-                        ) : (
-                            <div className="empty-order">
-                                <span>
-                                    <Icon name="receipt" />
-                                </span>
-                                <h3>{isPaid ? 'Ready for the next party' : 'Your order is empty'}</h3>
-                                <p>
-                                    {isPaid
-                                        ? 'Reopen this table to start a new bill.'
-                                        : 'Add a dish from the menu to begin.'}
-                                </p>
-                            </div>
-                        )}
-                    </div>
+                {view === 'users' && canManageUsers(staff.role) && (
+                    <Suspense fallback={<ViewFallback />}>
+                        <UsersPanel
+                            staff={state.staff}
+                            activeStaffId={staff.id}
+                            currentRole={staff.role}
+                            hidePins={serverMode}
+                            onCreate={({ name, role, pin }) => {
+                                if (!canManageUsers(staff.role)) return 'Not allowed.';
+                                const trimmedName = name.trim();
+                                const trimmedPin = pin.trim();
+                                if (trimmedName.length < 2) return 'Enter a full name.';
+                                if (!/^\d{4,8}$/.test(trimmedPin)) {
+                                    return 'PIN must be 4–8 digits.';
+                                }
+                                if (
+                                    !serverMode &&
+                                    state.staff.some((user) => user.pin === trimmedPin)
+                                ) {
+                                    return 'That PIN is already in use.';
+                                }
+                                if (role === 'manager' && staff.role !== 'manager') {
+                                    return 'Only a manager can create another manager.';
+                                }
+                                if (serverMode && posSession) {
+                                    void fetch(
+                                        `${(import.meta as ImportMeta & { env?: Record<string, string> }).env?.PUBLIC_POS_API_URL?.replace(/\/$/, '')}/pos/staff`,
+                                        {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                                Authorization: `Bearer ${posSession.token}`,
+                                            },
+                                            body: JSON.stringify({
+                                                name: trimmedName,
+                                                role,
+                                                pin: trimmedPin,
+                                                initials: trimmedName
+                                                    .split(/\s+/)
+                                                    .map((p) => p[0] ?? '')
+                                                    .join('')
+                                                    .slice(0, 3)
+                                                    .toUpperCase(),
+                                            }),
+                                        },
+                                    )
+                                        .then((res) => {
+                                            if (!res.ok) throw new Error('create failed');
+                                            return fetchPosState();
+                                        })
+                                        .then((remote) => {
+                                            setServerRevision(remote.revision);
+                                            setState(
+                                                touchState({
+                                                    ...remote.state,
+                                                    activeStaffId: staff.id,
+                                                }),
+                                            );
+                                        })
+                                        .catch(() =>
+                                            setShareFeedback('Could not create user on server.'),
+                                        );
+                                    return null;
+                                }
+                                const user = createStaffUser({
+                                    name: trimmedName,
+                                    role: role as StaffRole,
+                                    pin: trimmedPin,
+                                });
+                                setState((current) => ({
+                                    ...current,
+                                    staff: [...current.staff, user],
+                                }));
+                                return null;
+                            }}
+                            onDelete={(id) => {
+                                if (id === staff.id) return 'Cannot delete the signed-in user.';
+                                const target = state.staff.find((user) => user.id === id);
+                                if (!target) return 'User not found.';
+                                if (target.role === 'manager' && staff.role !== 'manager') {
+                                    return 'Only a manager can delete a manager.';
+                                }
+                                if (state.staff.length <= 1) return 'At least one user is required.';
+                                setState((current) => ({
+                                    ...current,
+                                    staff: current.staff.filter((user) => user.id !== id),
+                                }));
+                                return null;
+                            }}
+                            onSwitchUser={switchStaff}
+                        />
+                    </Suspense>
+                )}
 
-                    <div className="billing-controls">
-                        <div className="tip-presets" role="group" aria-label="Tip presets">
-                            {TIP_PRESETS.map((preset) => (
-                                <button
-                                    key={preset}
-                                    type="button"
-                                    className={activeTable.tipPreset === preset ? 'active' : ''}
-                                    onClick={() => setTipPreset(preset)}
-                                    disabled={isPaid}
-                                >
-                                    {preset}%
-                                </button>
-                            ))}
-                            <button
-                                type="button"
-                                className={activeTable.tipPreset === 'custom' ? 'active' : ''}
-                                onClick={() => setTipPreset('custom')}
-                                disabled={isPaid}
-                            >
-                                Custom
-                            </button>
-                        </div>
-                        {activeTable.tipPreset === 'custom' && (
-                            <label className="custom-tip">
-                                Custom tip %
-                                <input
-                                    type="number"
-                                    min="0"
-                                    step="0.5"
-                                    value={activeTable.tipCustomPercent}
-                                    disabled={isPaid}
-                                    onChange={(event) =>
-                                        updateActiveTable((table) => ({
+                {view === 'admin' && canManageMenu(staff.role) && (
+                    <Suspense fallback={<ViewFallback />}>
+                        <AdminPanel
+                            menu={state.menu}
+                            tables={state.tables}
+                            activeTableId={activeTable.id}
+                            menuForm={menuForm}
+                            editingId={editingId}
+                            newTableLabel={newTableLabel}
+                            settings={state.settings}
+                            auditLog={state.auditLog}
+                            onFormChange={setMenuForm}
+                            onSettingsChange={(patch: Partial<PosSettings>) => {
+                                commit((current) => ({
+                                    ...current,
+                                    settings: { ...current.settings, ...patch },
+                                }));
+                                if (typeof patch.xcgPerUsd === 'number') {
+                                    setActiveXcgRate(patch.xcgPerUsd);
+                                }
+                            }}
+                            onSaveItem={() => {
+                                if (!menuForm.name.trim() || menuForm.priceCents < 0) return;
+                                if (editingId) {
+                                    setState((current) => ({
+                                        ...current,
+                                        menu: current.menu.map((item) =>
+                                            item.id === editingId
+                                                ? {
+                                                      ...item,
+                                                      ...menuForm,
+                                                      name: menuForm.name.trim(),
+                                                      description: menuForm.description.trim(),
+                                                  }
+                                                : item,
+                                        ),
+                                    }));
+                                } else {
+                                    setState((current) => ({
+                                        ...current,
+                                        menu: [
+                                            ...current.menu,
+                                            {
+                                                id: createId('menu'),
+                                                ...menuForm,
+                                                name: menuForm.name.trim(),
+                                                description: menuForm.description.trim(),
+                                            },
+                                        ],
+                                    }));
+                                }
+                                setMenuForm(emptyMenuForm());
+                                setEditingId(null);
+                            }}
+                            onCancelEdit={() => {
+                                setEditingId(null);
+                                setMenuForm(emptyMenuForm());
+                            }}
+                            onEditItem={(item) => {
+                                setEditingId(item.id);
+                                setMenuForm({
+                                    name: item.name,
+                                    description: item.description,
+                                    category: item.category,
+                                    priceCents: item.priceCents,
+                                    image: item.image,
+                                    popular: Boolean(item.popular),
+                                    modifierGroups: item.modifierGroups,
+                                });
+                            }}
+                            onDeleteItem={(id) => {
+                                const remove = () => {
+                                    setState((current) => ({
+                                        ...current,
+                                        menu: current.menu.filter((item) => item.id !== id),
+                                        tables: current.tables.map((table) => ({
                                             ...table,
-                                            tipCustomPercent: Number(event.target.value || 0),
-                                            billGeneratedAt: null,
-                                        }))
+                                            lines: table.lines.filter(
+                                                (line) => line.menuItemId !== id,
+                                            ),
+                                        })),
+                                    }));
+                                    if (editingId === id) {
+                                        setEditingId(null);
+                                        setMenuForm(emptyMenuForm());
                                     }
-                                />
-                            </label>
-                        )}
-                        <label className="tax-toggle">
-                            <input
-                                type="checkbox"
-                                checked={activeTable.taxEnabled}
-                                disabled={isPaid}
-                                onChange={(event) =>
+                                };
+                                if (canDeleteMenuItems(staff.role)) remove();
+                                else requireManager(remove);
+                            }}
+                            onNewTableLabel={setNewTableLabel}
+                            onAddTable={() => {
+                                const label =
+                                    newTableLabel.trim() || `Table ${state.tables.length + 1}`;
+                                const table = createTable(
+                                    label,
+                                    state.settings.defaultServiceChargePercent,
+                                );
+                                setState((current) => ({
+                                    ...current,
+                                    tables: [...current.tables, table],
+                                    activeTableId: table.id,
+                                }));
+                                setNewTableLabel('');
+                            }}
+                            onSwitchTable={(tableId) => {
+                                setState((current) => ({ ...current, activeTableId: tableId }));
+                                setReceipt(null);
+                                setGuestBillOpen(false);
+                            }}
+                        />
+                    </Suspense>
+                )}
+
+                {view === 'service' && canAccessView(staff.role, 'service') && (
+                    <OrderPanel
+                        activeTable={activeTable}
+                        menuById={menuById}
+                        bill={bill}
+                        itemCount={itemCount}
+                        draftCount={draftCount}
+                        isPaid={isPaid}
+                        isPartial={isPartial}
+                        shareFeedback={shareFeedback}
+                        canClear={canClearOrder(staff.role)}
+                        canSendKitchen={canSendToKitchen(staff.role)}
+                        canGenerateBill={canGenerateBill(staff.role)}
+                        canTakePayment={canTakePayment(staff.role)}
+                        canReopen={canReopenTable(staff.role)}
+                        canDeleteTickets={canDeleteTickets(staff.role)}
+                        canUpdateBeverageStatus={canUpdateBeverageStatus(staff.role)}
+                        flashLineIds={flashIds}
+                        onClear={() => {
+                            if (!canClearOrder(staff.role)) {
+                                requireManager(() =>
                                     updateActiveTable((table) => ({
                                         ...table,
-                                        taxEnabled: event.target.checked,
+                                        lines: [],
+                                        status: 'open',
                                         billGeneratedAt: null,
-                                    }))
-                                }
-                            />
-                            Apply tax
-                            <input
-                                className="tax-input"
-                                type="number"
-                                min="0"
-                                step="0.1"
-                                value={activeTable.taxPercent}
-                                disabled={isPaid || !activeTable.taxEnabled}
-                                onChange={(event) =>
-                                    updateActiveTable((table) => ({
-                                        ...table,
-                                        taxPercent: Number(event.target.value || 0),
-                                        billGeneratedAt: null,
-                                    }))
-                                }
-                                aria-label="Tax percent"
-                            />
-                            %
-                        </label>
-                    </div>
-
-                    <div className="bill-summary">
-                        <div>
-                            <span>Subtotal</span>
-                            <strong>{money(bill.subtotalCents)}</strong>
-                        </div>
-                        <div>
-                            <span>
-                                Tax
-                                {activeTable.taxEnabled ? ` (${activeTable.taxPercent}%)` : ''}
-                            </span>
-                            <strong>
-                                {activeTable.taxEnabled ? money(bill.taxCents) : '—'}
-                            </strong>
-                        </div>
-                        <div>
-                            <span>Tip ({tipLabel(activeTable.tipPreset, activeTable.tipCustomPercent)})</span>
-                            <strong>{money(bill.tipCents)}</strong>
-                        </div>
-                        <div className="total">
-                            <span>Total</span>
-                            <strong>{money(bill.totalCents)}</strong>
-                        </div>
-                        {bill.guestBreakdown.filter((guest) => guest.subtotalCents > 0).length > 1 && (
-                            <div className="guest-totals">
-                                {bill.guestBreakdown
-                                    .filter((guest) => guest.subtotalCents > 0)
-                                    .map((guest) => (
-                                        <div key={guest.name}>
-                                            <span>{guest.name}</span>
-                                            <strong>{money(guest.totalCents)}</strong>
-                                        </div>
-                                    ))}
-                            </div>
-                        )}
-                    </div>
-
-                    {!isPaid ? (
-                        <>
-                            <button
-                                className={`generate-button ${activeTable.billGeneratedAt ? 'ready' : ''}`}
-                                type="button"
-                                disabled={!itemCount}
-                                onClick={generateBill}
-                            >
-                                <Icon name={activeTable.billGeneratedAt ? 'check' : 'receipt'} />
-                                {activeTable.billGeneratedAt ? 'View receipt' : 'Generate bill'}
-                                {!activeTable.billGeneratedAt && <span>{money(bill.totalCents)}</span>}
-                            </button>
-                            <div className="secondary-actions">
-                                <button
-                                    type="button"
-                                    className="secondary-button"
-                                    disabled={!itemCount}
-                                    onClick={shareFromToolbar}
-                                >
-                                    <Icon name="share" /> Share
-                                </button>
-                                <button
-                                    type="button"
-                                    className="secondary-button paid-button"
-                                    disabled={!itemCount}
-                                    onClick={markPaid}
-                                >
-                                    <Icon name="check" /> Mark paid
-                                </button>
-                            </div>
-                        </>
-                    ) : (
-                        <>
-                            <button className="generate-button ready" type="button" onClick={() => setReceipt(buildSnapshot(activeTable, state.menu))}>
-                                <Icon name="receipt" /> View paid receipt
-                            </button>
-                            <button type="button" className="secondary-button" onClick={reopenTable}>
-                                Reopen table
-                            </button>
-                        </>
-                    )}
-                    {shareFeedback && (
-                        <div className="bill-message" role="status">
-                            <strong>{shareFeedback}</strong>
-                        </div>
-                    )}
-                </aside>
+                                        guestBillApprovedAt: null,
+                                        guestSignatureDataUrl: null,
+                                        guestPreferredPayment: null,
+                                        guests: table.guests.map((guest) => ({
+                                            ...guest,
+                                            paidAt: null,
+                                            payment: null,
+                                        })),
+                                    })),
+                                );
+                                return;
+                            }
+                            updateActiveTable((table) => ({
+                                ...table,
+                                lines: [],
+                                status: 'open',
+                                billGeneratedAt: null,
+                                guestBillApprovedAt: null,
+                                guestSignatureDataUrl: null,
+                                guestPreferredPayment: null,
+                                guests: table.guests.map((guest) => ({
+                                    ...guest,
+                                    paidAt: null,
+                                    payment: null,
+                                })),
+                            }));
+                        }}
+                        onAddGuest={() => {
+                            if (isPaid) return;
+                            updateActiveTable((table) => ({
+                                ...table,
+                                guests: [
+                                    ...table.guests,
+                                    {
+                                        id: createId('guest'),
+                                        name: `Guest ${table.guests.length + 1}`,
+                                        paidAt: null,
+                                        payment: null,
+                                    },
+                                ],
+                            }));
+                        }}
+                        onRenameGuest={(guestId, name) =>
+                            updateActiveTable((table) => ({
+                                ...table,
+                                guests: table.guests.map((guest) =>
+                                    guest.id === guestId ? { ...guest, name } : guest,
+                                ),
+                            }))
+                        }
+                        onRemoveGuest={(guestId) => {
+                            if (isPaid) return;
+                            updateActiveTable((table) => {
+                                if (table.guests.length <= 1) return table;
+                                const target = table.guests.find((guest) => guest.id === guestId);
+                                if (target?.paidAt) return table;
+                                const fallback =
+                                    table.guests.find((guest) => guest.id !== guestId)?.id ?? null;
+                                return {
+                                    ...table,
+                                    guests: table.guests.filter((guest) => guest.id !== guestId),
+                                    lines: table.lines.map((line) =>
+                                        line.guestId === guestId
+                                            ? { ...line, guestId: fallback }
+                                            : line,
+                                    ),
+                                    billGeneratedAt: null,
+                                };
+                            });
+                        }}
+                        onChangeQuantity={changeQuantity}
+                        onDeleteLine={deleteLine}
+                        onBeverageStatus={setBeverageStatus}
+                        onAssignGuest={(lineId, guestId) => {
+                            if (isPaid) return;
+                            updateActiveTable((table) => ({
+                                ...table,
+                                billGeneratedAt: null,
+                                lines: table.lines.map((line) =>
+                                    line.id === lineId ? { ...line, guestId } : line,
+                                ),
+                            }));
+                        }}
+                        onCourseFire={(lineId, courseFire) => {
+                            if (isPaid) return;
+                            updateActiveTable((table) => setLineCourseFire(table, lineId, courseFire));
+                        }}
+                        onTipPreset={(preset: TipAmountPreset) => {
+                            if (isPaid) return;
+                            updateActiveTable((table) => ({
+                                ...table,
+                                tipAmountPreset: preset,
+                                tipCents: preset === 'custom' ? table.tipCents : preset,
+                                billGeneratedAt: null,
+                                guestBillApprovedAt: null,
+                            }));
+                        }}
+                        onCustomTipDollars={(value) =>
+                            updateActiveTable((table) => ({
+                                ...table,
+                                tipAmountPreset: 'custom',
+                                tipCents: Math.max(0, Math.round(value * 100)),
+                                billGeneratedAt: null,
+                                guestBillApprovedAt: null,
+                            }))
+                        }
+                        onServiceChargeEnabled={(enabled) =>
+                            updateActiveTable((table) => ({
+                                ...table,
+                                serviceChargeEnabled: enabled,
+                                billGeneratedAt: null,
+                                guestBillApprovedAt: null,
+                            }))
+                        }
+                        onServiceChargePercent={(value) =>
+                            updateActiveTable((table) => ({
+                                ...table,
+                                serviceChargePercent: value,
+                                billGeneratedAt: null,
+                                guestBillApprovedAt: null,
+                            }))
+                        }
+                        onSendKitchen={sendToKitchen}
+                        onGenerateBill={() => {
+                            if (!canGenerateBill(staff.role)) return;
+                            generateBill();
+                        }}
+                        onGuestBill={openGuestBill}
+                        onTakePayment={() => {
+                            if (!canTakePayment(staff.role)) return;
+                            openPayment();
+                        }}
+                        onViewPaidReceipt={() => {
+                            setReceiptTemplate('paid');
+                            setReceipt(
+                                buildSnapshot(
+                                    activeTable,
+                                    state.menu,
+                                    state.restaurant,
+                                    staff.name,
+                                    'paid',
+                                ),
+                            );
+                        }}
+                        onReopen={() => {
+                            const reopen = () =>
+                                updateActiveTable((table) => ({
+                                    ...table,
+                                    status: 'open',
+                                    paidAt: null,
+                                    payment: null,
+                                    billGeneratedAt: null,
+                                    guestBillApprovedAt: null,
+                                    guestSignatureDataUrl: null,
+                                    guestPreferredPayment: null,
+                                    guests: table.guests.map((guest) => ({
+                                        ...guest,
+                                        paidAt: null,
+                                        payment: null,
+                                    })),
+                                    lines: [],
+                                }));
+                            if (!canReopenTable(staff.role)) {
+                                requireManager(reopen);
+                                return;
+                            }
+                            reopen();
+                        }}
+                    />
+                )}
             </main>
+
+            {modifierItem && (
+                <ModifierModal
+                    item={modifierItem}
+                    selectedMods={selectedMods}
+                    lineNote={lineNote}
+                    onToggleMod={toggleMod}
+                    onNote={setLineNote}
+                    onConfirm={confirmAddItem}
+                    onCancel={cancelAddOrder}
+                />
+            )}
+
+            {guestBillOpen && (
+                <GuestBillModal
+                    snapshot={guestBillSnapshot}
+                    preferredPayment={activeTable.guestPreferredPayment}
+                    signatureDataUrl={activeTable.guestSignatureDataUrl}
+                    onPreferredPayment={(method) =>
+                        updateActiveTable((table) => ({
+                            ...table,
+                            guestPreferredPayment: method,
+                        }))
+                    }
+                    onSignature={(dataUrl) =>
+                        updateActiveTable((table) => ({
+                            ...table,
+                            guestSignatureDataUrl: dataUrl,
+                        }))
+                    }
+                    onApproveAndCollect={() => {
+                        const method = activeTable.guestPreferredPayment;
+                        if (!method) {
+                            setShareFeedback('Tick a payment option and sign before collecting.');
+                            return;
+                        }
+                        updateActiveTable((table) => ({
+                            ...table,
+                            guestBillApprovedAt: new Date().toISOString(),
+                            guestPreferredPayment: method,
+                            billGeneratedAt: table.billGeneratedAt ?? new Date().toISOString(),
+                        }));
+                        setGuestBillOpen(false);
+                        const unpaid = bill.guestBreakdown.filter(
+                            (guest) => guest.totalCents > 0 && !guest.paidAt,
+                        );
+                        const defaultGuest = unpaid.length > 1 ? unpaid[0].id : null;
+                        setPayGuestId(defaultGuest);
+                        setPayMethod(method);
+                        setTenderCurrency('USD');
+                        const due =
+                            defaultGuest == null
+                                ? bill.totalCents
+                                : unpaid.find((guest) => guest.id === defaultGuest)?.totalCents ??
+                                  bill.totalCents;
+                        fillPaymentDefaults('USD', due);
+                        setPaymentOpen(true);
+                        setShareFeedback('Guest approved the bill. Collect payment.');
+                    }}
+                    onCancel={() => {
+                        setGuestBillOpen(false);
+                        setShareFeedback('Guest bill review cancelled.');
+                    }}
+                />
+            )}
+
+            {paymentOpen && (
+                <PaymentModal
+                    totalCents={paymentTotalCents}
+                    payMethod={payMethod}
+                    tenderCurrency={tenderCurrency}
+                    cashInput={cashInput}
+                    cardInput={cardInput}
+                    preferredMethod={activeTable.guestPreferredPayment}
+                    guests={bill.guestBreakdown.map((guest) => ({
+                        id: guest.id,
+                        name: guest.name,
+                        totalCents: guest.totalCents,
+                        paidAt: guest.paidAt,
+                    }))}
+                    selectedGuestId={payGuestId}
+                    onSelectGuest={(guestId) => {
+                        setPayGuestId(guestId);
+                        const due =
+                            guestId == null
+                                ? bill.totalCents
+                                : bill.guestBreakdown.find((guest) => guest.id === guestId)
+                                      ?.totalCents ?? bill.totalCents;
+                        fillPaymentDefaults(tenderCurrency, due);
+                    }}
+                    onMethod={setPayMethod}
+                    onCurrency={(currency) => {
+                        setTenderCurrency(currency);
+                        fillPaymentDefaults(currency, paymentTotalCents);
+                    }}
+                    onCashInput={setCashInput}
+                    onCardInput={setCardInput}
+                    onComplete={completePayment}
+                    onCancel={cancelPayment}
+                />
+            )}
+
+            {voidPending && (
+                <VoidReasonModal
+                    title={voidPending.title}
+                    details={voidPending.details}
+                    onConfirm={confirmVoid}
+                    onCancel={() => setVoidPending(null)}
+                />
+            )}
+
+            {showPinGate && (
+                <PinGate
+                    pinInput={pinInput}
+                    pinError={pinError}
+                    helpText={
+                        serverMode
+                            ? 'Enter your staff PIN to sign in to the POS server.'
+                            : 'Enter your staff PIN to switch users or authorize a manager action.'
+                    }
+                    demoCredentials={
+                        serverMode
+                            ? 'Server mode: PINs are hashed on the API. Demo seeds: server 1234 · kitchen 2222 · admin 5555 · manager 9999 — change these before go-live.'
+                            : roleHelpText(state.staff)
+                    }
+                    onPinInput={setPinInput}
+                    onSubmit={submitPin}
+                    onClose={() => {
+                        if (serverMode && !posSession) return;
+                        setShowPinGate(false);
+                        setPendingManagerAction(null);
+                    }}
+                />
+            )}
 
             {receipt && (
                 <ReceiptView
                     snapshot={receipt}
                     shareFeedback={shareFeedback}
                     onShareFeedback={setShareFeedback}
+                    onTemplateChange={(template) => {
+                        setReceiptTemplate(template);
+                        setReceipt(
+                            buildSnapshot(
+                                activeTable,
+                                state.menu,
+                                state.restaurant,
+                                staff.name,
+                                template,
+                            ),
+                        );
+                    }}
                     onClose={() => {
                         setReceipt(null);
                         setShareFeedback(null);
                         if (window.location.hash.startsWith('#bill=')) {
-                            history.replaceState(null, '', window.location.pathname);
+                            history.replaceState(
+                                null,
+                                '',
+                                `${window.location.pathname}${window.location.search}`,
+                            );
                         }
                     }}
                 />
