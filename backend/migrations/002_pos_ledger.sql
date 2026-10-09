@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS pos_staff (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
-    role VARCHAR(50) NOT NULL CHECK (role IN ('kitchen', 'server', 'admin', 'manager')),
+    role VARCHAR(50) NOT NULL CHECK (role IN ('kitchen', 'bartender', 'server', 'admin', 'manager')),
     initials VARCHAR(8) NOT NULL,
     pin_hash TEXT NOT NULL,
     active BOOLEAN NOT NULL DEFAULT TRUE,

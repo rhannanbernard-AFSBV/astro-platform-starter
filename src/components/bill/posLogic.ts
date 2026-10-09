@@ -181,6 +181,20 @@ export function canGuestTakePayment(table: TableOrder): boolean {
     return Boolean(table.guestBillApprovedAt && table.guestPreferredPayment);
 }
 
+/** Payments allowed when shift never used, or currently open. */
+export function isShiftAcceptingPayments(settings: {
+    shiftOpenedAt: string | null;
+    shiftClosedAt: string | null;
+}): boolean {
+    if (!settings.shiftOpenedAt && !settings.shiftClosedAt) return true;
+    return Boolean(settings.shiftOpenedAt && !settings.shiftClosedAt);
+}
+
+/** Paid or empty bar tabs can be closed without wiping the sales ledger. */
+export function canCloseBarTabCheck(table: TableOrder): boolean {
+    return table.checkKind === 'bar_tab' && (table.status === 'paid' || table.lines.length === 0);
+}
+
 export function nextBeverageStatus(status: KitchenStatus): KitchenStatus | null {
     if (status === 'queued') return 'preparing';
     if (status === 'preparing') return 'ready';

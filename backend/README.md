@@ -44,12 +44,13 @@ PUBLIC_POS_API_URL=http://localhost:8000
 
 Then `npm run dev`. Staff must PIN-login against the API. Demo seed PINs:
 
-| Role    | PIN  |
-|---------|------|
-| Server  | 1234 |
-| Kitchen | 2222 |
-| Admin   | 5555 |
-| Manager | 9999 |
+| Role      | PIN  |
+|-----------|------|
+| Server    | 1234 |
+| Kitchen   | 2222 |
+| Bartender | 3333 |
+| Admin     | 5555 |
+| Manager   | 9999 |
 
 **With `POS_FORCE_PIN_CHANGE=1` (Docker default) the UI blocks the floor until each user sets a private PIN.** Rate limits lock an IP after repeated failures; idle sessions revoke server-side and the SPA locks the station.
 

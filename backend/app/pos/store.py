@@ -367,7 +367,7 @@ def change_staff_pin(
     if current_pin == new_pin:
         raise ValueError("New PIN must differ from the current PIN")
     # Block well-known demo PINs after rotation so pilots are not left on defaults
-    demo_pins = {"1234", "2222", "5555", "9999"}
+    demo_pins = {"1234", "2222", "3333", "5555", "9999"}
     if new_pin in demo_pins:
         raise ValueError("Choose a PIN that is not a published demo default")
     with _lock, connect() as conn:

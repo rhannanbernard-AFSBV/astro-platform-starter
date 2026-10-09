@@ -21,6 +21,7 @@ import {
     salesForDay,
     salesToCsv,
     setActiveXcgRate,
+    summarizeSales,
     usdCentsToXcgCents,
 } from './bill/math';
 import ModifierModal from './bill/ModifierModal';
@@ -41,6 +42,7 @@ import {
     canGuestTakePayment,
     drinkDraftLineIds,
     fireHeldLines,
+    isShiftAcceptingPayments,
     parseStationParam,
     recallKitchenLine,
     setLineCourseFire,
@@ -774,6 +776,48 @@ export default function RestaurantBillGenerator() {
         setShareFeedback(`Bar tab opened for ${guestName.trim()}.`);
     };
 
+    const renameBarTab = (tableId: string, guestName: string) => {
+        if (!canOpenBarTab(staff.role)) return;
+        const name = guestName.trim();
+        if (!name) return;
+        commit((current) => ({
+            ...current,
+            tables: current.tables.map((table) => {
+                if (table.id !== tableId || table.checkKind !== 'bar_tab') return table;
+                const primaryId = table.guests[0]?.id;
+                return {
+                    ...table,
+                    label: `Tab · ${name}`,
+                    guests: table.guests.map((guest, index) =>
+                        index === 0 || guest.id === primaryId ? { ...guest, name } : guest,
+                    ),
+                };
+            }),
+        }));
+        setShareFeedback(`Bar tab renamed to ${name}.`);
+    };
+
+    const closeBarTab = (tableId: string) => {
+        if (!canOpenBarTab(staff.role)) return;
+        const tab = state.tables.find((table) => table.id === tableId);
+        if (!tab || tab.checkKind !== 'bar_tab') return;
+        if (tab.status !== 'paid' && tab.lines.length > 0) {
+            setShareFeedback('Settle or clear the tab before closing it.');
+            return;
+        }
+        commit((current) => {
+            const remaining = current.tables.filter((table) => table.id !== tableId);
+            const nextActive =
+                current.activeTableId === tableId
+                    ? remaining[0]?.id ?? current.activeTableId
+                    : current.activeTableId;
+            return { ...current, tables: remaining, activeTableId: nextActive };
+        });
+        setShareFeedback(`${tab.label} closed.`);
+    };
+
+    const shiftAcceptsPayments = isShiftAcceptingPayments(state.settings);
+
     const toggleEightySix = (menuItemId: string) => {
         if (!canEightySix(staff.role)) {
             setShareFeedback('Kitchen, bartender, or manager can 86 items.');
@@ -1080,6 +1124,10 @@ export default function RestaurantBillGenerator() {
 
     const openGuestBill = () => {
         if (!itemCount || isPaid || !canTakePayment(staff.role)) return;
+        if (!shiftAcceptsPayments) {
+            setShareFeedback('Shift is closed — open a shift on Sales before taking payment.');
+            return;
+        }
         const generatedAt = activeTable.billGeneratedAt ?? new Date().toISOString();
         updateActiveTable((table) => ({
             ...table,
@@ -1095,6 +1143,10 @@ export default function RestaurantBillGenerator() {
 
     const openPayment = () => {
         if (!itemCount || isPaid) return;
+        if (!shiftAcceptsPayments) {
+            setShareFeedback('Shift is closed — open a shift on Sales before taking payment.');
+            return;
+        }
         if (!canGuestTakePayment(activeTable)) {
             setShareFeedback('Guest must review, sign, and tick a payment option first.');
             openGuestBill();
@@ -1122,6 +1174,10 @@ export default function RestaurantBillGenerator() {
     };
 
     const completePayment = () => {
+        if (!shiftAcceptsPayments) {
+            setShareFeedback('Shift is closed — open a shift on Sales before taking payment.');
+            return;
+        }
         const dueCents = paymentTotalCents;
         const { cashCents, cardCents } = paymentInputsToUsd(
             payMethod,
@@ -1543,12 +1599,15 @@ export default function RestaurantBillGenerator() {
                                 tables={state.tables}
                                 activeTableId={activeTable.id}
                                 canOpenBarTab={canOpenBarTab(staff.role)}
+                                canCloseBarTab={canOpenBarTab(staff.role)}
                                 onSelect={(tableId) => {
                                     commit((current) => ({ ...current, activeTableId: tableId }));
                                     setReceipt(null);
                                     setGuestBillOpen(false);
                                 }}
                                 onOpenBarTab={openBarTab}
+                                onCloseBarTab={closeBarTab}
+                                onRenameBarTab={renameBarTab}
                             />
                         </div>
                         <ServiceMenu
@@ -1634,15 +1693,21 @@ export default function RestaurantBillGenerator() {
                                     },
                                 }))
                             }
-                            onCloseShift={() =>
+                            onCloseShift={() => {
+                                const summary = summarizeSales(todaySales);
+                                const ok = window.confirm(
+                                    `Close shift?\n\nChecks: ${summary.count}\nSales: ${formatDual(summary.totalCents)}\nTips: ${formatDual(summary.tipCents)}\nComps: ${formatDual(summary.compCents)}\n\nPayments stay blocked until a new shift is opened.`,
+                                );
+                                if (!ok) return;
                                 commit((current) => ({
                                     ...current,
                                     settings: {
                                         ...current.settings,
                                         shiftClosedAt: new Date().toISOString(),
                                     },
-                                }))
-                            }
+                                }));
+                                setShareFeedback('Shift closed — open a new shift before taking payments.');
+                            }}
                         />
                     </Suspense>
                 )}
@@ -1987,12 +2052,21 @@ export default function RestaurantBillGenerator() {
                             }));
                         }}
                         onRenameGuest={(guestId, name) =>
-                            updateActiveTable((table) => ({
-                                ...table,
-                                guests: table.guests.map((guest) =>
-                                    guest.id === guestId ? { ...guest, name } : guest,
-                                ),
-                            }))
+                            updateActiveTable((table) => {
+                                const trimmed = name.trim() || 'Guest';
+                                const guests = table.guests.map((guest) =>
+                                    guest.id === guestId ? { ...guest, name: trimmed } : guest,
+                                );
+                                const isPrimary = table.guests[0]?.id === guestId;
+                                if (table.checkKind === 'bar_tab' && isPrimary) {
+                                    return {
+                                        ...table,
+                                        guests,
+                                        label: `Tab · ${trimmed}`,
+                                    };
+                                }
+                                return { ...table, guests };
+                            })
                         }
                         onRemoveGuest={(guestId) => {
                             if (isPaid) return;
@@ -2153,6 +2227,12 @@ export default function RestaurantBillGenerator() {
                             setShareFeedback('Tick a payment option and sign before collecting.');
                             return;
                         }
+                        if (!shiftAcceptsPayments) {
+                            setShareFeedback(
+                                'Shift is closed — open a shift on Sales before taking payment.',
+                            );
+                            return;
+                        }
                         updateActiveTable((table) => ({
                             ...table,
                             guestBillApprovedAt: new Date().toISOString(),
@@ -2257,7 +2337,7 @@ export default function RestaurantBillGenerator() {
                         hideDemoCredentials
                             ? undefined
                             : serverMode
-                              ? 'Server mode: PINs are hashed on the API. Demo seeds: server 1234 · kitchen 2222 · admin 5555 · manager 9999 — change these before go-live.'
+                              ? 'Server mode: PINs are hashed on the API. Demo seeds: server 1234 · kitchen 2222 · bartender 3333 · admin 5555 · manager 9999 — change these before go-live.'
                               : roleHelpText(state.staff)
                     }
                     onPinInput={setPinInput}

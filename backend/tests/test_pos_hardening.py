@@ -99,6 +99,12 @@ def test_change_pin_clears_gate_and_rejects_demo_defaults(client: TestClient):
         json={"currentPin": "9999", "newPin": "1234"},
     )
     assert bad.status_code == 400
+    bad_bartender = client.post(
+        "/pos/auth/change-pin",
+        headers=headers,
+        json={"currentPin": "9999", "newPin": "3333"},
+    )
+    assert bad_bartender.status_code == 400
     ok = client.post(
         "/pos/auth/change-pin",
         headers=headers,

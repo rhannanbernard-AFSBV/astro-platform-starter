@@ -121,6 +121,66 @@ def test_sales_are_immutable_void_only(client: TestClient):
     assert all(s["id"] != "sale_test_1" for s in state["sales"])
 
 
+def test_bartender_can_post_sale(client: TestClient):
+    token = _login(client, "3333")
+    headers = {"Authorization": f"Bearer {token}"}
+    sale = {
+        "id": "sale_bar_1",
+        "tableId": "tab1",
+        "tableLabel": "Tab · Guest",
+        "paidAt": "2026-10-09T01:00:00+00:00",
+        "subtotalCents": 900,
+        "serviceChargeCents": 45,
+        "tipCents": 200,
+        "totalCents": 1145,
+        "compCents": 0,
+        "payment": {
+            "method": "cash",
+            "cashCents": 1200,
+            "cardCents": 0,
+            "changeDueCents": 55,
+            "paidAt": "2026-10-09T01:00:00+00:00",
+        },
+        "serverName": "Morgan Rum",
+        "itemCount": 1,
+        "orderNumbers": ["ORD-20261009-0001"],
+        "guestName": "Guest",
+        "guestId": None,
+    }
+    res = client.post("/pos/sales", headers=headers, json={"sale": sale})
+    assert res.status_code == 200, res.text
+    assert res.json()["sale"]["id"] == "sale_bar_1"
+
+
+def test_kitchen_cannot_post_sale(client: TestClient):
+    token = _login(client, "2222")
+    headers = {"Authorization": f"Bearer {token}"}
+    sale = {
+        "id": "sale_kitchen_blocked",
+        "tableId": "t1",
+        "tableLabel": "Table 12",
+        "paidAt": "2026-10-09T01:00:00+00:00",
+        "subtotalCents": 100,
+        "serviceChargeCents": 0,
+        "tipCents": 0,
+        "totalCents": 100,
+        "payment": {
+            "method": "cash",
+            "cashCents": 100,
+            "cardCents": 0,
+            "changeDueCents": 0,
+            "paidAt": "2026-10-09T01:00:00+00:00",
+        },
+        "serverName": "Casey",
+        "itemCount": 1,
+        "orderNumbers": [],
+        "guestName": None,
+        "guestId": None,
+    }
+    res = client.post("/pos/sales", headers=headers, json={"sale": sale})
+    assert res.status_code == 403
+
+
 def test_optimistic_concurrency(client: TestClient):
     token = _login(client, "9999")
     headers = {"Authorization": f"Bearer {token}"}

@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { createDefaultState, createId } from './defaults';
+import { createBarTab, createDefaultState, createId } from './defaults';
 import {
     allGuestsPaid,
     applySendDrinksToBar,
     applySendFoodToKitchen,
     bumpKitchenLine,
+    canCloseBarTabCheck,
     canGuestTakePayment,
     drinkDraftLineIds,
     foodDraftLineIds,
+    isShiftAcceptingPayments,
     isTicketLate,
     parseStationParam,
     recallKitchenLine,
@@ -203,5 +205,30 @@ describe('posLogic kitchen vs beverages', () => {
                 ],
             }),
         ).toBe(true);
+    });
+
+    it('gates payments when a shift is explicitly closed', () => {
+        expect(isShiftAcceptingPayments({ shiftOpenedAt: null, shiftClosedAt: null })).toBe(true);
+        expect(
+            isShiftAcceptingPayments({
+                shiftOpenedAt: '2026-10-09T10:00:00.000Z',
+                shiftClosedAt: null,
+            }),
+        ).toBe(true);
+        expect(
+            isShiftAcceptingPayments({
+                shiftOpenedAt: '2026-10-09T10:00:00.000Z',
+                shiftClosedAt: '2026-10-09T22:00:00.000Z',
+            }),
+        ).toBe(false);
+    });
+
+    it('allows closing paid or empty bar tabs only', () => {
+        const empty = createBarTab('Alex');
+        expect(canCloseBarTabCheck(empty)).toBe(true);
+        const withLines = { ...empty, lines: [line('drink')] };
+        expect(canCloseBarTabCheck(withLines)).toBe(false);
+        expect(canCloseBarTabCheck({ ...withLines, status: 'paid' })).toBe(true);
+        expect(canCloseBarTabCheck(createDefaultState().tables[0])).toBe(false);
     });
 });

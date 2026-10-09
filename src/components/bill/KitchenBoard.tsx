@@ -154,7 +154,18 @@ export default function KitchenBoard({
                     <p className="eyebrow">{isBar ? 'Bar rail' : 'Expo'}</p>
                     <h1>{isBar ? 'Bar tickets' : 'Kitchen tickets'}</h1>
                 </div>
-                <p className="ticket-count">{totalActive} active</p>
+                <div className="kitchen-header-actions">
+                    {activeGroup && (
+                        <button
+                            type="button"
+                            className="secondary-button no-print"
+                            onClick={() => window.print()}
+                        >
+                            <Icon name="receipt" /> Print {isBar ? 'bar' : 'kitchen'} ticket
+                        </button>
+                    )}
+                    <p className="ticket-count">{totalActive} active</p>
+                </div>
             </div>
 
             {canEightySix && onToggleEightySix && (
@@ -455,6 +466,37 @@ export default function KitchenBoard({
                         </div>
                     )}
                 </>
+            )}
+
+            {activeGroup && (
+                <div className="kitchen-print-sheet print-only" aria-hidden="true">
+                    <header>
+                        <p>{isBar ? 'Bar ticket' : 'Kitchen ticket'}</p>
+                        <h2>{activeGroup.table.label}</h2>
+                        <p>{new Date().toLocaleString()}</p>
+                    </header>
+                    <ul>
+                        {activeGroup.tickets
+                            .filter((ticket) => ticket.line.kitchenStatus !== 'served')
+                            .map((ticket) => (
+                                <li key={ticket.line.id}>
+                                    <strong>
+                                        {ticket.line.quantity}× {ticket.item.name}
+                                    </strong>
+                                    <span>{ticket.line.orderNumber ?? ''}</span>
+                                    {!isBar && (
+                                        <span>{COURSE_FIRE_LABELS[ticket.line.courseFire]}</span>
+                                    )}
+                                    {ticket.line.modifiers.length > 0 && (
+                                        <em>
+                                            {ticket.line.modifiers.map((mod) => mod.name).join(', ')}
+                                        </em>
+                                    )}
+                                    {ticket.line.note && <em>Note: {ticket.line.note}</em>}
+                                </li>
+                            ))}
+                    </ul>
+                </div>
             )}
         </section>
     );

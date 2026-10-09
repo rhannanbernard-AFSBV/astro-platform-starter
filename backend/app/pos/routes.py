@@ -254,7 +254,7 @@ async def post_sale(
     session: dict[str, Any] = Depends(require_session),
 ) -> dict[str, Any]:
     _require_pin_changed(session)
-    if session["staff"]["role"] not in ("server", "admin", "manager"):
+    if session["staff"]["role"] not in ("server", "bartender", "admin", "manager"):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Not allowed to take payment")
     try:
         sale = store.record_sale(session["tenantId"], body.sale)

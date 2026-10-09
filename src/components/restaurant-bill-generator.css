@@ -3069,6 +3069,16 @@ button.status-tab {
     }
 }
 
+.bar-tab-actions {
+    display: grid;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.kitchen-print-sheet {
+    display: none;
+}
+
 @media print {
     @page {
         size: 80mm auto;
@@ -3078,7 +3088,9 @@ button.status-tab {
         visibility: hidden !important;
     }
     .receipt-overlay,
-    .receipt-overlay * {
+    .receipt-overlay *,
+    .kitchen-print-sheet,
+    .kitchen-print-sheet * {
         visibility: visible !important;
     }
     .receipt-overlay {
@@ -3087,6 +3099,39 @@ button.status-tab {
         display: block;
         padding: 0;
         background: #fff;
+    }
+    .kitchen-print-sheet {
+        display: block !important;
+        position: static;
+        width: 72mm;
+        max-width: 72mm;
+        margin: 0;
+        padding: 4mm;
+        color: #000;
+        background: #fff;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+    }
+    .kitchen-print-sheet header {
+        margin-bottom: 8px;
+        border-bottom: 1px dashed #000;
+        padding-bottom: 6px;
+    }
+    .kitchen-print-sheet h2 {
+        margin: 2px 0;
+        font-size: 16px;
+    }
+    .kitchen-print-sheet ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+    .kitchen-print-sheet li {
+        display: grid;
+        gap: 2px;
+        margin-bottom: 8px;
+        padding-bottom: 6px;
+        border-bottom: 1px dotted #999;
     }
     .receipt-sheet,
     .guest-bill-sheet {

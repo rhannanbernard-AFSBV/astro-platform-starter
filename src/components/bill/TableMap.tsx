@@ -6,8 +6,11 @@ type Props = {
     tables: TableOrder[];
     activeTableId: string;
     canOpenBarTab?: boolean;
+    canCloseBarTab?: boolean;
     onSelect: (tableId: string) => void;
     onOpenBarTab?: (guestName: string) => void;
+    onCloseBarTab?: (tableId: string) => void;
+    onRenameBarTab?: (tableId: string, guestName: string) => void;
 };
 
 const TONE_LABEL = {
@@ -22,12 +25,17 @@ export default function TableMap({
     tables,
     activeTableId,
     canOpenBarTab = false,
+    canCloseBarTab = false,
     onSelect,
     onOpenBarTab,
+    onCloseBarTab,
+    onRenameBarTab,
 }: Props) {
     const [tabName, setTabName] = useState('');
+    const [renameValue, setRenameValue] = useState('');
     const floor = tables.filter((table) => table.checkKind !== 'bar_tab');
     const tabs = tables.filter((table) => table.checkKind === 'bar_tab');
+    const activeTab = tabs.find((table) => table.id === activeTableId) ?? null;
 
     const submitTab = () => {
         const name = tabName.trim();
@@ -35,6 +43,12 @@ export default function TableMap({
         onOpenBarTab(name);
         setTabName('');
     };
+
+    const canCloseActiveTab =
+        Boolean(activeTab) &&
+        canCloseBarTab &&
+        Boolean(onCloseBarTab) &&
+        (activeTab!.status === 'paid' || activeTab!.lines.length === 0);
 
     const renderTile = (table: TableOrder) => {
         const tone = tableStatusTone(table);
@@ -44,7 +58,12 @@ export default function TableMap({
                 key={table.id}
                 type="button"
                 className={`table-tile tone-${tone} ${table.id === activeTableId ? 'active' : ''}${isTab ? ' bar-tab-tile' : ''}`}
-                onClick={() => onSelect(table.id)}
+                onClick={() => {
+                    onSelect(table.id);
+                    if (isTab) {
+                        setRenameValue(table.label.replace(/^Tab\s*·\s*/i, ''));
+                    }
+                }}
                 aria-current={table.id === activeTableId ? 'true' : undefined}
             >
                 <strong>
@@ -89,6 +108,45 @@ export default function TableMap({
                     <div className="table-map-grid">{tabs.map(renderTile)}</div>
                 ) : (
                     <p className="pin-help">No open bar tabs.</p>
+                )}
+                {activeTab && (onRenameBarTab || canCloseActiveTab) && (
+                    <div className="bar-tab-actions">
+                        {onRenameBarTab && activeTab.status !== 'paid' && (
+                            <form
+                                className="open-tab-form"
+                                onSubmit={(event) => {
+                                    event.preventDefault();
+                                    const name = renameValue.trim();
+                                    if (!name) return;
+                                    onRenameBarTab(activeTab.id, name);
+                                }}
+                            >
+                                <input
+                                    type="text"
+                                    value={renameValue || activeTab.label.replace(/^Tab\s*·\s*/i, '')}
+                                    onChange={(event) => setRenameValue(event.target.value)}
+                                    placeholder="Rename tab guest"
+                                    aria-label="Rename bar tab guest"
+                                />
+                                <button
+                                    type="submit"
+                                    className="secondary-button"
+                                    disabled={!renameValue.trim()}
+                                >
+                                    Rename
+                                </button>
+                            </form>
+                        )}
+                        {canCloseActiveTab && onCloseBarTab && (
+                            <button
+                                type="button"
+                                className="secondary-button"
+                                onClick={() => onCloseBarTab(activeTab.id)}
+                            >
+                                {activeTab.status === 'paid' ? 'Close paid tab' : 'Close empty tab'}
+                            </button>
+                        )}
+                    </div>
                 )}
             </div>
         </div>
