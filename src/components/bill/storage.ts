@@ -37,7 +37,19 @@ function migrateRestaurant(raw: unknown): RestaurantProfile {
     return merged;
 }
 
+const LEGACY_MENU_MARKERS = ['Truffle Mushroom Pasta', 'Smash Burger', 'Basque Cheesecake'];
+
 function withModifiers(menu: MenuItem[]): MenuItem[] {
+    const looksLegacy = menu.some((item) => LEGACY_MENU_MARKERS.includes(item.name));
+    if (looksLegacy || menu.length === 0) {
+        return DEFAULT_MENU.map((item) => ({
+            ...item,
+            modifierGroups: item.modifierGroups.map((group) => ({
+                ...group,
+                options: group.options.map((option) => ({ ...option })),
+            })),
+        }));
+    }
     const defaults = new Map(DEFAULT_MENU.map((item) => [item.id, item]));
     return menu.map((item) => ({
         ...item,

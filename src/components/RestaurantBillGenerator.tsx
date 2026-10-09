@@ -1128,10 +1128,12 @@ export default function RestaurantBillGenerator() {
         <div className="bistro-app">
             <header className="topbar">
                 <a className="brand" href="/" aria-label="Authentic Jamaican Cuisine & Bar home">
-                    <span className="brand-mark">A</span>
+                    <span className="brand-mark" aria-hidden="true">
+                        A
+                    </span>
                     <span>
                         <strong>Authentic Jamaican</strong>
-                        <small>Cuisine &amp; Bar · USD/XCG</small>
+                        <small>Cuisine &amp; Bar · country market · USD/XCG</small>
                     </span>
                 </a>
                 <div className="service-status">

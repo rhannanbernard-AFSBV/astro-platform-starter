@@ -181,7 +181,7 @@ def _seed_snapshot() -> dict[str, Any]:
         "sales": [],
         "restaurant": {
             "name": "Authentic Jamaican Cuisine & Bar",
-            "tagline": "Coastal plates · craft drinks",
+            "tagline": "Country kitchen · market-fresh · coal pot fire",
             "address": "14 Front Street, Philipsburg, Sint Maarten",
             "phone": "+1 (721) 555-0142",
             "taxId": "TAX-SXM-48291",

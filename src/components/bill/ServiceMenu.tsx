@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { optimizeImageUrl } from './images';
+import MarketStall from './MarketStall';
 import Price from './Price';
 import { Icon } from './Icons';
 import type { FilterCategory, MenuItem, TableOrder } from './types';
@@ -68,8 +69,8 @@ export default function ServiceMenu({
         <section className={`menu-panel ${readyFlash ? 'ready-flash-panel' : ''}`}>
             <div className="menu-heading">
                 <div>
-                    <p className="eyebrow">Today’s menu</p>
-                    <h1>What would you like?</h1>
+                    <p className="eyebrow">Yard kitchen</p>
+                    <h1>What you having?</h1>
                 </div>
                 <label className="search">
                     <Icon name="search" />
@@ -78,11 +79,26 @@ export default function ServiceMenu({
                         type="search"
                         value={search}
                         onChange={(event) => onSearch(event.target.value)}
-                        placeholder="Search menu"
+                        placeholder="Search pot & market"
                         aria-label="Search menu"
                     />
                 </label>
             </div>
+
+            <MarketStall
+                onPick={(name) => {
+                    const needle = name.toLowerCase();
+                    const match = menu.find((item) => {
+                        const hay = item.name.toLowerCase();
+                        return (
+                            hay.includes(needle) ||
+                            needle.split(/\s+/).every((part) => part.length < 3 || hay.includes(part))
+                        );
+                    });
+                    if (match && !isPaid) (onQuickAdd ?? onAdd)(match);
+                    else onSearch(name);
+                }}
+            />
 
             {favorites.length > 0 && (
                 <div className="favorites-row" aria-label="Popular favorites">
