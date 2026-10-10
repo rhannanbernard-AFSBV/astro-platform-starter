@@ -19,6 +19,6 @@ Differentiators aimed at **Front Street / cruise-port** service, not generic Toa
 
 ## Next edges (later)
 
-- Tender/cruise rush mode (faster bump thresholds)
+- **Rush mode** (peak service: faster bump thresholds, shorter wait messaging — works for cruise days, lunch crush, or any rush)
 - Dutch/English guest toggle
 - Stripe Terminal for card-present XCG/USD
