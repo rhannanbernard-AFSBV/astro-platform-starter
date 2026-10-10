@@ -26,6 +26,10 @@ Older draft PRs for intermediate POS slices are **superseded** by this tip for p
 | Floor smoke path | ✅ `docs/POS_FLOOR_SMOKE.md` + `npm run test:smoke` |
 | Shift day-part (floor vs bar) | ✅ Sales + close-shift confirm |
 | Reopen last closed bar tab | ✅ |
+| Guest `/order` + QR | ✅ Phase B — menu, checkout, kitchen/bar tickets, status |
+| Guest pay-at-counter | ✅ (in-app card = later phase) |
+
+See also: `docs/GUEST_ORDER.md`.
 
 ## Pilot deploy (trusted customer path)
 

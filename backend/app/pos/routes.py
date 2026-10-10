@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 from app.pos import ai as menu_ai
+from app.pos import guest_orders
 from app.pos import ops
 from app.pos import payments as pay
 from app.pos import rate_limit
@@ -65,6 +66,19 @@ class BootstrapBody(BaseModel):
 class ChangePinBody(BaseModel):
     currentPin: str = Field(min_length=4, max_length=8)
     newPin: str = Field(min_length=4, max_length=8)
+
+
+class GuestOrderLineBody(BaseModel):
+    menuItemId: str = Field(min_length=1, max_length=80)
+    quantity: int = Field(ge=1, le=40)
+
+
+class GuestPlaceOrderBody(BaseModel):
+    fulfillment: str = Field(description="table | pickup")
+    tableLabel: Optional[str] = Field(default=None, max_length=40)
+    guestName: Optional[str] = Field(default=None, max_length=80)
+    lines: list[GuestOrderLineBody] = Field(min_length=1, max_length=40)
+    tenantId: Optional[str] = None
 
 
 def _client_ip(request: Request) -> str:
@@ -455,7 +469,50 @@ async def public_config() -> dict[str, Any]:
         "hideDemoCredentials": hide_demo_credentials(),
         "pinMaxAttempts": int(os.getenv("POS_PIN_MAX_ATTEMPTS", "5")),
         "openaiMenuEnrich": menu_ai.openai_configured(),
+        "guestOrderEnabled": True,
     }
+
+
+@router.get("/guest/menu")
+async def guest_menu(tenantId: Optional[str] = None) -> dict[str, Any]:
+    """Public guest catalog (86'd items omitted). No auth."""
+    return guest_orders.public_menu(tenantId)
+
+
+@router.post("/guest/orders")
+async def guest_place_order(body: GuestPlaceOrderBody) -> dict[str, Any]:
+    """Guest places an order — fires kitchen/bar tickets into the live POS snapshot."""
+    last_err: Exception | None = None
+    for _ in range(3):
+        try:
+            return guest_orders.place_order(
+                tenant_id=body.tenantId,
+                fulfillment=body.fulfillment,
+                table_label=body.tableLabel,
+                guest_name=body.guestName,
+                lines=[line.model_dump() for line in body.lines],
+            )
+        except ConflictError:
+            continue
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001
+            last_err = exc
+            break
+    if last_err:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not place order")
+    raise HTTPException(status.HTTP_409_CONFLICT, detail="POS busy — retry")
+
+
+@router.get("/guest/orders/{token}")
+async def guest_order_status(token: str, tenantId: Optional[str] = None) -> dict[str, Any]:
+    """Poll guest order status (Received → Preparing → Ready → Paid)."""
+    if not token.startswith("go_"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid order token")
+    payload = guest_orders.find_order_by_token(tenantId, token)
+    if not payload:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Order not found")
+    return payload
 
 
 @router.post("/ai/enrich-menu-item", response_model=MenuEnrichResponse)

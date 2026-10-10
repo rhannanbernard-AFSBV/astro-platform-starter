@@ -1,4 +1,4 @@
-export type GuestCategory = 'Jerk' | 'Seafood' | 'Ital' | 'Patties';
+export type GuestCategory = 'Jerk' | 'Seafood' | 'Ital' | 'Patties' | 'Drinks' | string;
 
 export type GuestDish = {
     id: string;
@@ -12,7 +12,14 @@ export type GuestDish = {
 };
 
 /** Guest-facing catalog — USD cents; XCG shown at 1.80 */
-export const GUEST_CATEGORIES: GuestCategory[] = ['Jerk', 'Seafood', 'Ital', 'Patties'];
+export const GUEST_CATEGORIES: GuestCategory[] = ['Jerk', 'Seafood', 'Ital', 'Patties', 'Drinks'];
+
+export const PHASE_LABELS: Record<string, string> = {
+    received: 'Received',
+    preparing: 'Preparing',
+    ready: 'Ready for you',
+    paid: 'Paid — thank you',
+};
 
 export const GUEST_DISHES: GuestDish[] = [
     {

@@ -24,6 +24,7 @@ from app.pos import store  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def fresh_db():
+    os.environ["POS_DATA_DIR"] = str(TEST_DIR)
     os.environ["POS_FORCE_PIN_CHANGE"] = "0"
     os.environ["POS_SESSION_IDLE_MINUTES"] = "0"
     if db_file.exists():

@@ -27,6 +27,7 @@ from app.pos import rate_limit, store  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def fresh_db():
+    os.environ["POS_DATA_DIR"] = str(TEST_DIR)
     os.environ["POS_FORCE_PIN_CHANGE"] = "1"
     os.environ["POS_PIN_MAX_ATTEMPTS"] = "3"
     os.environ["POS_PIN_LOCKOUT_SECONDS"] = "60"
