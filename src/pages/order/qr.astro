@@ -1,0 +1,27 @@
+---
+import GuestOrderPrintQr from '../../components/guest-order/GuestOrderPrintQr';
+---
+
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta
+            name="description"
+            content="Printable QR code — scan to open Authentic Jamaican guest order and add the app to your home screen."
+        />
+        <title>Order QR · Authentic Jamaican</title>
+        <style>
+            html,
+            body {
+                margin: 0;
+                padding: 0;
+                background: #f7f5ef;
+            }
+        </style>
+    </head>
+    <body>
+        <GuestOrderPrintQr client:load />
+    </body>
+</html>
