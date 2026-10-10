@@ -1,0 +1,175 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700&family=DM+Sans:opsz,wght@9..40,500;9..40,600&display=swap');
+
+.guest-print-qr {
+    --green: #1f6b3a;
+    --yellow: #ffe01b;
+    --ink: #121416;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 32px 24px 40px;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    color: var(--ink);
+    text-align: center;
+}
+
+.guest-print-qr-head {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.guest-print-mark {
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 700;
+    font-size: 1.5rem;
+    background: linear-gradient(145deg, var(--yellow), #e6c200);
+}
+
+.guest-print-qr-head h1 {
+    margin: 0;
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 1.65rem;
+    line-height: 1.1;
+}
+
+.guest-print-qr-head p {
+    margin: 4px 0 0;
+    color: #5a635c;
+    font-size: 0.9rem;
+}
+
+.guest-print-lead {
+    margin: 0 0 20px;
+    font-size: 1.05rem;
+    line-height: 1.45;
+}
+
+.guest-print-table-pick {
+    text-align: left;
+    margin: 0 auto 16px;
+    max-width: 360px;
+}
+
+.guest-print-table-pick label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: #5a635c;
+}
+
+.guest-print-table-pick input {
+    border: 1px solid #cfd5d0;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 1.05rem;
+}
+
+.guest-print-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.guest-print-presets button {
+    border: 1px solid #cfd5d0;
+    background: #fff;
+    border-radius: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.guest-print-table-banner {
+    margin: 0 0 12px;
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 1.75rem;
+    font-weight: 700;
+}
+
+.guest-print-btn {
+    margin: 0 auto;
+    border: 0;
+    border-radius: 999px;
+    padding: 10px 18px;
+    background: #1f6b3a;
+    color: #fff;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.guest-print-qr-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    margin: 0 auto 24px;
+}
+
+.guest-print-qr-block .guest-qr-img {
+    border-radius: 16px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+    padding: 8px;
+    background: #fff;
+}
+
+.guest-print-qr-block .guest-qr-copy {
+    text-align: center;
+}
+
+.guest-print-qr-block .guest-qr-url {
+    display: block;
+    max-width: 320px;
+    margin: 0 auto;
+    font-size: 0.75rem;
+    color: #5a635c;
+}
+
+.guest-print-qr-block .guest-qr-copy strong {
+    font-size: 1.15rem;
+}
+
+.guest-print-steps {
+    text-align: left;
+    margin: 0 auto 28px;
+    max-width: 320px;
+    padding-left: 1.25rem;
+    line-height: 1.55;
+    color: #3d4540;
+}
+
+.guest-print-foot {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: #6b736c;
+}
+
+.guest-print-foot a {
+    color: var(--green);
+    font-weight: 600;
+}
+
+@media print {
+    .guest-print-qr {
+        padding: 12mm;
+    }
+
+    .guest-print-foot a {
+        color: inherit;
+        text-decoration: none;
+    }
+
+    .no-print {
+        display: none !important;
+    }
+}
