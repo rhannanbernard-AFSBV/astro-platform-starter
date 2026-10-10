@@ -150,6 +150,24 @@ def _guest_category(item: dict[str, Any]) -> str:
     return cat
 
 
+def _kitchen_load(snap: dict[str, Any]) -> dict[str, Any]:
+    """Estimate prep wait from open kitchen/bar tickets (Philipsburg tourist clarity)."""
+    active = 0
+    for table in snap.get("tables") or []:
+        if table.get("status") == "paid":
+            continue
+        for line in table.get("lines") or []:
+            if line.get("kitchenStatus") in ("queued", "preparing"):
+                active += max(1, int(line.get("quantity") or 1))
+    # ~3.5 minutes per active unit, floor 8 / ceiling 45 for cruise-port expectations
+    minutes = 8 if active == 0 else min(45, max(8, int(round(active * 3.5))))
+    return {
+        "activeTickets": active,
+        "estimatedWaitMinutes": minutes,
+        "label": f"About {minutes} min" if active else "About 8–12 min",
+    }
+
+
 def public_menu(tenant_id: str | None = None) -> dict[str, Any]:
     tid = tenant_id or store.DEFAULT_TENANT_ID
     snap = store.get_snapshot(tid) or {}
@@ -177,12 +195,31 @@ def public_menu(tenant_id: str | None = None) -> dict[str, Any]:
                 "popular": bool(raw.get("popular")),
             }
         )
+    xcg = float(settings.get("xcgPerUsd") or 1.8)
+    service = int(settings.get("defaultServiceChargePercent") or 5)
     return {
         "source": source,
-        "currency": {"usd": True, "xcgPerUsd": float(settings.get("xcgPerUsd") or 1.8)},
+        "currency": {
+            "usd": True,
+            "xcg": True,
+            "xcgPerUsd": xcg,
+            "label": f"USD & XCG (1 USD = {xcg:g} XCG)",
+        },
+        "locale": {
+            "town": "Philipsburg",
+            "country": "Sint Maarten",
+            "countryCode": "SXM",
+            "street": restaurant.get("address") or "14 Front Street, Philipsburg, Sint Maarten",
+            "welcome": "Welcome to Philipsburg — cruise & island guests welcome",
+            "payNote": "Pay at the counter in USD or Caribbean guilders (XCG).",
+        },
+        "serviceChargePercent": service,
+        "tipPresetsCents": [0, 200, 500, 1000, 1500],
+        "kitchen": _kitchen_load(snap),
         "restaurant": {
             "name": restaurant.get("name") or "Authentic Jamaican Cuisine & Bar",
             "tagline": restaurant.get("tagline") or "",
+            "phone": restaurant.get("phone") or "",
         },
         "items": items,
         "payAtCounter": True,
@@ -205,6 +242,7 @@ def place_order(
     table_label: str | None,
     guest_name: str | None,
     lines: list[dict[str, Any]],
+    tip_cents: int = 0,
 ) -> dict[str, Any]:
     """Insert a guest check into the POS snapshot and fire tickets to kitchen/bar."""
     tid = tenant_id or store.DEFAULT_TENANT_ID
@@ -216,6 +254,7 @@ def place_order(
         raise ValueError("fulfillment must be table or pickup")
     if not lines:
         raise ValueError("Order needs at least one line")
+    tip_cents = max(0, min(int(tip_cents or 0), 50_000))
 
     menu = list(snap.get("menu") or [])
     if not menu:
@@ -296,8 +335,8 @@ def place_order(
         "status": "open",
         "lines": order_lines,
         "guests": [{"id": guest_id, "name": display_name, "paidAt": None, "payment": None}],
-        "tipAmountPreset": 0,
-        "tipCents": 0,
+        "tipAmountPreset": "custom" if tip_cents else 0,
+        "tipCents": tip_cents,
         "serviceChargeEnabled": True,
         "serviceChargePercent": int(
             (snap.get("settings") or {}).get("defaultServiceChargePercent") or 5
@@ -424,6 +463,9 @@ def order_status_payload(
         "guestName": (table.get("guests") or [{}])[0].get("name"),
         "phase": phase,
         "payAtCounter": True,
+        "payNote": "Pay at the counter in USD or XCG.",
+        "tipCents": int(table.get("tipCents") or 0),
         "tableStatus": table.get("status"),
         "lines": lines_out,
+        "locale": {"town": "Philipsburg", "countryCode": "SXM"},
     }

@@ -47,6 +47,11 @@ def test_guest_menu_fallback(client: TestClient):
     assert body["source"] == "fallback"
     assert len(body["items"]) >= 4
     assert body["payAtCounter"] is True
+    assert body["locale"]["town"] == "Philipsburg"
+    assert body["locale"]["countryCode"] == "SXM"
+    assert body["currency"]["xcg"] is True
+    assert "estimatedWaitMinutes" in body["kitchen"]
+    assert body["tipPresetsCents"][0] == 0
 
 
 def test_guest_place_and_status(client: TestClient):
@@ -58,6 +63,7 @@ def test_guest_place_and_status(client: TestClient):
             "fulfillment": "table",
             "tableLabel": "14",
             "guestName": "Marley",
+            "tipCents": 500,
             "lines": [{"menuItemId": first["id"], "quantity": 2}],
         },
     )
@@ -66,6 +72,7 @@ def test_guest_place_and_status(client: TestClient):
     assert order["token"].startswith("go_")
     assert order["phase"] == "received"
     assert order["orderNumber"]
+    assert order["tipCents"] == 500
     assert "Table" in (order["label"] or "")
 
     status = client.get(f"/pos/guest/orders/{order['token']}")

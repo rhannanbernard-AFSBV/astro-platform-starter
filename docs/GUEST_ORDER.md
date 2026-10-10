@@ -4,12 +4,14 @@ Mobile guest surface at **`/order`** with printable QR at **`/order/qr`**.
 
 ## Loop (server mode)
 
-1. Guest opens `/order` (or scans table QR).
-2. Menu loads from **`GET /pos/guest/menu`** (POS catalog, or fallback Jamaican set).
-3. Checkout → table # or pickup name → **`POST /pos/guest/orders`**.
+1. Guest opens `/order` or `/order?table=12` (table tent QR).
+2. Menu loads from **`GET /pos/guest/menu`** (POS catalog, or fallback Jamaican set) with Philipsburg locale, USD/XCG, wait estimate.
+3. Checkout → table # or pickup name + optional tip → **`POST /pos/guest/orders`**.
 4. POS snapshot gains an open check; food lines go **queued** to kitchen; drinks auto-fire to bar when enabled.
 5. Guest polls **`GET /pos/guest/orders/{token}`** → Received → Preparing → Ready → Paid (when staff take payment).
-6. Guest **pays at counter** (no in-app card in this phase).
+6. Guest **pays at counter in USD or XCG** (no in-app card in this phase).
+
+See also: `docs/PHILIPSBURG_EDGE.md`, `docs/POS_SUPPORT_RUNBOOK.md`.
 
 ## Env
 

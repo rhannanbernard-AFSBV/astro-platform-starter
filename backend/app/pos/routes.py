@@ -77,6 +77,7 @@ class GuestPlaceOrderBody(BaseModel):
     fulfillment: str = Field(description="table | pickup")
     tableLabel: Optional[str] = Field(default=None, max_length=40)
     guestName: Optional[str] = Field(default=None, max_length=80)
+    tipCents: int = Field(default=0, ge=0, le=50000)
     lines: list[GuestOrderLineBody] = Field(min_length=1, max_length=40)
     tenantId: Optional[str] = None
 
@@ -490,6 +491,7 @@ async def guest_place_order(body: GuestPlaceOrderBody) -> dict[str, Any]:
                 fulfillment=body.fulfillment,
                 table_label=body.tableLabel,
                 guest_name=body.guestName,
+                tip_cents=body.tipCents,
                 lines=[line.model_dump() for line in body.lines],
             )
         except ConflictError:

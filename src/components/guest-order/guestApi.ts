@@ -2,10 +2,23 @@ import { GUEST_DISHES, type GuestDish } from './menu';
 
 export type GuestFulfillment = 'table' | 'pickup';
 
+export type GuestLocale = {
+    town: string;
+    country?: string;
+    countryCode: string;
+    street?: string;
+    welcome?: string;
+    payNote?: string;
+};
+
 export type GuestMenuResponse = {
     source: 'pos' | 'fallback';
-    currency: { usd: boolean; xcgPerUsd: number };
-    restaurant: { name: string; tagline: string };
+    currency: { usd: boolean; xcg?: boolean; xcgPerUsd: number; label?: string };
+    locale?: GuestLocale;
+    serviceChargePercent?: number;
+    tipPresetsCents?: number[];
+    kitchen?: { activeTickets: number; estimatedWaitMinutes: number; label: string };
+    restaurant: { name: string; tagline: string; phone?: string };
     items: Array<{
         id: string;
         name: string;
@@ -28,6 +41,8 @@ export type GuestOrderStatus = {
     guestName: string | null;
     phase: 'received' | 'preparing' | 'ready' | 'paid' | string;
     payAtCounter: boolean;
+    payNote?: string;
+    tipCents?: number;
     tableStatus?: string;
     lines: Array<{
         id: string;
@@ -65,14 +80,37 @@ export function dishesFromMenuResponse(menu: GuestMenuResponse): GuestDish[] {
     }));
 }
 
+const DEFAULT_LOCALE: GuestLocale = {
+    town: 'Philipsburg',
+    country: 'Sint Maarten',
+    countryCode: 'SXM',
+    street: '14 Front Street, Philipsburg, Sint Maarten',
+    welcome: 'Welcome to Philipsburg — cruise & island guests welcome',
+    payNote: 'Pay at the counter in USD or Caribbean guilders (XCG).',
+};
+
 export async function fetchGuestMenu(): Promise<{
     dishes: GuestDish[];
     source: 'pos' | 'fallback' | 'static';
     xcgPerUsd: number;
+    locale: GuestLocale;
+    serviceChargePercent: number;
+    tipPresetsCents: number[];
+    waitLabel: string;
+    currencyLabel: string;
 }> {
     const base = apiBase();
     if (!base) {
-        return { dishes: GUEST_DISHES, source: 'static', xcgPerUsd: 1.8 };
+        return {
+            dishes: GUEST_DISHES,
+            source: 'static',
+            xcgPerUsd: 1.8,
+            locale: DEFAULT_LOCALE,
+            serviceChargePercent: 5,
+            tipPresetsCents: [0, 200, 500, 1000, 1500],
+            waitLabel: 'About 8–12 min',
+            currencyLabel: 'USD & XCG (1 USD = 1.8 XCG)',
+        };
     }
     try {
         const res = await fetch(`${base}/pos/guest/menu`);
@@ -82,9 +120,23 @@ export async function fetchGuestMenu(): Promise<{
             dishes: dishesFromMenuResponse(body),
             source: body.source,
             xcgPerUsd: body.currency.xcgPerUsd,
+            locale: { ...DEFAULT_LOCALE, ...body.locale },
+            serviceChargePercent: body.serviceChargePercent ?? 5,
+            tipPresetsCents: body.tipPresetsCents ?? [0, 200, 500, 1000, 1500],
+            waitLabel: body.kitchen?.label || 'About 8–12 min',
+            currencyLabel: body.currency.label || `USD & XCG (1 USD = ${body.currency.xcgPerUsd} XCG)`,
         };
     } catch {
-        return { dishes: GUEST_DISHES, source: 'static', xcgPerUsd: 1.8 };
+        return {
+            dishes: GUEST_DISHES,
+            source: 'static',
+            xcgPerUsd: 1.8,
+            locale: DEFAULT_LOCALE,
+            serviceChargePercent: 5,
+            tipPresetsCents: [0, 200, 500, 1000, 1500],
+            waitLabel: 'About 8–12 min',
+            currencyLabel: 'USD & XCG (1 USD = 1.8 XCG)',
+        };
     }
 }
 
@@ -92,11 +144,11 @@ export async function placeGuestOrder(input: {
     fulfillment: GuestFulfillment;
     tableLabel?: string;
     guestName?: string;
+    tipCents?: number;
     lines: Array<{ menuItemId: string; quantity: number }>;
 }): Promise<GuestOrderStatus> {
     const base = apiBase();
     if (!base) {
-        // Local demo — status only on this device (kitchen will not see it).
         const token = `go_demo_${Date.now().toString(36)}`;
         const demo: GuestOrderStatus = {
             token,
@@ -109,6 +161,8 @@ export async function placeGuestOrder(input: {
             guestName: input.guestName || 'Guest',
             phase: 'received',
             payAtCounter: true,
+            payNote: DEFAULT_LOCALE.payNote,
+            tipCents: input.tipCents || 0,
             lines: input.lines.map((line, index) => {
                 const dish = GUEST_DISHES.find((d) => d.id === line.menuItemId);
                 return {

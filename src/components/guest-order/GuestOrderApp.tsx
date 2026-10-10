@@ -7,8 +7,10 @@ import {
     isGuestApiConfigured,
     placeGuestOrder,
     type GuestFulfillment,
+    type GuestLocale,
     type GuestOrderStatus,
 } from './guestApi';
+import { readTableFromSearch } from './guestOrderUrl';
 import {
     formatDual,
     GUEST_CATEGORIES,
@@ -22,6 +24,12 @@ type CartLine = { dishId: string; qty: number };
 export default function GuestOrderApp() {
     const [dishes, setDishes] = useState<GuestDish[]>([]);
     const [menuSource, setMenuSource] = useState<'pos' | 'fallback' | 'static'>('static');
+    const [locale, setLocale] = useState<GuestLocale | null>(null);
+    const [waitLabel, setWaitLabel] = useState('About 8–12 min');
+    const [currencyLabel, setCurrencyLabel] = useState('USD & XCG');
+    const [serviceChargePercent, setServiceChargePercent] = useState(5);
+    const [tipPresets, setTipPresets] = useState([0, 200, 500, 1000, 1500]);
+    const [tipCents, setTipCents] = useState(0);
     const [category, setCategory] = useState<GuestCategory | 'All'>('All');
     const [cart, setCart] = useState<CartLine[]>([]);
     const [active, setActive] = useState<GuestDish | null>(null);
@@ -35,11 +43,24 @@ export default function GuestOrderApp() {
     const [order, setOrder] = useState<GuestOrderStatus | null>(null);
 
     useEffect(() => {
+        const fromQr = readTableFromSearch();
+        if (fromQr) {
+            setTableLabel(fromQr);
+            setFulfillment('table');
+        }
+    }, []);
+
+    useEffect(() => {
         let cancelled = false;
         void fetchGuestMenu().then((result) => {
             if (cancelled) return;
             setDishes(result.dishes);
             setMenuSource(result.source);
+            setLocale(result.locale);
+            setWaitLabel(result.waitLabel);
+            setCurrencyLabel(result.currencyLabel);
+            setServiceChargePercent(result.serviceChargePercent);
+            setTipPresets(result.tipPresetsCents);
         });
         return () => {
             cancelled = true;
@@ -122,6 +143,7 @@ export default function GuestOrderApp() {
                 fulfillment,
                 tableLabel: tableLabel.trim() || undefined,
                 guestName: guestName.trim() || undefined,
+                tipCents,
                 lines: cart.map((line) => ({ menuItemId: line.dishId, quantity: line.qty })),
             });
             setOrder(placed);
@@ -155,8 +177,12 @@ export default function GuestOrderApp() {
                         </p>
                         <h1>{PHASE_LABELS[order.phase] || order.phase}</h1>
                         <p className="guest-status-pay">
-                            Pay at the counter when you pick up or before you leave.
+                            {order.payNote ||
+                                'Pay at the counter in USD or XCG when you pick up or before you leave.'}
                         </p>
+                        {(order.tipCents ?? 0) > 0 && (
+                            <p className="guest-status-pay">Tip noted: {formatDual(order.tipCents ?? 0)}</p>
+                        )}
                         {!isGuestApiConfigured() && (
                             <p className="guest-status-demo">
                                 Demo mode — kitchen will not see this order until{' '}
@@ -220,13 +246,23 @@ export default function GuestOrderApp() {
                         </span>
                         <span>
                             <strong>Authentic Jamaican</strong>
-                            <small>Cuisine & Bar · Philipsburg</small>
+                            <small>
+                                Cuisine & Bar · {locale?.town || 'Philipsburg'}
+                                {tableLabel ? ` · Table ${tableLabel}` : ''}
+                            </small>
                         </span>
                     </a>
                     <button type="button" className="guest-cart-chip" onClick={openCheckout}>
                         Cart · {cartCount}
                     </button>
                 </header>
+
+                <p className="guest-sxm-banner">
+                    <span>{locale?.welcome || 'Welcome to Philipsburg'}</span>
+                    <span>
+                        {currencyLabel} · Wait {waitLabel}
+                    </span>
+                </p>
 
                 {menuSource !== 'static' && (
                     <p className="guest-live-banner">
@@ -245,13 +281,16 @@ export default function GuestOrderApp() {
                     <div className="guest-hero-media" />
                     <div className="guest-hero-wood" aria-hidden="true" />
                     <div className="guest-hero-copy">
-                        <p className="eyebrow">Yard kitchen · coal pot fire</p>
+                        <p className="eyebrow">Yard kitchen · Front Street · SXM</p>
                         <h1>Authentic Jamaican</h1>
-                        <p>Jerk chicken, rice & peas, fried plantain — order for pickup or table.</p>
+                        <p>
+                            Jerk, seafood, ital &amp; patties — order for your table or pickup. Prices in
+                            USD &amp; XCG.
+                        </p>
                         <button type="button" className="guest-cta" onClick={scrollMenu}>
                             Order Now
                         </button>
-                        <GuestOrderHeroQr />
+                        <GuestOrderHeroQr table={tableLabel || undefined} />
                     </div>
                 </section>
 
@@ -301,7 +340,14 @@ export default function GuestOrderApp() {
                 </section>
 
                 <div className="guest-footer-links">
-                    <a className="guest-pos-link" href="/order/qr">
+                    <a
+                        className="guest-pos-link"
+                        href={
+                            tableLabel
+                                ? `/order/qr?table=${encodeURIComponent(tableLabel)}`
+                                : '/order/qr'
+                        }
+                    >
                         Table QR for guests →
                     </a>
                     <a className="guest-pos-link subtle" href="/">
@@ -391,6 +437,9 @@ export default function GuestOrderApp() {
                             </button>
                             <h3>Checkout</h3>
                             <p className="guest-checkout-total">{formatDual(cartCents)}</p>
+                            <p className="guest-pay-note">
+                                Incl. service charge ~{serviceChargePercent}% at counter · Wait {waitLabel}
+                            </p>
                             <div className="guest-fulfill">
                                 <button
                                     type="button"
@@ -429,7 +478,24 @@ export default function GuestOrderApp() {
                                     />
                                 </label>
                             )}
-                            <p className="guest-pay-note">Pay at the counter — no card required in-app.</p>
+                            <div className="guest-tip-block">
+                                <span>Tip for the team (optional)</span>
+                                <div className="guest-tip-presets">
+                                    {tipPresets.map((cents) => (
+                                        <button
+                                            key={cents}
+                                            type="button"
+                                            className={tipCents === cents ? 'active' : ''}
+                                            onClick={() => setTipCents(cents)}
+                                        >
+                                            {cents === 0 ? 'No tip' : formatDual(cents)}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <p className="guest-pay-note">
+                                {locale?.payNote || 'Pay at the counter in USD or XCG.'}
+                            </p>
                             {error && <p className="guest-error">{error}</p>}
                             <button
                                 type="button"

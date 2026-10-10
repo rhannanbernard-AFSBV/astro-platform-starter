@@ -534,6 +534,27 @@
     color: var(--yellow);
 }
 
+.guest-sxm-banner {
+    margin: 8px 16px 0;
+    padding: 10px 12px;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.72rem;
+    line-height: 1.35;
+    color: #f4f0e6;
+    background:
+        linear-gradient(105deg, rgba(31, 107, 58, 0.45), rgba(200, 30, 30, 0.22)),
+        rgba(18, 20, 22, 0.9);
+    border: 1px solid rgba(255, 224, 27, 0.22);
+}
+
+.guest-sxm-banner span:last-child {
+    color: var(--yellow);
+    font-weight: 600;
+}
+
 .guest-live-banner {
     margin: 8px 16px 0;
     padding: 8px 12px;
@@ -600,6 +621,38 @@
 .guest-pay-note {
     font-size: 0.8rem !important;
     color: #9aa396 !important;
+}
+
+.guest-tip-block {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 4px 0 12px;
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+.guest-tip-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.guest-tip-presets button {
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+    color: #e8e4d8;
+    padding: 8px 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.guest-tip-presets button.active {
+    border-color: rgba(255, 224, 27, 0.55);
+    background: rgba(255, 224, 27, 0.14);
+    color: var(--yellow);
 }
 
 .guest-error {
