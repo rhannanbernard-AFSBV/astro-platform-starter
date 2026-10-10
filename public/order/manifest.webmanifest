@@ -1,0 +1,19 @@
+{
+  "name": "Authentic Jamaican — Guest Order",
+  "short_name": "Order Jamaican",
+  "description": "Order jerk, seafood, ital, and patties from Authentic Jamaican Cuisine & Bar.",
+  "start_url": "/order",
+  "scope": "/order",
+  "display": "standalone",
+  "background_color": "#0a0b0c",
+  "theme_color": "#1f6b3a",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

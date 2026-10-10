@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import './guest-order.css';
+import GuestOrderHeroQr from './GuestOrderHeroQr';
 import {
     formatDual,
     GUEST_CATEGORIES,
@@ -78,6 +79,7 @@ export default function GuestOrderApp() {
                         <button type="button" className="guest-cta" onClick={scrollMenu}>
                             Order Now
                         </button>
+                        <GuestOrderHeroQr />
                     </div>
                 </section>
 
@@ -126,9 +128,14 @@ export default function GuestOrderApp() {
                     </div>
                 </section>
 
-                <a className="guest-pos-link" href="/">
-                    Staff POS →
-                </a>
+                <div className="guest-footer-links">
+                    <a className="guest-pos-link" href="/order/qr">
+                        Table QR for guests →
+                    </a>
+                    <a className="guest-pos-link subtle" href="/">
+                        Staff POS →
+                    </a>
+                </div>
 
                 {cartCount > 0 && (
                     <div className="guest-dock" role="status">
