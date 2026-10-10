@@ -27,6 +27,7 @@ export default function GuestOrderApp() {
     const [locale, setLocale] = useState<GuestLocale | null>(null);
     const [waitLabel, setWaitLabel] = useState('About 8–12 min');
     const [currencyLabel, setCurrencyLabel] = useState('USD & XCG');
+    const [rushMode, setRushMode] = useState(false);
     const [serviceChargePercent, setServiceChargePercent] = useState(5);
     const [tipPresets, setTipPresets] = useState([0, 200, 500, 1000, 1500]);
     const [tipCents, setTipCents] = useState(0);
@@ -52,18 +53,25 @@ export default function GuestOrderApp() {
 
     useEffect(() => {
         let cancelled = false;
-        void fetchGuestMenu().then((result) => {
+        const applyMenu = (result: Awaited<ReturnType<typeof fetchGuestMenu>>) => {
             if (cancelled) return;
             setDishes(result.dishes);
             setMenuSource(result.source);
             setLocale(result.locale);
             setWaitLabel(result.waitLabel);
             setCurrencyLabel(result.currencyLabel);
+            setRushMode(result.rushMode);
             setServiceChargePercent(result.serviceChargePercent);
             setTipPresets(result.tipPresetsCents);
-        });
+        };
+        void fetchGuestMenu().then(applyMenu);
+        // Refresh wait / rush banner while guests keep the page open
+        const timer = window.setInterval(() => {
+            void fetchGuestMenu().then(applyMenu);
+        }, 30_000);
         return () => {
             cancelled = true;
+            window.clearInterval(timer);
         };
     }, []);
 
@@ -257,8 +265,12 @@ export default function GuestOrderApp() {
                     </button>
                 </header>
 
-                <p className="guest-sxm-banner">
-                    <span>{locale?.welcome || 'Welcome to Philipsburg'}</span>
+                <p className={`guest-sxm-banner${rushMode ? ' is-rush' : ''}`}>
+                    <span>
+                        {rushMode
+                            ? 'Rush service — kitchen is moving fast'
+                            : locale?.welcome || 'Welcome to Philipsburg'}
+                    </span>
                     <span>
                         {currencyLabel} · Wait {waitLabel}
                     </span>

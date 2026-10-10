@@ -35,6 +35,9 @@ export const DEFAULT_SETTINGS: PosSettings = {
     bumpAfterMinutes: 8,
     idleLockMinutes: 5,
     autoFireDrinks: true,
+    rushMode: false,
+    rushModeSince: null,
+    rushBumpMinutes: 4,
 };
 /** @deprecated use DEFAULT_SERVICE_CHARGE_PERCENT */
 export const DEFAULT_TAX_PERCENT = DEFAULT_SERVICE_CHARGE_PERCENT;

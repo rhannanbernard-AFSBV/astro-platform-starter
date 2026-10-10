@@ -371,9 +371,43 @@ export default function AdminPanel({
                         />
                         Auto-fire drinks to bar on add
                     </label>
+                    <label className="checkbox rush-admin-check">
+                        <input
+                            type="checkbox"
+                            checked={settings.rushMode}
+                            onChange={(event) =>
+                                onSettingsChange({
+                                    rushMode: event.target.checked,
+                                    rushModeSince: event.target.checked
+                                        ? new Date().toISOString()
+                                        : null,
+                                })
+                            }
+                        />
+                        Rush mode (peak tempo)
+                    </label>
+                    <label>
+                        Rush bump after (minutes)
+                        <input
+                            type="number"
+                            min="1"
+                            max="30"
+                            step="1"
+                            value={settings.rushBumpMinutes}
+                            onChange={(event) =>
+                                onSettingsChange({
+                                    rushBumpMinutes: Math.max(
+                                        1,
+                                        Math.min(30, Number(event.target.value || 4)),
+                                    ),
+                                })
+                            }
+                        />
+                    </label>
                 </div>
                 <p className="fx-note">
-                    FX, service charge, bump timer, idle lock, and auto-fire sync across open tabs.
+                    FX, service charge, bump timer, idle lock, auto-fire, and Rush mode sync across
+                    open tabs. Rush shortens kitchen bump alerts and speeds guest wait estimates.
                     Set idle lock to 0 to disable the station lock screen.
                 </p>
                 <h2>Station deep-links</h2>

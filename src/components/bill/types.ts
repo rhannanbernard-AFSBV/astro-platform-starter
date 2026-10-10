@@ -210,6 +210,12 @@ export type PosSettings = {
     idleLockMinutes: number;
     /** When true, adding a drink immediately fires it to the bar rail */
     autoFireDrinks: boolean;
+    /** Peak-service tempo — shorter bumps + faster guest wait estimates */
+    rushMode: boolean;
+    /** ISO timestamp when Rush mode was last turned on */
+    rushModeSince: string | null;
+    /** Bump threshold while Rush mode is on (minutes) */
+    rushBumpMinutes: number;
 };
 
 export type StaffUser = {

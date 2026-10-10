@@ -783,6 +783,132 @@ button {
     gap: 14px;
 }
 
+.rush-mode-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 12px 7px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(246, 231, 195, 0.28);
+    background:
+        linear-gradient(145deg, rgba(36, 24, 15, 0.55), rgba(20, 14, 10, 0.72));
+    color: #f6e7c3;
+    cursor: pointer;
+    transition:
+        border-color 0.2s ease,
+        transform 0.18s ease,
+        box-shadow 0.25s ease;
+}
+
+.rush-mode-toggle:hover:not(:disabled) {
+    transform: translateY(-1px);
+    border-color: rgba(255, 196, 72, 0.55);
+}
+
+.rush-mode-toggle:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.rush-mode-orb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #6b5a45;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.rush-mode-copy {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    line-height: 1.15;
+    text-align: left;
+}
+
+.rush-mode-copy strong {
+    font-size: 0.78rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.rush-mode-copy small {
+    font-size: 0.68rem;
+    color: #d2b48c;
+    max-width: 14ch;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rush-mode-toggle.is-on {
+    border-color: rgba(255, 196, 72, 0.75);
+    background:
+        linear-gradient(135deg, rgba(180, 40, 28, 0.88), rgba(140, 70, 12, 0.92));
+    box-shadow:
+        0 0 0 1px rgba(255, 196, 72, 0.2),
+        0 8px 22px rgba(180, 40, 28, 0.28);
+    animation: rush-pulse 2.2s ease-in-out infinite;
+}
+
+.rush-mode-toggle.is-on .rush-mode-orb {
+    background: #ffe01b;
+    box-shadow: 0 0 10px rgba(255, 224, 27, 0.75);
+}
+
+.rush-mode-toggle.is-on .rush-mode-copy small {
+    color: #ffe9b0;
+}
+
+@keyframes rush-pulse {
+    0%,
+    100% {
+        box-shadow:
+            0 0 0 1px rgba(255, 196, 72, 0.2),
+            0 8px 22px rgba(180, 40, 28, 0.28);
+    }
+    50% {
+        box-shadow:
+            0 0 0 1px rgba(255, 224, 27, 0.35),
+            0 10px 28px rgba(200, 50, 30, 0.4);
+    }
+}
+
+.rush-mode-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 18px;
+    padding: 10px clamp(16px, 4vw, 48px);
+    background:
+        linear-gradient(90deg, rgba(180, 36, 24, 0.96), rgba(120, 64, 16, 0.94));
+    color: #fff6e4;
+    border-bottom: 2px solid #ffe01b;
+}
+
+.rush-mode-banner-mark {
+    display: inline-grid;
+    place-items: center;
+    min-width: 58px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    color: #1a120a;
+    background: linear-gradient(180deg, #ffe01b, #e6c200);
+}
+
+.rush-mode-banner strong {
+    font-family: var(--display, Georgia, serif);
+    font-size: 0.98rem;
+}
+
+.rush-mode-banner span:last-child {
+    font-size: 0.78rem;
+    opacity: 0.9;
+}
+
 .mode-toggle {
     display: flex;
     padding: 3px;

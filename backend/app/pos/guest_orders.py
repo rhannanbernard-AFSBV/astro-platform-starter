@@ -151,7 +151,7 @@ def _guest_category(item: dict[str, Any]) -> str:
 
 
 def _kitchen_load(snap: dict[str, Any]) -> dict[str, Any]:
-    """Estimate prep wait from open kitchen/bar tickets (Philipsburg tourist clarity)."""
+    """Estimate prep wait from open kitchen/bar tickets; Rush mode uses a faster model."""
     active = 0
     for table in snap.get("tables") or []:
         if table.get("status") == "paid":
@@ -159,12 +159,21 @@ def _kitchen_load(snap: dict[str, Any]) -> dict[str, Any]:
         for line in table.get("lines") or []:
             if line.get("kitchenStatus") in ("queued", "preparing"):
                 active += max(1, int(line.get("quantity") or 1))
-    # ~3.5 minutes per active unit, floor 8 / ceiling 45 for cruise-port expectations
-    minutes = 8 if active == 0 else min(45, max(8, int(round(active * 3.5))))
+    settings = snap.get("settings") or {}
+    rush = bool(settings.get("rushMode"))
+    per_unit = 2.2 if rush else 3.5
+    floor = 5 if rush else 8
+    ceiling = 28 if rush else 45
+    minutes = floor if active == 0 else min(ceiling, max(floor, int(round(active * per_unit))))
+    if rush:
+        label = f"Rush · about {minutes} min"
+    else:
+        label = f"About {minutes} min" if active else "About 8–12 min"
     return {
         "activeTickets": active,
         "estimatedWaitMinutes": minutes,
-        "label": f"About {minutes} min" if active else "About 8–12 min",
+        "label": label,
+        "rushMode": rush,
     }
 
 

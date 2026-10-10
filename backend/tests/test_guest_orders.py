@@ -51,7 +51,26 @@ def test_guest_menu_fallback(client: TestClient):
     assert body["locale"]["countryCode"] == "SXM"
     assert body["currency"]["xcg"] is True
     assert "estimatedWaitMinutes" in body["kitchen"]
+    assert body["kitchen"]["rushMode"] is False
     assert body["tipPresetsCents"][0] == 0
+
+
+def test_guest_menu_rush_wait(client: TestClient):
+    token = client.post("/pos/auth/login", json={"pin": "9999"}).json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    current = client.get("/pos/state", headers=headers).json()
+    state = current["state"]
+    state["settings"]["rushMode"] = True
+    state["settings"]["rushModeSince"] = "2026-10-10T12:00:00+00:00"
+    put = client.put(
+        "/pos/state",
+        headers=headers,
+        json={"state": state, "expectedRevision": current["revision"]},
+    )
+    assert put.status_code == 200, put.text
+    menu = client.get("/pos/guest/menu").json()
+    assert menu["kitchen"]["rushMode"] is True
+    assert "Rush" in menu["kitchen"]["label"]
 
 
 def test_guest_place_and_status(client: TestClient):

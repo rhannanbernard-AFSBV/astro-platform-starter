@@ -17,7 +17,12 @@ export type GuestMenuResponse = {
     locale?: GuestLocale;
     serviceChargePercent?: number;
     tipPresetsCents?: number[];
-    kitchen?: { activeTickets: number; estimatedWaitMinutes: number; label: string };
+    kitchen?: {
+        activeTickets: number;
+        estimatedWaitMinutes: number;
+        label: string;
+        rushMode?: boolean;
+    };
     restaurant: { name: string; tagline: string; phone?: string };
     items: Array<{
         id: string;
@@ -98,6 +103,7 @@ export async function fetchGuestMenu(): Promise<{
     tipPresetsCents: number[];
     waitLabel: string;
     currencyLabel: string;
+    rushMode: boolean;
 }> {
     const base = apiBase();
     if (!base) {
@@ -110,6 +116,7 @@ export async function fetchGuestMenu(): Promise<{
             tipPresetsCents: [0, 200, 500, 1000, 1500],
             waitLabel: 'About 8–12 min',
             currencyLabel: 'USD & XCG (1 USD = 1.8 XCG)',
+            rushMode: false,
         };
     }
     try {
@@ -125,6 +132,7 @@ export async function fetchGuestMenu(): Promise<{
             tipPresetsCents: body.tipPresetsCents ?? [0, 200, 500, 1000, 1500],
             waitLabel: body.kitchen?.label || 'About 8–12 min',
             currencyLabel: body.currency.label || `USD & XCG (1 USD = ${body.currency.xcgPerUsd} XCG)`,
+            rushMode: Boolean(body.kitchen?.rushMode),
         };
     } catch {
         return {
@@ -136,6 +144,7 @@ export async function fetchGuestMenu(): Promise<{
             tipPresetsCents: [0, 200, 500, 1000, 1500],
             waitLabel: 'About 8–12 min',
             currencyLabel: 'USD & XCG (1 USD = 1.8 XCG)',
+            rushMode: false,
         };
     }
 }

@@ -16,6 +16,12 @@ One-page ops for floor, bar, and kitchen.
 3. Advance tickets on Kitchen/Bar boards.
 4. Take payment on Service (USD or XCG) — tip from guest app is already on the check.
 
+## Rush mode
+
+1. Manager / server / bartender: tap **Rush mode** in the top bar when the floor spikes.
+2. Kitchen bumps escalate sooner; guest wait ETA shortens; guest banner shows rush service.
+3. Turn off when the rush eases — same toggle.
+
 ## 86 / happy hour
 
 - Menu admin or Kitchen board: toggle 86.

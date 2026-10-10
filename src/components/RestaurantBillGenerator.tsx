@@ -50,6 +50,12 @@ import {
     type ClosedBarTabMemory,
 } from './bill/posLogic';
 import ReceiptView from './bill/ReceiptView';
+import RushModeControl from './bill/RushModeControl';
+import {
+    canToggleRushMode,
+    effectiveBumpAfterMinutes,
+    rushBannerCopy,
+} from './bill/rushMode';
 import {
     canAccessView,
     canClearOrder,
@@ -1552,6 +1558,30 @@ export default function RestaurantBillGenerator() {
                     )}
                 </div>
                 <div className="top-actions">
+                    {canToggleRushMode(staff.role) && (
+                        <RushModeControl
+                            active={state.settings.rushMode}
+                            since={state.settings.rushModeSince}
+                            onToggle={() => {
+                                const turningOn = !state.settings.rushMode;
+                                commit((current) => ({
+                                    ...current,
+                                    settings: {
+                                        ...current.settings,
+                                        rushMode: turningOn,
+                                        rushModeSince: turningOn
+                                            ? new Date().toISOString()
+                                            : null,
+                                    },
+                                }));
+                                setShareFeedback(
+                                    turningOn
+                                        ? 'Rush mode on — shorter kitchen bumps & faster guest wait estimates.'
+                                        : 'Rush mode off — back to normal tempo.',
+                                );
+                            }}
+                        />
+                    )}
                     <NotificationCenter
                         notifications={visibleNotifications}
                         staffId={staff.id}
@@ -1611,6 +1641,16 @@ export default function RestaurantBillGenerator() {
                 </div>
             </header>
 
+            {state.settings.rushMode && (
+                <div className="rush-mode-banner" role="status">
+                    <span className="rush-mode-banner-mark" aria-hidden="true">
+                        RUSH
+                    </span>
+                    <strong>{rushBannerCopy(state.settings.rushModeSince)}</strong>
+                    <span>Bump at {effectiveBumpAfterMinutes(state.settings)} min · guest wait model sped up</span>
+                </div>
+            )}
+
             {readyBanner && (
                 <div className="ready-banner" role="status">
                     <strong>{readyBanner}</strong>
@@ -1658,7 +1698,7 @@ export default function RestaurantBillGenerator() {
                             board="kitchen"
                             tables={state.tables}
                             menuById={menuById}
-                            bumpAfterMinutes={state.settings.bumpAfterMinutes}
+                            bumpAfterMinutes={effectiveBumpAfterMinutes(state.settings)}
                             canDeleteTickets={
                                 canDeleteTickets(staff.role) && staff.role !== 'kitchen'
                             }
@@ -1680,7 +1720,7 @@ export default function RestaurantBillGenerator() {
                             board="bar"
                             tables={state.tables}
                             menuById={menuById}
-                            bumpAfterMinutes={state.settings.bumpAfterMinutes}
+                            bumpAfterMinutes={effectiveBumpAfterMinutes(state.settings)}
                             canDeleteTickets={
                                 canDeleteTickets(staff.role) && staff.role !== 'bartender'
                             }

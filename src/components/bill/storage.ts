@@ -437,6 +437,16 @@ function normalizeState(value: unknown): PersistedState | null {
             rawSettings.autoFireDrinks !== undefined
                 ? rawSettings.autoFireDrinks !== false
                 : DEFAULT_SETTINGS.autoFireDrinks,
+        rushMode: rawSettings.rushMode === true,
+        rushModeSince:
+            typeof rawSettings.rushModeSince === 'string' ? rawSettings.rushModeSince : null,
+        rushBumpMinutes: Math.max(
+            1,
+            Math.min(
+                30,
+                Number(rawSettings.rushBumpMinutes ?? DEFAULT_SETTINGS.rushBumpMinutes),
+            ),
+        ),
     };
 
     return {
