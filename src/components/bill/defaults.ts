@@ -81,7 +81,7 @@ export const DEFAULT_PREP_GROUP: ModifierGroup = {
 export const DEFAULT_SIDES_GROUP: ModifierGroup = {
     id: 'sides',
     name: 'Side swap',
-    multi: false,
+    multi: true,
     options: [
         { id: 'rice-peas', name: 'Rice & peas', priceDeltaCents: 0 },
         { id: 'festival', name: 'Festival', priceDeltaCents: 100 },
@@ -100,7 +100,7 @@ export function ensureCoreModifierGroups(groups: ModifierGroup[] = []): Modifier
     const extras = groups.filter((group) => group.id !== 'prep' && group.id !== 'sides');
     return [
         { ...prep, name: 'Prep', multi: true },
-        { ...sides, name: 'Side swap', multi: false },
+        { ...sides, name: 'Side swap', multi: true },
         ...extras,
     ];
 }

@@ -823,7 +823,7 @@ export default function AdminPanel({
                             />
                             <ModifierGroupEditor
                                 title="Side swap"
-                                help="One side choice per plate (rice & peas, festival, plantain…)."
+                                help="Multi-select sides per plate (rice & peas, festival, plantain…)."
                                 group={sides}
                                 onChange={(group) =>
                                     onFormChange((current) => ({
