@@ -3040,8 +3040,8 @@ button.status-tab {
 
 .wine-style-badge {
     position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
+    bottom: 0.5rem;
+    left: 0.5rem;
     padding: 0.22rem 0.5rem;
     font-size: 0.68rem;
     font-weight: 800;
