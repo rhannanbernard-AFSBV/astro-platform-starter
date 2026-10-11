@@ -117,7 +117,7 @@ const RAW_DEFAULT_MENU: MenuItem[] = [
         description: 'Pimento wood smoke, scotch bonnet marinade, festival',
         category: 'Mains',
         priceCents: 2450,
-        image: '/menu/1.svg',
+        image: '/menu/photos/jerk-chicken.jpg',
         popular: true,
         modifierGroups: sharedMods([
             {
@@ -138,7 +138,7 @@ const RAW_DEFAULT_MENU: MenuItem[] = [
         description: 'National plate with callaloo, boiled banana, avocado pear',
         category: 'Mains',
         priceCents: 2890,
-        image: '/menu/2.svg',
+        image: '/menu/photos/ackee-saltfish.jpg',
         popular: true,
         modifierGroups: sharedMods(),
     },
@@ -148,7 +148,7 @@ const RAW_DEFAULT_MENU: MenuItem[] = [
         description: 'Slow pot curry, thyme, potato, white rice',
         category: 'Mains',
         priceCents: 2680,
-        image: '/menu/3.svg',
+        image: '/menu/photos/curry-goat.jpg',
         popular: true,
         modifierGroups: sharedMods(),
     },
@@ -158,7 +158,7 @@ const RAW_DEFAULT_MENU: MenuItem[] = [
         description: 'Butter beans, broad thyme, rich gravy',
         category: 'Mains',
         priceCents: 2990,
-        image: '/menu/4.svg',
+        image: '/menu/photos/oxtail-stew.jpg',
         modifierGroups: sharedMods(),
     },
     {
@@ -167,7 +167,7 @@ const RAW_DEFAULT_MENU: MenuItem[] = [
         description: 'Golden fried festival with ripe plantain from the market',
         category: 'Starters',
         priceCents: 990,
-        image: '/menu/5.svg',
+        image: '/menu/photos/festival-plantain.jpg',
         modifierGroups: sharedMods(),
     },
     {
@@ -176,7 +176,7 @@ const RAW_DEFAULT_MENU: MenuItem[] = [
         description: 'Market callaloo, onion, scotch bonnet, coconut oil',
         category: 'Starters',
         priceCents: 850,
-        image: '/menu/6.svg',
+        image: '/menu/photos/callaloo-saute.jpg',
         modifierGroups: sharedMods(),
     },
     {
@@ -185,7 +185,7 @@ const RAW_DEFAULT_MENU: MenuItem[] = [
         description: 'Coal-side breadfruit wedges, salted butter',
         category: 'Starters',
         priceCents: 750,
-        image: '/market/breadfruit.svg',
+        image: '/menu/photos/roasted-breadfruit.jpg',
         modifierGroups: [],
     },
     {
@@ -194,7 +194,7 @@ const RAW_DEFAULT_MENU: MenuItem[] = [
         description: 'Chilled market mango, lime pinch',
         category: 'Starters',
         priceCents: 650,
-        image: '/market/mango.svg',
+        image: '/menu/photos/julie-mango.jpg',
         popular: true,
         modifierGroups: [],
     },
@@ -205,7 +205,7 @@ const RAW_DEFAULT_MENU: MenuItem[] = [
         description: 'Oven pudding with coconut milk & spice',
         category: 'Desserts',
         priceCents: 1080,
-        image: '/menu/9.svg',
+        image: '/menu/photos/sweet-potato-pudding.jpg',
         popular: true,
         modifierGroups: [
             {
@@ -222,7 +222,7 @@ const RAW_DEFAULT_MENU: MenuItem[] = [
         description: 'Pinched tart shell, sweet spiced coconut',
         category: 'Desserts',
         priceCents: 850,
-        image: '/menu/10.svg',
+        image: '/menu/photos/gizzada.jpg',
         modifierGroups: [],
     },
 ];

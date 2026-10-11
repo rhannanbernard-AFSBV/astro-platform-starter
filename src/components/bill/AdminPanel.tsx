@@ -229,6 +229,7 @@ export default function AdminPanel({
                       happyHour: null,
                       origin: null,
                       vintageYear: null,
+                      wineStyle: null,
                       prepGuide: null,
                       pairingNotes: null,
                       ingredients: null,
@@ -245,6 +246,7 @@ export default function AdminPanel({
                       happyHour: null,
                       origin: null,
                       vintageYear: null,
+                      wineStyle: null,
                       prepGuide: null,
                       pairingNotes: null,
                       ingredients: null,
@@ -704,6 +706,30 @@ export default function AdminPanel({
                                     placeholder="e.g. 2022"
                                 />
                             </label>
+                            {(menuForm.category === 'Wine' ||
+                                menuForm.category === 'Champagne') && (
+                                <label>
+                                    Wine style
+                                    <select
+                                        value={menuForm.wineStyle ?? ''}
+                                        onChange={(event) =>
+                                            onFormChange((current) => ({
+                                                ...current,
+                                                wineStyle: (event.target.value ||
+                                                    null) as MenuItem['wineStyle'],
+                                            }))
+                                        }
+                                    >
+                                        <option value="">—</option>
+                                        <option value="White">White</option>
+                                        <option value="Red">Red</option>
+                                        <option value="Rosé">Rosé</option>
+                                        <option value="Sparkling">Sparkling</option>
+                                        <option value="Orange">Orange</option>
+                                        <option value="Dessert">Dessert</option>
+                                    </select>
+                                </label>
+                            )}
                         </div>
                     )}
                     <p className="fx-note">

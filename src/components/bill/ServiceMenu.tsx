@@ -205,15 +205,30 @@ export default function ServiceMenu({
                                 {item.popular && !eighty && <span className="popular">Popular</span>}
                                 {eighty && <span className="eighty-badge">86</span>}
                                 {hh && !eighty && <span className="hh-badge">Happy hour</span>}
+                                {item.wineStyle && !eighty && (
+                                    <span
+                                        className={`wine-style-badge wine-style-${item.wineStyle.toLowerCase().replace('é', 'e')}`}
+                                    >
+                                        {item.wineStyle}
+                                    </span>
+                                )}
                                 {quantity > 0 && <span className="in-order">{quantity} in order</span>}
                             </div>
                             <div className="card-copy">
-                                <p className="item-category">{MENU_CATEGORY_LABELS[item.category]}</p>
+                                <p className="item-category">
+                                    {item.wineStyle
+                                        ? `${MENU_CATEGORY_LABELS[item.category]} · ${item.wineStyle}`
+                                        : MENU_CATEGORY_LABELS[item.category]}
+                                </p>
                                 <h2>{item.name}</h2>
                                 <p className="description">{item.description}</p>
                                 {(item.origin || item.vintageYear) && (
                                     <p className="wine-meta">
-                                        {[item.origin, item.vintageYear ? String(item.vintageYear) : null]
+                                        {[
+                                            item.wineStyle,
+                                            item.origin,
+                                            item.vintageYear ? String(item.vintageYear) : null,
+                                        ]
                                             .filter(Boolean)
                                             .join(' · ')}
                                     </p>

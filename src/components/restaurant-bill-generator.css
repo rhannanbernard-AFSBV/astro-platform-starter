@@ -3038,6 +3038,51 @@ button.status-tab {
     background: #2f6f8f;
 }
 
+.wine-style-badge {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    padding: 0.22rem 0.5rem;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border-radius: 999px;
+    color: #24180f;
+    background: #f6e7c3;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.wine-style-badge.wine-style-white {
+    background: #f4f1e6;
+    color: #3a3428;
+}
+
+.wine-style-badge.wine-style-red {
+    background: #6b1f28;
+    color: #fff4f0;
+}
+
+.wine-style-badge.wine-style-rose {
+    background: #e8a0b0;
+    color: #3a1820;
+}
+
+.wine-style-badge.wine-style-sparkling {
+    background: #d4af37;
+    color: #24180f;
+}
+
+.wine-style-badge.wine-style-orange {
+    background: #c4722a;
+    color: #fff8f0;
+}
+
+.wine-style-badge.wine-style-dessert {
+    background: #5c3d7a;
+    color: #f8f0ff;
+}
+
 .price-stack {
     display: flex;
     flex-direction: column;

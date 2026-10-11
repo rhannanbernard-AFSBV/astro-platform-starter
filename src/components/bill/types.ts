@@ -96,6 +96,8 @@ export type MenuItem = {
     origin?: string | null;
     /** Vintage year when applicable */
     vintageYear?: number | null;
+    /** Wine list style — White, Red, Rosé, Sparkling, etc. */
+    wineStyle?: 'White' | 'Red' | 'Rosé' | 'Sparkling' | 'Orange' | 'Dessert' | null;
     /** GPT-4o / AI: professional prep method */
     prepGuide?: string | null;
     /** GPT-4o / AI: wine↔meal or drink pairings */

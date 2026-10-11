@@ -174,6 +174,7 @@ function emptyMenuForm(): Omit<MenuItem, 'id'> {
         happyHour: null,
         origin: null,
         vintageYear: null,
+        wineStyle: null,
         prepGuide: null,
         pairingNotes: null,
         ingredients: null,

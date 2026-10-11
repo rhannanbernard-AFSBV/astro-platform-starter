@@ -38,6 +38,8 @@ const mocktail = (
     ...opts,
 });
 
+export type WineStyle = NonNullable<MenuItem['wineStyle']>;
+
 const wine = (
     id: string,
     name: string,
@@ -45,6 +47,7 @@ const wine = (
     origin: string,
     vintageYear: number,
     priceCents: number,
+    wineStyle: WineStyle,
 ): MenuItem => ({
     id,
     name,
@@ -54,6 +57,7 @@ const wine = (
     image: '/menu/8.svg',
     origin,
     vintageYear,
+    wineStyle,
     modifierGroups: [],
 });
 
@@ -73,6 +77,7 @@ const champagne = (
     image: '/menu/8.svg',
     origin,
     vintageYear,
+    wineStyle: 'Sparkling',
     modifierGroups: [],
 });
 
@@ -161,6 +166,7 @@ export const WINE_MENU: MenuItem[] = [
         'Marlborough, New Zealand',
         2023,
         4200,
+        'White',
     ),
     wine(
         'w02',
@@ -169,6 +175,7 @@ export const WINE_MENU: MenuItem[] = [
         'Marlborough, New Zealand',
         2022,
         3800,
+        'Red',
     ),
     wine(
         'w03',
@@ -177,6 +184,7 @@ export const WINE_MENU: MenuItem[] = [
         'Columbia Valley, USA',
         2022,
         3200,
+        'White',
     ),
     wine(
         'w04',
@@ -185,6 +193,7 @@ export const WINE_MENU: MenuItem[] = [
         'Mendoza, Argentina',
         2021,
         2900,
+        'Red',
     ),
     wine(
         'w05',
@@ -193,6 +202,7 @@ export const WINE_MENU: MenuItem[] = [
         'Tuscany, Italy',
         2021,
         3600,
+        'Red',
     ),
     wine(
         'w06',
@@ -201,6 +211,7 @@ export const WINE_MENU: MenuItem[] = [
         'California, USA',
         2021,
         3400,
+        'Red',
     ),
     wine(
         'w07',
@@ -209,6 +220,7 @@ export const WINE_MENU: MenuItem[] = [
         'Hawke’s Bay, New Zealand',
         2023,
         3100,
+        'White',
     ),
     wine(
         'w08',
@@ -217,6 +229,16 @@ export const WINE_MENU: MenuItem[] = [
         'South Eastern Australia',
         2022,
         2400,
+        'Red',
+    ),
+    wine(
+        'w09',
+        'Whispering Angel Rosé',
+        'Dry Provence pink — strawberry, citrus, perfect with patties or fried fish.',
+        'Côtes de Provence, France',
+        2023,
+        3900,
+        'Rosé',
     ),
 ];
 

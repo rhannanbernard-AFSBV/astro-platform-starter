@@ -9,6 +9,7 @@ import {
     DEFAULT_XCG_PER_USD,
     ensureCoreModifierGroups,
     LEGACY_STORAGE_KEYS,
+    PLACEHOLDER_IMAGE,
     STORAGE_KEY,
 } from './defaults';
 import { applyEnrichment, localEnrichMenuItem } from './menuAi';
@@ -84,6 +85,23 @@ function withModifiers(menu: MenuItem[]): MenuItem[] {
                 typeof item.vintageYear === 'number'
                     ? item.vintageYear
                     : (seed?.vintageYear ?? null),
+            wineStyle:
+                item.wineStyle === 'White' ||
+                item.wineStyle === 'Red' ||
+                item.wineStyle === 'Rosé' ||
+                item.wineStyle === 'Sparkling' ||
+                item.wineStyle === 'Orange' ||
+                item.wineStyle === 'Dessert'
+                    ? item.wineStyle
+                    : (seed?.wineStyle ?? null),
+            image:
+                typeof item.image === 'string' && item.image.length > 0
+                    ? seed &&
+                      seed.image.includes('/menu/photos/') &&
+                      (item.image.endsWith('.svg') || item.image.includes('/market/'))
+                        ? seed.image
+                        : item.image
+                    : (seed?.image ?? PLACEHOLDER_IMAGE),
             prepGuide:
                 typeof item.prepGuide === 'string'
                     ? item.prepGuide
@@ -114,6 +132,7 @@ function withModifiers(menu: MenuItem[]): MenuItem[] {
                 happyHour: seed.happyHour ?? null,
                 origin: seed.origin ?? null,
                 vintageYear: seed.vintageYear ?? null,
+                wineStyle: seed.wineStyle ?? null,
                 prepGuide: seed.prepGuide ?? null,
                 pairingNotes: seed.pairingNotes ?? null,
                 ingredients: seed.ingredients ?? null,
@@ -122,6 +141,20 @@ function withModifiers(menu: MenuItem[]): MenuItem[] {
                     options: group.options.map((option) => ({ ...option })),
                 })),
             });
+        } else {
+            // Refresh wine style / photo upgrades onto existing catalog rows.
+            const existing = migrated.find((item) => item.id === seed.id);
+            if (existing) {
+                if (!existing.wineStyle && seed.wineStyle) {
+                    existing.wineStyle = seed.wineStyle;
+                }
+                if (
+                    seed.image.includes('/menu/photos/') &&
+                    (existing.image.endsWith('.svg') || existing.image.includes('/market/'))
+                ) {
+                    existing.image = seed.image;
+                }
+            }
         }
     }
 
