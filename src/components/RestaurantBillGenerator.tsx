@@ -52,9 +52,15 @@ import {
 import ReceiptView from './bill/ReceiptView';
 import RushModeControl from './bill/RushModeControl';
 import {
+    applyToggleRushMode,
     canToggleRushMode,
+    confirmRushToggleMessage,
     effectiveBumpAfterMinutes,
+    formatRushShiftLine,
     rushBannerCopy,
+    rushMinutesRemaining,
+    shouldAutoOffRush,
+    shouldWarnRushEnding,
 } from './bill/rushMode';
 import {
     canAccessView,
@@ -293,6 +299,8 @@ export default function RestaurantBillGenerator() {
     const [hideDemoCredentials, setHideDemoCredentials] = useState(false);
     const [ownerOps, setOwnerOps] = useState<OwnerSummary | null>(null);
     const [lastClosedBarTab, setLastClosedBarTab] = useState<ClosedBarTabMemory | null>(null);
+    const [rushWarnArmed, setRushWarnArmed] = useState(true);
+    const [rushClock, setRushClock] = useState(0);
     const serverMode = isServerMode();
 
     useDebouncedSave(state, hydrated && !serverMode, 400);
@@ -452,6 +460,49 @@ export default function RestaurantBillGenerator() {
 
     const staff =
         state.staff.find((entry) => entry.id === state.activeStaffId) ?? state.staff[0];
+
+    useEffect(() => {
+        if (!state.settings.rushMode) {
+            setRushWarnArmed(true);
+            return;
+        }
+        const tick = window.setInterval(() => setRushClock((n) => n + 1), 30_000);
+        return () => window.clearInterval(tick);
+    }, [state.settings.rushMode]);
+
+    useEffect(() => {
+        if (!hydrated || !state.settings.rushMode || !staff) return;
+        if (shouldAutoOffRush(state.settings)) {
+            commit((current) =>
+                applyToggleRushMode(current, {
+                    turningOn: false,
+                    staff: {
+                        id: staff.id,
+                        name: staff.name,
+                        role: staff.role,
+                    },
+                    reason: 'Rush mode auto-off',
+                }),
+            );
+            setShareFeedback('Rush mode auto-off — back to normal tempo.');
+            setRushWarnArmed(true);
+            return;
+        }
+        if (rushWarnArmed && shouldWarnRushEnding(state.settings)) {
+            const left = rushMinutesRemaining(state.settings);
+            setShareFeedback(`Rush mode ending soon — about ${left ?? 10} min left.`);
+            setRushWarnArmed(false);
+        }
+        void rushClock;
+    }, [
+        hydrated,
+        staff?.id,
+        state.settings.rushMode,
+        state.settings.rushModeSince,
+        state.settings.rushAutoOffMinutes,
+        rushClock,
+        rushWarnArmed,
+    ]);
     const allowedViews = useMemo(() => viewsForRole(staff.role), [staff.role]);
     const visibleNotifications = useMemo(
         () => notificationsForStaff(state.notifications, staff),
@@ -1558,25 +1609,33 @@ export default function RestaurantBillGenerator() {
                     )}
                 </div>
                 <div className="top-actions">
-                    {canToggleRushMode(staff.role) && (
+                    {canToggleRushMode(staff.role, state.settings) && (
                         <RushModeControl
                             active={state.settings.rushMode}
                             since={state.settings.rushModeSince}
                             onToggle={() => {
                                 const turningOn = !state.settings.rushMode;
-                                commit((current) => ({
-                                    ...current,
-                                    settings: {
-                                        ...current.settings,
-                                        rushMode: turningOn,
-                                        rushModeSince: turningOn
-                                            ? new Date().toISOString()
-                                            : null,
-                                    },
-                                }));
+                                if (
+                                    !window.confirm(
+                                        confirmRushToggleMessage(turningOn, state.settings),
+                                    )
+                                ) {
+                                    return;
+                                }
+                                commit((current) =>
+                                    applyToggleRushMode(current, {
+                                        turningOn,
+                                        staff: {
+                                            id: staff.id,
+                                            name: staff.name,
+                                            role: staff.role,
+                                        },
+                                    }),
+                                );
+                                setRushWarnArmed(true);
                                 setShareFeedback(
                                     turningOn
-                                        ? 'Rush mode on — shorter kitchen bumps & faster guest wait estimates.'
+                                        ? 'Rush mode on — kitchen & bar notified; shorter bumps & faster guest waits.'
                                         : 'Rush mode off — back to normal tempo.',
                                 );
                             }}
@@ -1642,12 +1701,22 @@ export default function RestaurantBillGenerator() {
             </header>
 
             {state.settings.rushMode && (
-                <div className="rush-mode-banner" role="status">
+                <div
+                    className={`rush-mode-banner${shouldWarnRushEnding(state.settings) ? ' is-ending' : ''}`}
+                    role="status"
+                >
                     <span className="rush-mode-banner-mark" aria-hidden="true">
                         RUSH
                     </span>
                     <strong>{rushBannerCopy(state.settings.rushModeSince)}</strong>
-                    <span>Bump at {effectiveBumpAfterMinutes(state.settings)} min · guest wait model sped up</span>
+                    <span>
+                        Bump at {effectiveBumpAfterMinutes(state.settings)} min
+                        {rushMinutesRemaining(state.settings) !== null
+                            ? ` · auto-off in ${rushMinutesRemaining(state.settings)} min`
+                            : ''}
+                        {' · '}
+                        guest wait sped up
+                    </span>
                 </div>
             )}
 
@@ -1762,15 +1831,38 @@ export default function RestaurantBillGenerator() {
                                 }))
                             }
                             onCloseShift={() => {
-                                const ok = window.confirm(formatShiftCloseSummary(todaySales));
+                                const rushLine = formatRushShiftLine(
+                                    todaySales,
+                                    state.settings.rushSessions,
+                                    formatDual,
+                                );
+                                const summary = formatShiftCloseSummary(todaySales).replace(
+                                    'Payments stay blocked',
+                                    `${rushLine}\n\nPayments stay blocked`,
+                                );
+                                const ok = window.confirm(summary);
                                 if (!ok) return;
-                                commit((current) => ({
-                                    ...current,
-                                    settings: {
-                                        ...current.settings,
-                                        shiftClosedAt: new Date().toISOString(),
-                                    },
-                                }));
+                                commit((current) => {
+                                    let next = current;
+                                    if (current.settings.rushMode) {
+                                        next = applyToggleRushMode(next, {
+                                            turningOn: false,
+                                            staff: {
+                                                id: staff.id,
+                                                name: staff.name,
+                                                role: staff.role,
+                                            },
+                                            reason: 'Rush mode off · shift close',
+                                        });
+                                    }
+                                    return {
+                                        ...next,
+                                        settings: {
+                                            ...next.settings,
+                                            shiftClosedAt: new Date().toISOString(),
+                                        },
+                                    };
+                                });
                                 setShareFeedback(
                                     'Shift closed with floor/bar day-part totals — open a new shift before taking payments.',
                                 );
@@ -1916,6 +2008,31 @@ export default function RestaurantBillGenerator() {
                                 }
                             }}
                             onSettingsChange={(patch: Partial<PosSettings>) => {
+                                if (typeof patch.rushMode === 'boolean') {
+                                    const turningOn = patch.rushMode;
+                                    if (
+                                        !window.confirm(
+                                            confirmRushToggleMessage(turningOn, {
+                                                ...state.settings,
+                                                ...patch,
+                                            }),
+                                        )
+                                    ) {
+                                        return;
+                                    }
+                                    commit((current) =>
+                                        applyToggleRushMode(current, {
+                                            turningOn,
+                                            staff: {
+                                                id: staff.id,
+                                                name: staff.name,
+                                                role: staff.role,
+                                            },
+                                        }),
+                                    );
+                                    setRushWarnArmed(true);
+                                    return;
+                                }
                                 commit((current) => ({
                                     ...current,
                                     settings: { ...current.settings, ...patch },

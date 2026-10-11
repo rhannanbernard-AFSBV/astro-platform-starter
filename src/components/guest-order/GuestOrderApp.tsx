@@ -65,15 +65,15 @@ export default function GuestOrderApp() {
             setTipPresets(result.tipPresetsCents);
         };
         void fetchGuestMenu().then(applyMenu);
-        // Refresh wait / rush banner while guests keep the page open
-        const timer = window.setInterval(() => {
+        // Refresh wait / rush banner; faster while Rush mode is on
+        let timer = window.setInterval(() => {
             void fetchGuestMenu().then(applyMenu);
-        }, 30_000);
+        }, rushMode ? 10_000 : 30_000);
         return () => {
             cancelled = true;
             window.clearInterval(timer);
         };
-    }, []);
+    }, [rushMode]);
 
     useEffect(() => {
         if (!order?.token || order.token.startsWith('go_demo_')) return;

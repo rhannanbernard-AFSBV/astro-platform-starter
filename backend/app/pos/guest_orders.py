@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.pos import store
+from app.pos.rush_constants import estimate_wait_minutes
 
 BEVERAGE_CATEGORIES = frozenset({"Drinks", "Wine", "Champagne", "Rum"})
 
@@ -161,14 +162,7 @@ def _kitchen_load(snap: dict[str, Any]) -> dict[str, Any]:
                 active += max(1, int(line.get("quantity") or 1))
     settings = snap.get("settings") or {}
     rush = bool(settings.get("rushMode"))
-    per_unit = 2.2 if rush else 3.5
-    floor = 5 if rush else 8
-    ceiling = 28 if rush else 45
-    minutes = floor if active == 0 else min(ceiling, max(floor, int(round(active * per_unit))))
-    if rush:
-        label = f"Rush · about {minutes} min"
-    else:
-        label = f"About {minutes} min" if active else "About 8–12 min"
+    minutes, label = estimate_wait_minutes(active, rush)
     return {
         "activeTickets": active,
         "estimatedWaitMinutes": minutes,

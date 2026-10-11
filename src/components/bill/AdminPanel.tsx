@@ -378,13 +378,20 @@ export default function AdminPanel({
                             onChange={(event) =>
                                 onSettingsChange({
                                     rushMode: event.target.checked,
-                                    rushModeSince: event.target.checked
-                                        ? new Date().toISOString()
-                                        : null,
                                 })
                             }
                         />
                         Rush mode (peak tempo)
+                    </label>
+                    <label className="checkbox">
+                        <input
+                            type="checkbox"
+                            checked={settings.rushManagerOnly}
+                            onChange={(event) =>
+                                onSettingsChange({ rushManagerOnly: event.target.checked })
+                            }
+                        />
+                        Manager/admin only may toggle Rush
                     </label>
                     <label>
                         Rush bump after (minutes)
@@ -404,11 +411,48 @@ export default function AdminPanel({
                             }
                         />
                     </label>
+                    <label>
+                        Rush auto-off (minutes, 0 = off)
+                        <input
+                            type="number"
+                            min="0"
+                            max="1440"
+                            step="5"
+                            value={settings.rushAutoOffMinutes}
+                            onChange={(event) =>
+                                onSettingsChange({
+                                    rushAutoOffMinutes: Math.max(
+                                        0,
+                                        Math.min(1440, Number(event.target.value || 0)),
+                                    ),
+                                })
+                            }
+                        />
+                    </label>
+                    <label>
+                        Rush ending warning (minutes left)
+                        <input
+                            type="number"
+                            min="1"
+                            max="120"
+                            step="1"
+                            value={settings.rushWarnMinutes}
+                            onChange={(event) =>
+                                onSettingsChange({
+                                    rushWarnMinutes: Math.max(
+                                        1,
+                                        Math.min(120, Number(event.target.value || 10)),
+                                    ),
+                                })
+                            }
+                        />
+                    </label>
                 </div>
                 <p className="fx-note">
                     FX, service charge, bump timer, idle lock, auto-fire, and Rush mode sync across
-                    open tabs. Rush shortens kitchen bump alerts and speeds guest wait estimates.
-                    Set idle lock to 0 to disable the station lock screen.
+                    open tabs. Rush shortens kitchen bump alerts, speeds guest wait estimates, logs
+                    an audit entry, and notifies kitchen/bar. Set idle lock to 0 to disable the
+                    station lock screen.
                 </p>
                 <h2>Station deep-links</h2>
                 <p className="fx-note">

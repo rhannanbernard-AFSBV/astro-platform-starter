@@ -38,6 +38,10 @@ export const DEFAULT_SETTINGS: PosSettings = {
     rushMode: false,
     rushModeSince: null,
     rushBumpMinutes: 4,
+    rushAutoOffMinutes: 90,
+    rushWarnMinutes: 10,
+    rushManagerOnly: false,
+    rushSessions: [],
 };
 /** @deprecated use DEFAULT_SERVICE_CHARGE_PERCENT */
 export const DEFAULT_TAX_PERCENT = DEFAULT_SERVICE_CHARGE_PERCENT;

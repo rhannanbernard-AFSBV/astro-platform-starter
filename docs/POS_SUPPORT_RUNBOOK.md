@@ -18,9 +18,10 @@ One-page ops for floor, bar, and kitchen.
 
 ## Rush mode
 
-1. Manager / server / bartender: tap **Rush mode** in the top bar when the floor spikes.
-2. Kitchen bumps escalate sooner; guest wait ETA shortens; guest banner shows rush service.
-3. Turn off when the rush eases — same toggle.
+1. Manager / server / bartender (or manager-only if configured): tap **Rush mode** → confirm.
+2. Kitchen/bar get a rush alert; bumps escalate sooner; guest wait ETA shortens.
+3. Auto-off after 90 min by default (warning at 10 min left). Shift close also clears rush.
+4. Every toggle is audited. Shift close shows rush minutes + sales during rush.
 
 ## 86 / happy hour
 

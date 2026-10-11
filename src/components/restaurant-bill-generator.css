@@ -909,6 +909,19 @@ button {
     opacity: 0.9;
 }
 
+.rush-mode-banner.is-ending {
+    background:
+        linear-gradient(90deg, rgba(120, 64, 16, 0.96), rgba(180, 36, 24, 0.94));
+    border-bottom-color: #ffb020;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .rush-mode-toggle.is-on,
+    .guest-sxm-banner.is-rush {
+        animation: none;
+    }
+}
+
 .mode-toggle {
     display: flex;
     padding: 3px;

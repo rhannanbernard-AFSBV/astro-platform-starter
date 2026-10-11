@@ -294,7 +294,8 @@ function migrateAuditLog(raw: unknown): PersistedState['auditLog'] {
                 a.kind === 'void_payment' ||
                 a.kind === 'void_line' ||
                 a.kind === 'void_ticket' ||
-                a.kind === 'comp'
+                a.kind === 'comp' ||
+                a.kind === 'rush_mode'
                     ? a.kind
                     : 'void_ticket';
             return {
@@ -324,9 +325,11 @@ function migrateNotifications(raw: unknown): AppNotification[] {
                         ? 'server_ack'
                         : n.kind === 'bump_alert'
                           ? 'bump_alert'
-                          : n.kind === 'bar_ticket'
-                            ? 'bar_ticket'
-                            : 'kitchen_ticket',
+                          : n.kind === 'rush_alert'
+                            ? 'rush_alert'
+                            : n.kind === 'bar_ticket'
+                              ? 'bar_ticket'
+                              : 'kitchen_ticket',
                 title: String(n.title ?? 'Notification'),
                 message: String(n.message ?? ''),
                 orderNumber: typeof n.orderNumber === 'string' ? n.orderNumber : null,
@@ -447,6 +450,37 @@ function normalizeState(value: unknown): PersistedState | null {
                 Number(rawSettings.rushBumpMinutes ?? DEFAULT_SETTINGS.rushBumpMinutes),
             ),
         ),
+        rushAutoOffMinutes: Math.max(
+            0,
+            Math.min(
+                24 * 60,
+                Number(rawSettings.rushAutoOffMinutes ?? DEFAULT_SETTINGS.rushAutoOffMinutes),
+            ),
+        ),
+        rushWarnMinutes: Math.max(
+            1,
+            Math.min(
+                120,
+                Number(rawSettings.rushWarnMinutes ?? DEFAULT_SETTINGS.rushWarnMinutes),
+            ),
+        ),
+        rushManagerOnly: rawSettings.rushManagerOnly === true,
+        rushSessions: Array.isArray(rawSettings.rushSessions)
+            ? rawSettings.rushSessions
+                  .map((session) => {
+                      if (!session || typeof session !== 'object') return null;
+                      const s = session as { startedAt?: unknown; endedAt?: unknown };
+                      if (typeof s.startedAt !== 'string') return null;
+                      return {
+                          startedAt: s.startedAt,
+                          endedAt: typeof s.endedAt === 'string' ? s.endedAt : null,
+                      };
+                  })
+                  .filter((session): session is { startedAt: string; endedAt: string | null } =>
+                      Boolean(session),
+                  )
+                  .slice(-40)
+            : [],
     };
 
     return {
@@ -533,7 +567,8 @@ export function notificationsForStaff(
                     n.kind === 'kitchen_ticket' ||
                     n.kind === 'bar_ticket' ||
                     n.kind === 'server_ack' ||
-                    n.kind === 'bump_alert'
+                    n.kind === 'bump_alert' ||
+                    n.kind === 'rush_alert'
                 );
             }
             return false;

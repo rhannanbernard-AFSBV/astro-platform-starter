@@ -216,6 +216,14 @@ export type PosSettings = {
     rushModeSince: string | null;
     /** Bump threshold while Rush mode is on (minutes) */
     rushBumpMinutes: number;
+    /** Auto-turn off after N minutes (0 = never) */
+    rushAutoOffMinutes: number;
+    /** Warn when this many minutes remain before auto-off */
+    rushWarnMinutes: number;
+    /** When true, only manager/admin may toggle Rush */
+    rushManagerOnly: boolean;
+    /** Closed/open rush windows for shift reporting */
+    rushSessions: Array<{ startedAt: string; endedAt: string | null }>;
 };
 
 export type StaffUser = {
@@ -228,7 +236,7 @@ export type StaffUser = {
 
 export type AppNotification = {
     id: string;
-    kind: 'kitchen_ticket' | 'bar_ticket' | 'server_ack' | 'bump_alert';
+    kind: 'kitchen_ticket' | 'bar_ticket' | 'server_ack' | 'bump_alert' | 'rush_alert';
     title: string;
     message: string;
     orderNumber: string | null;
@@ -241,7 +249,7 @@ export type AppNotification = {
 
 export type AuditEntry = {
     id: string;
-    kind: 'void_ticket' | 'void_payment' | 'void_line' | 'comp';
+    kind: 'void_ticket' | 'void_payment' | 'void_line' | 'comp' | 'rush_mode';
     reason: string;
     staffId: string;
     staffName: string;
