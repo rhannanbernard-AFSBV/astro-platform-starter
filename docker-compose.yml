@@ -1,0 +1,37 @@
+# Savory POS pilot stack — API + persistent data volume
+# Usage:
+#   docker compose up -d --build
+#   Point SPA: PUBLIC_POS_API_URL=http://localhost:8000
+#
+# Before real traffic: change every seeded PIN (forced on first login).
+
+services:
+  pos-api:
+    build:
+      context: ./backend
+    image: savory-pos-api:local
+    ports:
+      - "8000:8000"
+    environment:
+      POS_DATA_DIR: /data
+      POS_CORS_ORIGINS: ${POS_CORS_ORIGINS:-http://localhost:4321,http://127.0.0.1:4321}
+      POS_SESSION_TTL_HOURS: ${POS_SESSION_TTL_HOURS:-12}
+      POS_SESSION_IDLE_MINUTES: ${POS_SESSION_IDLE_MINUTES:-30}
+      POS_PIN_MAX_ATTEMPTS: ${POS_PIN_MAX_ATTEMPTS:-5}
+      POS_PIN_LOCKOUT_SECONDS: ${POS_PIN_LOCKOUT_SECONDS:-900}
+      POS_FORCE_PIN_CHANGE: "1"
+      POS_HIDE_DEMO_CREDENTIALS: "1"
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      PUBLIC_STRIPE_PUBLISHABLE_KEY: ${PUBLIC_STRIPE_PUBLISHABLE_KEY:-}
+    volumes:
+      - pos-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  pos-data:
