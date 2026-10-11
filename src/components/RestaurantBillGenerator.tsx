@@ -75,6 +75,7 @@ import {
     canManageMenu,
     canManageUsers,
     canOpenBarTab,
+    canOverseeStaff,
     canReopenTable,
     canRunBarBoard,
     canRunKitchenBoard,
@@ -89,6 +90,7 @@ import {
     viewsForRole,
 } from './bill/roles';
 import ServiceMenu from './bill/ServiceMenu';
+import { buildSaleReceiptSnapshot } from './bill/staffOversight';
 import {
     createStaffUser,
     findStaffByPin,
@@ -150,6 +152,7 @@ import {
 
 const KitchenBoard = lazy(() => import('./bill/KitchenBoard'));
 const SalesReport = lazy(() => import('./bill/SalesReport'));
+const StaffOversight = lazy(() => import('./bill/StaffOversight'));
 const AdminPanel = lazy(() => import('./bill/AdminPanel'));
 const UsersPanel = lazy(() => import('./bill/UsersPanel'));
 
@@ -158,6 +161,7 @@ const VIEW_LABELS: Record<AppView, string> = {
     kitchen: 'Kitchen',
     bar: 'Bar',
     reports: 'Sales',
+    oversight: 'Staff desk',
     admin: 'Menu',
     users: 'Users',
 };
@@ -572,7 +576,7 @@ export default function RestaurantBillGenerator() {
     };
 
     const requireManager = (action: () => void) => {
-        if (staff.role === 'manager') {
+        if (staff.role === 'manager' || staff.role === 'admin') {
             action();
             return;
         }
@@ -616,10 +620,17 @@ export default function RestaurantBillGenerator() {
                     setView(DEFAULT_VIEW_BY_ROLE[session.staff.role]);
                     setShowPinGate(false);
                     unlockIdle();
-                    if (pendingManagerAction && session.staff.role === 'manager') {
+                    if (
+                        pendingManagerAction &&
+                        (session.staff.role === 'manager' || session.staff.role === 'admin')
+                    ) {
                         pendingManagerAction();
-                    } else if (pendingManagerAction && session.staff.role !== 'manager') {
-                        setPinError('Manager PIN required for that action.');
+                    } else if (
+                        pendingManagerAction &&
+                        session.staff.role !== 'manager' &&
+                        session.staff.role !== 'admin'
+                    ) {
+                        setPinError('Manager or Admin PIN required for that action.');
                         setShowPinGate(true);
                         return;
                     }
@@ -643,15 +654,24 @@ export default function RestaurantBillGenerator() {
             setPinError('Invalid PIN. Check Users for available staff PINs.');
             return;
         }
-        if (pendingManagerAction && match.role !== 'manager') {
-            setPinError('Manager PIN required for that action.');
+        if (
+            pendingManagerAction &&
+            match.role !== 'manager' &&
+            match.role !== 'admin'
+        ) {
+            setPinError('Manager or Admin PIN required for that action.');
             return;
         }
         setState((current) => ({ ...current, activeStaffId: match.id }));
         setView(DEFAULT_VIEW_BY_ROLE[match.role]);
         setShowPinGate(false);
         unlockIdle();
-        if (pendingManagerAction && match.role === 'manager') pendingManagerAction();
+        if (
+            pendingManagerAction &&
+            (match.role === 'manager' || match.role === 'admin')
+        ) {
+            pendingManagerAction();
+        }
         setPendingManagerAction(null);
         setPinInput('');
         setPinError(null);
@@ -1299,6 +1319,7 @@ export default function RestaurantBillGenerator() {
             compCents: saleGuest ? 0 : bill.compCents,
             payment,
             serverName: staff.name,
+            serverStaffId: staff.id,
             itemCount: saleGuest
                 ? activeTable.lines
                       .filter((line) => line.guestId === saleGuest.id)
@@ -1806,6 +1827,85 @@ export default function RestaurantBillGenerator() {
                     </Suspense>
                 )}
 
+                {view === 'oversight' && canOverseeStaff(staff.role) && (
+                    <Suspense fallback={<ViewFallback />}>
+                        <StaffOversight
+                            tables={state.tables}
+                            menu={state.menu}
+                            staff={state.staff}
+                            sales={state.sales}
+                            restaurant={state.restaurant}
+                            canManage={canOverseeStaff(staff.role)}
+                            onOpenTable={(tableId) => {
+                                commit((current) => ({
+                                    ...current,
+                                    activeTableId: tableId,
+                                }));
+                                setView('service');
+                                setShareFeedback('Opened staff check on Service.');
+                            }}
+                            onAdvanceStatus={(tableId, lineId, status) => {
+                                commit((current) => ({
+                                    ...current,
+                                    tables: current.tables.map((table) =>
+                                        table.id !== tableId
+                                            ? table
+                                            : {
+                                                  ...table,
+                                                  lines: table.lines.map((line) =>
+                                                      line.id === lineId
+                                                          ? { ...line, kitchenStatus: status }
+                                                          : line,
+                                                  ),
+                                              },
+                                    ),
+                                }));
+                            }}
+                            onBump={(tableId, lineId) => bumpTicket(tableId, lineId)}
+                            onVoidTicket={(tableId, lineId) => {
+                                if (!canDeleteTickets(staff.role)) {
+                                    requireManager(() =>
+                                        deleteKitchenTicket(tableId, lineId),
+                                    );
+                                    return;
+                                }
+                                deleteKitchenTicket(tableId, lineId);
+                            }}
+                            onViewTableReceipt={(tableId) => {
+                                const table = state.tables.find((entry) => entry.id === tableId);
+                                if (!table) return;
+                                commit((current) => ({
+                                    ...current,
+                                    activeTableId: tableId,
+                                }));
+                                const owner =
+                                    state.staff.find((entry) =>
+                                        table.lines.some(
+                                            (line) => line.sentByStaffId === entry.id,
+                                        ),
+                                    )?.name ?? staff.name;
+                                const template =
+                                    table.status === 'paid' ? 'paid' : 'guest';
+                                setReceiptTemplate(template);
+                                setReceipt(
+                                    buildSnapshot(
+                                        table,
+                                        state.menu,
+                                        state.restaurant,
+                                        owner,
+                                        template,
+                                    ),
+                                );
+                            }}
+                            onViewSaleReceipt={(snapshot) => {
+                                setReceiptTemplate(snapshot.template ?? 'paid');
+                                setReceipt(snapshot);
+                            }}
+                            onVoidSale={deleteSale}
+                        />
+                    </Suspense>
+                )}
+
                 {view === 'reports' && canAccessView(staff.role, 'reports') && (
                     <Suspense fallback={<ViewFallback />}>
                         <SalesReport
@@ -1816,6 +1916,26 @@ export default function RestaurantBillGenerator() {
                             ownerOps={ownerOps}
                             onExport={exportSales}
                             onDeleteSale={deleteSale}
+                            onViewSale={(sale) => {
+                                const table = state.tables.find(
+                                    (entry) => entry.id === sale.tableId,
+                                );
+                                if (table) {
+                                    setReceiptTemplate('paid');
+                                    setReceipt(
+                                        buildSnapshot(
+                                            table,
+                                            state.menu,
+                                            state.restaurant,
+                                            sale.serverName,
+                                            'paid',
+                                        ),
+                                    );
+                                    return;
+                                }
+                                setReceiptTemplate('paid');
+                                setReceipt(buildSaleReceiptSnapshot(sale, state.restaurant));
+                            }}
                             onBackup={
                                 serverMode && (staff.role === 'manager' || staff.role === 'admin')
                                     ? runOwnerBackup

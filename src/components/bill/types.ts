@@ -42,7 +42,14 @@ export type TipAmountPreset = (typeof TIP_AMOUNT_PRESETS)[number] | 'custom';
 
 export const STAFF_ROLES = ['kitchen', 'bartender', 'server', 'admin', 'manager'] as const;
 export type StaffRole = (typeof STAFF_ROLES)[number];
-export type AppView = 'service' | 'kitchen' | 'bar' | 'reports' | 'admin' | 'users';
+export type AppView =
+    | 'service'
+    | 'kitchen'
+    | 'bar'
+    | 'reports'
+    | 'oversight'
+    | 'admin'
+    | 'users';
 export type PaymentMethod = 'cash' | 'card' | 'mixed';
 export type KitchenStatus = 'draft' | 'queued' | 'preparing' | 'ready' | 'served';
 export type TableStatus = 'open' | 'paid' | 'partial';
@@ -184,6 +191,8 @@ export type SaleRecord = {
     compCents: number;
     payment: PaymentTender;
     serverName: string;
+    /** Staff who closed the check — used by manager/admin oversight */
+    serverStaffId?: string | null;
     itemCount: number;
     orderNumbers: string[];
     guestName: string | null;
