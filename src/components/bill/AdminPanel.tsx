@@ -49,6 +49,7 @@ const STATION_LINKS: Array<{ key: StationKey; label: string }> = [
     { key: 'kitchen', label: 'Kitchen expo' },
     { key: 'bar', label: 'Bar rail' },
     { key: 'reports', label: 'Sales' },
+    { key: 'oversight', label: 'Staff desk' },
     { key: 'admin', label: 'Menu admin' },
 ];
 

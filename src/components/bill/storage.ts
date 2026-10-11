@@ -301,6 +301,8 @@ function migrateSales(rawSales: unknown): SaleRecord[] {
             compCents: Math.max(0, Number(sale.compCents ?? 0)),
             payment: sale.payment as SaleRecord['payment'],
             serverName: String(sale.serverName ?? 'Server'),
+            serverStaffId:
+                typeof sale.serverStaffId === 'string' ? sale.serverStaffId : null,
             itemCount: Number(sale.itemCount ?? 0),
             orderNumbers: Array.isArray(sale.orderNumbers)
                 ? (sale.orderNumbers as string[])

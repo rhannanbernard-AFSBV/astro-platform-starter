@@ -18,6 +18,7 @@ type Props = {
     ownerOps?: OwnerOps | null;
     onExport: () => void;
     onDeleteSale: (saleId: string) => void;
+    onViewSale?: (sale: SaleRecord) => void;
     onOpenShift: () => void;
     onCloseShift: () => void;
     onBackup?: () => void;
@@ -31,6 +32,7 @@ export default function SalesReport({
     ownerOps = null,
     onExport,
     onDeleteSale,
+    onViewSale,
     onOpenShift,
     onCloseShift,
     onBackup,
@@ -177,18 +179,24 @@ export default function SalesReport({
                 </div>
             </div>
             <div className="sales-table">
-                <div className={`sales-row head ${canDeletePayments ? 'with-actions' : ''}`}>
+                <div
+                    className={`sales-row head ${
+                        canDeletePayments || onViewSale ? 'with-actions' : ''
+                    }`}
+                >
                     <span>Time</span>
                     <span>Table</span>
                     <span>Server</span>
                     <span>Method</span>
                     <span>Total</span>
-                    {canDeletePayments && <span>Actions</span>}
+                    {(canDeletePayments || onViewSale) && <span>Actions</span>}
                 </div>
                 {sales.length === 0 && <p className="empty-menu">No paid checks yet today.</p>}
                 {sales.map((sale) => (
                     <div
-                        className={`sales-row ${canDeletePayments ? 'with-actions' : ''}`}
+                        className={`sales-row ${
+                            canDeletePayments || onViewSale ? 'with-actions' : ''
+                        }`}
                         key={sale.id}
                     >
                         <span>{new Date(sale.paidAt).toLocaleTimeString()}</span>
@@ -204,22 +212,33 @@ export default function SalesReport({
                         <span>
                             <Price cents={sale.totalCents} compact />
                         </span>
-                        {canDeletePayments && (
-                            <span>
-                                <button
-                                    type="button"
-                                    className="ghost-text danger-text"
-                                    onClick={() => onDeleteSale(sale.id)}
-                                >
-                                    Delete
-                                </button>
+                        {(canDeletePayments || onViewSale) && (
+                            <span className="oversight-sale-actions">
+                                {onViewSale && (
+                                    <button
+                                        type="button"
+                                        className="ghost-text"
+                                        onClick={() => onViewSale(sale)}
+                                    >
+                                        View receipt
+                                    </button>
+                                )}
+                                {canDeletePayments && (
+                                    <button
+                                        type="button"
+                                        className="ghost-text danger-text"
+                                        onClick={() => onDeleteSale(sale.id)}
+                                    >
+                                        Void
+                                    </button>
+                                )}
                             </span>
                         )}
                     </div>
                 ))}
             </div>
             {!canDeletePayments && (
-                <p className="pin-help">Only a Manager can delete payments.</p>
+                <p className="pin-help">Manager or Admin can void payments from Sales or Staff desk.</p>
             )}
             <p className="fx-note">
                 FX: {settings.xcgPerUsd.toFixed(2)} XCG = 1 USD · amounts stored in USD

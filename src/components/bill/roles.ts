@@ -25,12 +25,17 @@ export function viewsForRole(role: StaffRole): AppView[] {
         case 'server':
             return ['service'];
         case 'admin':
-            return ['service', 'kitchen', 'bar', 'reports', 'admin', 'users'];
+            return ['service', 'kitchen', 'bar', 'reports', 'oversight', 'admin', 'users'];
         case 'manager':
-            return ['service', 'kitchen', 'bar', 'reports', 'admin', 'users'];
+            return ['service', 'kitchen', 'bar', 'reports', 'oversight', 'admin', 'users'];
         default:
             return ['service'];
     }
+}
+
+/** Full staff ticket / payment oversight desk */
+export function canOverseeStaff(role: StaffRole): boolean {
+    return role === 'admin' || role === 'manager';
 }
 
 export function canAccessView(role: StaffRole, view: AppView): boolean {
@@ -98,22 +103,22 @@ export function canRunBarBoard(role: StaffRole): boolean {
     return role === 'bartender' || role === 'admin' || role === 'manager';
 }
 
-/** Destructive / privileged ops — Manager only */
+/** Destructive / privileged ops — Manager + Admin */
 export function canClearOrder(role: StaffRole): boolean {
-    return role === 'manager';
+    return role === 'manager' || role === 'admin';
 }
 
 export function canReopenTable(role: StaffRole): boolean {
-    return role === 'manager';
+    return role === 'manager' || role === 'admin';
 }
 
 export function canVoidKitchenItems(role: StaffRole): boolean {
-    return role === 'manager';
+    return role === 'manager' || role === 'admin';
 }
 
-/** Delete kitchen tickets — Manager only (kitchen staff never) */
+/** Delete kitchen tickets — Manager / Admin (kitchen staff never) */
 export function canDeleteTickets(role: StaffRole): boolean {
-    return role === 'manager';
+    return role === 'manager' || role === 'admin';
 }
 
 /** Bar / beverage status after drinks are sent (bartender + floor leads) */
@@ -126,9 +131,9 @@ export function canUpdateBeverageStatus(role: StaffRole): boolean {
     );
 }
 
-/** Delete / void payments and sales — Manager only */
+/** Delete / void payments and sales — Manager / Admin */
 export function canDeletePayments(role: StaffRole): boolean {
-    return role === 'manager';
+    return role === 'manager' || role === 'admin';
 }
 
 export function canDeleteMenuItems(role: StaffRole): boolean {
