@@ -6,11 +6,12 @@ Multi-tenant foundation for Sint Maarten tax calculations. The Astro app at the 
 
 - Master accounts (accounting firms) and the business profiles under them
 - A signed-in user can switch the active business profile, and Postgres row-level security keeps that switch inside the firm
-- Turnover tax, annual wage-tax step brackets, and SZV ZV/OV plus AOV/AWW splits and monthly wage ceilings
-- Rates, brackets, and ceilings are rows for `country_code = SXM` and a `tax_year`. The Python functions only multiply and cap the decimals they are given
+- Turnover tax, annual wage-tax step brackets, the monthly loonbelasting withholding table, and SZV ZV/OV plus AOV/AWW splits and monthly wage ceilings
+- Rates, brackets, ceilings, and withholding classes are rows for `country_code = SXM` and a `tax_year`. The Python functions only multiply, cap, and look up the decimals they are given
 - Async FastAPI routes with Pydantic responses. Money is a decimal string
+- Payroll runs for the active business profile. Withholding uses the monthly loonbelasting table. SZV premiums use the existing capped-split calculator
 
-Invoices, payroll runs, and OCR intake are not in this slice.
+Invoices and OCR intake are not in this slice.
 
 ## Run locally
 
@@ -41,14 +42,19 @@ Switch with `POST /api/v1/context/switch` and `{"tenant_id": "..."}` before call
 
 ## Tax routes
 
-All three require an active business profile. Amounts are decimal strings, not JSON floats.
+The tax routes require an active business profile. Amounts are decimal strings, not JSON floats.
 
 - `POST /api/v1/tax/tot` — `gross_taxable_revenue`. Turnover tax is `revenue * rate` using the TOT row
-- `POST /api/v1/tax/wage` — annual taxable wage (grondslag) for the AB 2026 schijventarief. The monthly loonbelasting lookup tables are not loaded yet
+- `POST /api/v1/tax/wage` — annual taxable wage (grondslag) for the AB 2026 schijventarief
+- `POST /api/v1/tax/wage-monthly` — monthly loonbelasting grondslag. The class at or below that amount is the withholding, unless the grondslag is at or below the free maximum stored on the schedule. Above the last class, the stored excess rate applies to the excess
 - `POST /api/v1/tax/szv` — monthly gross wage. Each component caps the wage at its own monthly ceiling. OV uses the request rate, otherwise the business profile rate, otherwise the statutory minimum stored on the component. The rate must sit inside the band stored on that row
 - `GET /api/v1/tax/schedules?tax_year=2026&country_code=SXM` — the rows the calculators will read
 
-The 2026 seed cites the statutory turnover-tax rate, AB 2026 no. 11, and the SZV AOV/AWW notice plus the published premium splits. The ZV/OV monthly ceiling is the Cg 10,000.00 maximum in force from 1 August 2022; SZV's public index did not show a later amendment. Confirm those rows before filing.
+The 2026 seed cites the statutory turnover-tax rate, AB 2026 no. 11 (annual schijventarief and Bijlage II maandtabel), and the SZV AOV/AWW notice plus the published premium splits. The ZV/OV monthly ceiling is the Cg 10,000.00 maximum in force from 1 August 2022; SZV's public index did not show a later amendment. Confirm those rows before filing.
+
+## Payroll
+
+`POST /api/v1/payroll/runs` records one month for the active business profile. Send `period_year`, `period_month`, and lines (`employee_name`, optional `employee_code`, `gross_wage`) as decimal strings. The service subtracts the monthly acquisition cost stored on the withholding rules, then the employee AOV/AWW premiums from the SZV calculator on that reduced wage, and looks the resulting grondslag up in the maandtabel. SZV amounts on the payslip are the calculator applied to gross wage. `GET /api/v1/payroll/runs` and `GET /api/v1/payroll/runs/{run_id}` return only that profile's runs.
 
 ## Tests
 

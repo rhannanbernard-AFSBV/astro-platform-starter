@@ -16,15 +16,6 @@ DEV_KEY = "allyanna-dev-key"
 OTHER_KEY = "allyanna-other-key"
 
 
-@pytest.fixture
-def client(database_url: str, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("TAX_CACHE_TTL_SECONDS", "0")
-    app = create_app()
-    with TestClient(app) as test_client:
-        yield test_client
-
-
 def _auth(key: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {key}"}
 
@@ -39,6 +30,13 @@ def test_health_and_money_schema_without_a_database(monkeypatch: pytest.MonkeyPa
         schema = test_client.get("/openapi.json").json()
     assert schema["components"]["schemas"]["TotResponse"]["properties"]["tot_amount"]["type"] == "string"
     assert schema["components"]["schemas"]["TotResponse"]["properties"]["rate"]["type"] == "string"
+    payroll_props = schema["components"]["schemas"]["PayrollRunResponse"]["properties"]
+    assert payroll_props["gross_wages"]["type"] == "string"
+    assert payroll_props["wage_tax_total"]["type"] == "string"
+    assert payroll_props["net_wages"]["type"] == "string"
+    line_props = schema["components"]["schemas"]["PayrollLineResponse"]["properties"]
+    assert line_props["wage_tax_withheld"]["type"] == "string"
+    assert line_props["wage_tax_base"]["type"] == "string"
 
 
 def test_json_float_money_is_rejected() -> None:

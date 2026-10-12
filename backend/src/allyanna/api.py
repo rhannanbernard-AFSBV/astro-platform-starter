@@ -2,16 +2,26 @@
 
 from dataclasses import dataclass
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
 from allyanna.errors import AllyannaError, ServiceUnavailable, Unauthenticated
+from allyanna.payroll.models import PayrollLineInput, PayrollRun
+from allyanna.payroll.service import PayrollService
 from allyanna.schemas import (
     ContextResponse,
     ErrorResponse,
     HealthResponse,
     MasterAccountResponse,
+    MonthlyWageTaxRequest,
+    MonthlyWageTaxResponse,
+    PayrollLineResponse,
+    PayrollRunCreateRequest,
+    PayrollRunListResponse,
+    PayrollRunResponse,
+    PayrollSzvLineResponse,
     SzvComponentResponse,
     SzvComponentTableResponse,
     SzvGroupResponse,
@@ -24,6 +34,7 @@ from allyanna.schemas import (
     TotRequest,
     TotResponse,
     WageTaxBracketResponse,
+    WageTaxLookupSummary,
     WageTaxRequest,
     WageTaxResponse,
 )
@@ -41,6 +52,7 @@ class AuthContext:
     user: User
     tenancy: TenancyService
     tax: TaxService
+    payroll: PayrollService
 
 
 async def allyanna_error_handler(_request: Request, exc: AllyannaError) -> JSONResponse:
@@ -74,6 +86,7 @@ async def get_auth(
         user=user,
         tenancy=tenancy,
         tax=request.app.state.tax_service,
+        payroll=request.app.state.payroll_service,
     )
 
 
@@ -204,6 +217,78 @@ async def calculate_szv(
     )
 
 
+@router.post("/tax/wage-monthly", response_model=MonthlyWageTaxResponse)
+async def calculate_monthly_wage_tax(
+    body: MonthlyWageTaxRequest,
+    auth: AuthContext = Depends(get_auth),
+) -> MonthlyWageTaxResponse:
+    tenant, bundle, result = await auth.tax.calculate_monthly_wage_tax(
+        auth.conn,
+        country_code=body.country_code,
+        tax_year=body.tax_year,
+        wage_tax_base=body.wage_tax_base,
+    )
+    return MonthlyWageTaxResponse(
+        tenant_id=tenant.id,
+        tax_year=bundle.schedule.tax_year,
+        country_code=bundle.schedule.country_code,
+        currency_code=bundle.schedule.currency_code,
+        amount_period=bundle.schedule.amount_period,
+        schedule_id=bundle.schedule.id,
+        wage_tax_base=result.wage_tax_base,
+        tax_amount=result.tax_amount,
+        method=result.method,
+        table_wage_amount=result.table_wage_amount,
+        table_tax_amount=result.table_tax_amount,
+        excess_wage=result.excess_wage,
+        excess_rate=result.excess_rate,
+        source_note=bundle.schedule.source_note,
+    )
+
+
+@router.post("/payroll/runs", response_model=PayrollRunResponse, status_code=201)
+async def create_payroll_run(
+    body: PayrollRunCreateRequest,
+    auth: AuthContext = Depends(get_auth),
+) -> PayrollRunResponse:
+    stored = await auth.payroll.create_run(
+        auth.conn,
+        period_year=body.period_year,
+        period_month=body.period_month,
+        ov_employer_rate=body.ov_employer_rate,
+        lines=tuple(
+            PayrollLineInput(
+                employee_name=line.employee_name,
+                employee_code=line.employee_code,
+                gross_wage=line.gross_wage,
+            )
+            for line in body.lines
+        ),
+    )
+    return _payroll_response(stored)
+
+
+@router.get("/payroll/runs", response_model=PayrollRunListResponse)
+async def list_payroll_runs(
+    auth: AuthContext = Depends(get_auth),
+) -> PayrollRunListResponse:
+    runs = await auth.payroll.list_runs(auth.conn)
+    tenant, _active = await auth.tenancy.require_active_tenant(auth.conn)
+    return PayrollRunListResponse(
+        tenant_id=tenant.id,
+        runs=[_payroll_response(run) for run in runs],
+    )
+
+
+@router.get("/payroll/runs/{run_id}", response_model=PayrollRunResponse)
+async def get_payroll_run(
+    run_id: UUID,
+    auth: AuthContext = Depends(get_auth),
+) -> PayrollRunResponse:
+    stored = await auth.payroll.get_run(auth.conn, run_id)
+    return _payroll_response(stored)
+
+
 def _context_response(user: User, snapshot: ContextSnapshot) -> ContextResponse:
     accounts = [_membership_response(item) for item in snapshot.memberships]
     tenants = [_tenant_response(item) for item in snapshot.tenants]
@@ -297,6 +382,7 @@ def _schedule_response(bundle: TaxBundle) -> TaxScheduleResponse:
         tot_rate=bundle.tot_rate,
         brackets=[_bracket_response(item) for item in bundle.brackets],
         components=[_stored_component_response(item) for item in bundle.components],
+        withholding=_withholding_summary(bundle),
     )
 
 
@@ -312,4 +398,76 @@ def _stored_component_response(component: SzvComponent) -> SzvComponentTableResp
         employer_rate_min=component.employer_rate_min,
         employer_rate_max=component.employer_rate_max,
         rate_is_variable=component.rate_is_variable,
+        reduces_wage_tax_base=component.reduces_wage_tax_base,
+    )
+
+
+def _withholding_summary(bundle: TaxBundle) -> WageTaxLookupSummary | None:
+    rules = bundle.withholding_rules
+    if rules is None or not bundle.lookup_rows:
+        return None
+    first = bundle.lookup_rows[0]
+    last = bundle.lookup_rows[-1]
+    return WageTaxLookupSummary(
+        withholding_free_maximum=rules.withholding_free_maximum,
+        excess_rate=rules.excess_rate,
+        monthly_acquisition_cost=rules.monthly_acquisition_cost,
+        row_count=len(bundle.lookup_rows),
+        first_wage_amount=first.wage_amount,
+        last_wage_amount=last.wage_amount,
+        last_tax_amount=last.tax_amount,
+    )
+
+
+def _payroll_response(run: PayrollRun) -> PayrollRunResponse:
+    return PayrollRunResponse(
+        id=run.id,
+        tenant_id=run.tenant_id,
+        period_year=run.period_year,
+        period_month=run.period_month,
+        country_code=run.country_code,
+        currency_code=run.currency_code,
+        wage_tax_schedule_id=run.wage_tax_schedule_id,
+        szv_schedule_id=run.szv_schedule_id,
+        employee_count=run.employee_count,
+        gross_wages=run.gross_wages,
+        employee_szv_total=run.employee_szv_total,
+        employer_szv_total=run.employer_szv_total,
+        wage_tax_total=run.wage_tax_total,
+        net_wages=run.net_wages,
+        created_at=run.created_at,
+        lines=[
+            PayrollLineResponse(
+                id=line.id,
+                line_number=line.line_number,
+                employee_name=line.employee_name,
+                employee_code=line.employee_code,
+                gross_wage=line.gross_wage,
+                acquisition_cost=line.acquisition_cost,
+                aov_aww_employee_deduction=line.aov_aww_employee_deduction,
+                wage_tax_base=line.wage_tax_base,
+                wage_tax_withheld=line.wage_tax_withheld,
+                withholding_method=line.withholding_method,
+                table_wage_amount=line.table_wage_amount,
+                table_tax_amount=line.table_tax_amount,
+                excess_wage=line.excess_wage,
+                excess_rate=line.excess_rate,
+                employee_szv_total=line.employee_szv_total,
+                employer_szv_total=line.employer_szv_total,
+                net_wage=line.net_wage,
+                szv_lines=[
+                    PayrollSzvLineResponse(
+                        component_code=premium.component_code,
+                        group_code=premium.group_code,
+                        capped_wage=premium.capped_wage,
+                        employee_rate=premium.employee_rate,
+                        employer_rate=premium.employer_rate,
+                        employee_amount=premium.employee_amount,
+                        employer_amount=premium.employer_amount,
+                    )
+                    for premium in line.szv_lines
+                ],
+            )
+            for line in run.lines
+        ],
     )
