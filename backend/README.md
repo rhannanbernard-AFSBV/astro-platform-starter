@@ -19,6 +19,7 @@ Multi-tenant foundation for Sint Maarten tax calculations. The Astro app at the 
 - A due date stored on the filed return, and open balances that are past that date
 - An amendment that supersedes the frozen tax for a period while the earlier filing stays readable
 - One correcting invoice posted into an already filed period, so the next amendment can include it. An ordinary invoice in that period is still rejected
+- A refund against the latest filing that reduces the amount paid and leaves the original payment in place
 
 Payroll runs are not in this service yet.
 
@@ -79,6 +80,8 @@ One correcting invoice may name the latest filing for that period with `corrects
 `POST /api/v1/tax/tot/returns` files that worksheet. The stored row keeps the summed subtotal, the turnover-tax table rate at filing time, and the summed tax. Send `due_on` to store the date that tax is due. The due date cannot be earlier than the period end. `GET /api/v1/tax/tot/returns` and `GET /api/v1/tax/tot/returns/{return_id}` read it back for the active business profile. A period can be filed once. `POST /api/v1/tax/tot/returns/{return_id}/amendments` files a correction for that same period. The new row replaces the frozen tax used for the open balance. The earlier filing stays readable, including its original tax. Payments already recorded still count against the latest filing. Row-level security on `tot_returns` keeps another firm from reading or amending the filing.
 
 `POST /api/v1/tax/tot/returns/{return_id}/payments` records a payment against that filed turnover tax. Send `amount` and `paid_on` as a decimal string and a date. The amount is applied to the tax stored on the return. Partial payments are kept until the balance is zero. A later read returns the tax due, the amount paid, and the balance still due. `GET /api/v1/tax/tot/returns/{return_id}/payments` lists the payments for that return. `GET /api/v1/tax/tot/payments/{payment_id}` reads one payment. Row-level security on `tot_return_payments` keeps another firm from reading them.
+
+`POST /api/v1/tax/tot/returns/{return_id}/refunds` records a refund against the latest filing. Send `amount` and `refunded_on` as a decimal string and a date. The refund reduces the amount paid and raises the balance still due. The original payment stays, with the amount that was recorded. A refund cannot be larger than the amount paid, and a superseded filing cannot take one. `GET /api/v1/tax/tot/returns/{return_id}/refunds` lists the refunds. `GET /api/v1/tax/tot/refunds/{refund_id}` reads one refund. Row-level security on `tot_return_refunds` keeps another firm from reading them.
 
 `GET /api/v1/tax/tot/balances` lists every filed return for the active business profile. Each row carries the tax stored on that return, the payments recorded against it, the remaining balance, and the due date. A row is past due when a due date is stored, that date is before `as_of`, and a balance remains. The header sums the open balances that are past due. `as_of` defaults to the current date. A settled return stays on the list and is not past due. When a period has been amended, the list follows the latest filing. The query is limited to the active profile's `tenant_id`, and row-level security on the return and payment tables is the backstop. Another firm does not see these balances.
 

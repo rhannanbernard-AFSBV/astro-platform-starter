@@ -66,6 +66,16 @@ class TotPayment:
 
 
 @dataclass(frozen=True)
+class TotRefund:
+    id: UUID
+    tenant_id: UUID
+    tot_return_id: UUID
+    amount: Decimal
+    refunded_on: date
+    recorded_at: datetime
+
+
+@dataclass(frozen=True)
 class TotPaymentView:
     payment: TotPayment
     tax_due: Decimal
@@ -84,6 +94,24 @@ class TotPaymentList:
 
 
 @dataclass(frozen=True)
+class TotRefundView:
+    refund: TotRefund
+    tax_due: Decimal
+    amount_paid: Decimal
+    balance_due: Decimal
+
+
+@dataclass(frozen=True)
+class TotRefundList:
+    tenant_id: UUID
+    tot_return_id: UUID
+    tax_due: Decimal
+    amount_paid: Decimal
+    balance_due: Decimal
+    refunds: tuple[TotRefund, ...]
+
+
+@dataclass(frozen=True)
 class TotFiledTax:
     return_id: UUID
     tenant_id: UUID
@@ -96,6 +124,7 @@ class TotFiledTax:
     amends_return_id: UUID | None
     tax_due: Decimal
     amount_paid: Decimal
+    amount_refunded: Decimal
 
 
 @dataclass(frozen=True)

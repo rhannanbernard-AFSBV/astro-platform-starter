@@ -81,10 +81,10 @@ class TotPaymentRepository:
         return _payment_from_row(row)
 
     async def list_filed_tax(self, conn: Connection) -> tuple[TotFiledTax, ...]:
-        """Stored turnover tax and the payments recorded against each filing.
+        """Stored turnover tax, payments, and refunds for each filing.
 
-        amount_paid is the sum of stored payment amounts. This query does not
-        apply a tax rate.
+        amount_paid is the sum of stored payment amounts. amount_refunded is
+        the sum of stored refunds. This query does not apply a tax rate.
         """
         rows = await conn.fetch(
             """
@@ -99,7 +99,13 @@ class TotPaymentRepository:
               returns.due_on,
               returns.amends_return_id,
               returns.tot_amount,
-              COALESCE(SUM(payments.amount), 0::numeric) AS amount_paid
+              COALESCE(SUM(payments.amount), 0::numeric) AS amount_paid,
+              COALESCE((
+                SELECT SUM(refunds.amount)
+                FROM allyanna.tot_return_refunds AS refunds
+                WHERE refunds.tot_return_id = returns.id
+                  AND refunds.tenant_id = returns.tenant_id
+              ), 0::numeric) AS amount_refunded
             FROM allyanna.tot_returns AS returns
             LEFT JOIN allyanna.tot_return_payments AS payments
               ON payments.tot_return_id = returns.id
@@ -125,6 +131,7 @@ def _filed_tax_from_row(row: Any) -> TotFiledTax:
         amends_return_id=row["amends_return_id"],
         tax_due=as_decimal(row["tot_amount"]),
         amount_paid=as_decimal(row["amount_paid"]),
+        amount_refunded=as_decimal(row["amount_refunded"]),
     )
 
 

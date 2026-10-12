@@ -26,4 +26,5 @@ fi
 "${PSQL[@]}" -d "$DB_NAME" -f "$ROOT/db/migrations/009_return_due_date.sql"
 "${PSQL[@]}" -d "$DB_NAME" -f "$ROOT/db/migrations/010_tot_return_amendments.sql"
 "${PSQL[@]}" -d "$DB_NAME" -f "$ROOT/db/migrations/011_correcting_invoice.sql"
+"${PSQL[@]}" -d "$DB_NAME" -f "$ROOT/db/migrations/012_tot_return_refunds.sql"
 echo "Applied Allyanna schema to ${DB_NAME}"

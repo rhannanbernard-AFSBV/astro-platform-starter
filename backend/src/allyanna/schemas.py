@@ -430,6 +430,42 @@ class TotPaymentListResponse(BaseModel):
     payments: list[TotPaymentItem]
 
 
+class TotRefundRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    amount: Decimal
+    refunded_on: date
+
+    @field_validator("amount", mode="before")
+    @classmethod
+    def money_is_decimal(cls, value: object) -> object:
+        return _reject_json_float(value)
+
+
+class TotRefundItem(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    tot_return_id: UUID
+    amount: Money
+    refunded_on: date
+    recorded_at: datetime
+
+
+class TotRefundResponse(TotRefundItem):
+    tax_due: Money
+    amount_paid: Money
+    balance_due: Money
+
+
+class TotRefundListResponse(BaseModel):
+    tenant_id: UUID
+    tot_return_id: UUID
+    tax_due: Money
+    amount_paid: Money
+    balance_due: Money
+    refunds: list[TotRefundItem]
+
+
 class TotReturnBalanceResponse(BaseModel):
     return_id: UUID
     tenant_id: UUID

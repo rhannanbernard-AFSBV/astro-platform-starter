@@ -107,6 +107,21 @@ def test_tot_return_table_forces_row_level_security() -> None:
     assert "0.05" not in sql
 
 
+def test_tot_refund_reduces_amount_paid_without_removing_the_payment() -> None:
+    sql = (Path(__file__).resolve().parents[1] / "db" / "migrations" / "012_tot_return_refunds.sql").read_text(
+        encoding="utf-8"
+    )
+    assert "tenant_id uuid NOT NULL" in sql
+    assert "ALTER TABLE allyanna.tot_return_refunds ENABLE ROW LEVEL SECURITY;" in sql
+    assert "ALTER TABLE allyanna.tot_return_refunds FORCE ROW LEVEL SECURITY;" in sql
+    assert "GRANT UPDATE ON allyanna.tot_return_refunds" not in sql
+    assert "refund exceeds the amount paid" in sql
+    assert "prior_tenant <> NEW.tenant_id" in sql
+    assert "0.05" not in sql
+    text = (SRC / "allyanna" / "worksheets" / "refunds.py").read_text(encoding="utf-8")
+    assert "tenant_id = current_setting('allyanna.tenant_id', true)::uuid" in text
+
+
 def test_tot_payment_table_forces_row_level_security() -> None:
     sql = (Path(__file__).resolve().parents[1] / "db" / "migrations" / "007_tot_return_payments.sql").read_text(
         encoding="utf-8"

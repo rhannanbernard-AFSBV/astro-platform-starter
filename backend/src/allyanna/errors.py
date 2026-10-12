@@ -125,6 +125,11 @@ class TotPaymentNotFound(AllyannaError):
     status_code = 404
 
 
+class TotRefundNotFound(AllyannaError):
+    code = "tot_refund_not_found"
+    status_code = 404
+
+
 class ServiceUnavailable(AllyannaError):
     code = "service_unavailable"
     status_code = 503

@@ -41,6 +41,10 @@ from allyanna.schemas import (
     TotPaymentListResponse,
     TotPaymentRequest,
     TotPaymentResponse,
+    TotRefundItem,
+    TotRefundListResponse,
+    TotRefundRequest,
+    TotRefundResponse,
     TotReturnBalanceResponse,
     TotReturnFileRequest,
     TotReturnListResponse,
@@ -62,6 +66,9 @@ from allyanna.worksheets.models import (
     TotPayment,
     TotPaymentList,
     TotPaymentView,
+    TotRefund,
+    TotRefundList,
+    TotRefundView,
     TotReturn,
     TotReturnBalance,
     TotWorksheet,
@@ -288,6 +295,46 @@ async def get_turnover_tax_payment(
 ) -> TotPaymentResponse:
     recorded = await auth.worksheets.get_payment(auth.conn, payment_id)
     return _payment_response(recorded)
+
+
+@router.post(
+    "/tax/tot/returns/{return_id}/refunds",
+    response_model=TotRefundResponse,
+    status_code=201,
+)
+async def record_turnover_tax_refund(
+    return_id: UUID,
+    body: TotRefundRequest,
+    auth: AuthContext = Depends(get_auth),
+) -> TotRefundResponse:
+    recorded = await auth.worksheets.record_refund(
+        auth.conn,
+        return_id=return_id,
+        amount=body.amount,
+        refunded_on=body.refunded_on,
+    )
+    return _refund_response(recorded)
+
+
+@router.get(
+    "/tax/tot/returns/{return_id}/refunds",
+    response_model=TotRefundListResponse,
+)
+async def list_turnover_tax_refunds(
+    return_id: UUID,
+    auth: AuthContext = Depends(get_auth),
+) -> TotRefundListResponse:
+    listing = await auth.worksheets.list_refunds(auth.conn, return_id)
+    return _refund_list_response(listing)
+
+
+@router.get("/tax/tot/refunds/{refund_id}", response_model=TotRefundResponse)
+async def get_turnover_tax_refund(
+    refund_id: UUID,
+    auth: AuthContext = Depends(get_auth),
+) -> TotRefundResponse:
+    recorded = await auth.worksheets.get_refund(auth.conn, refund_id)
+    return _refund_response(recorded)
 
 
 @router.get("/tax/tot/balances", response_model=TotBalanceListResponse)
@@ -601,6 +648,43 @@ def _balance_list_response(listing: TotBalanceList) -> TotBalanceListResponse:
         balance_due=listing.balance_due,
         past_due_balance=listing.past_due_balance,
         returns=[_balance_item(row) for row in listing.returns],
+    )
+
+
+def _refund_item(refund: TotRefund) -> TotRefundItem:
+    return TotRefundItem(
+        id=refund.id,
+        tenant_id=refund.tenant_id,
+        tot_return_id=refund.tot_return_id,
+        amount=refund.amount,
+        refunded_on=refund.refunded_on,
+        recorded_at=refund.recorded_at,
+    )
+
+
+def _refund_response(view: TotRefundView) -> TotRefundResponse:
+    item = _refund_item(view.refund)
+    return TotRefundResponse(
+        id=item.id,
+        tenant_id=item.tenant_id,
+        tot_return_id=item.tot_return_id,
+        amount=item.amount,
+        refunded_on=item.refunded_on,
+        recorded_at=item.recorded_at,
+        tax_due=view.tax_due,
+        amount_paid=view.amount_paid,
+        balance_due=view.balance_due,
+    )
+
+
+def _refund_list_response(listing: TotRefundList) -> TotRefundListResponse:
+    return TotRefundListResponse(
+        tenant_id=listing.tenant_id,
+        tot_return_id=listing.tot_return_id,
+        tax_due=listing.tax_due,
+        amount_paid=listing.amount_paid,
+        balance_due=listing.balance_due,
+        refunds=[_refund_item(refund) for refund in listing.refunds],
     )
 
 
