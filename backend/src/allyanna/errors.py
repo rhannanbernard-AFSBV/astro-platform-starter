@@ -85,6 +85,11 @@ class IntakeAlreadyPosted(AllyannaError):
     status_code = 409
 
 
+class InvalidWorksheet(AllyannaError):
+    code = "invalid_worksheet"
+    status_code = 422
+
+
 class ServiceUnavailable(AllyannaError):
     code = "service_unavailable"
     status_code = 503

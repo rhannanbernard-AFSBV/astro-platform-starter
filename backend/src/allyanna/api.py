@@ -33,6 +33,9 @@ from allyanna.schemas import (
     TenantResponse,
     TotRequest,
     TotResponse,
+    TotWorksheetInvoiceResponse,
+    TotWorksheetRequest,
+    TotWorksheetResponse,
     WageTaxBracketResponse,
     WageTaxRequest,
     WageTaxResponse,
@@ -43,6 +46,8 @@ from allyanna.tax.models import SzvComponent, TaxBundle, WageTaxBracket
 from allyanna.tax.service import TaxService
 from allyanna.tenancy.models import ContextSnapshot, Membership, Tenant, User
 from allyanna.tenancy.service import TenancyService
+from allyanna.worksheets.models import TotWorksheet
+from allyanna.worksheets.service import TotWorksheetService
 
 router = APIRouter()
 
@@ -55,6 +60,7 @@ class AuthContext:
     tax: TaxService
     documents: DocumentIntakeService
     invoices: InvoiceService
+    worksheets: TotWorksheetService
 
 
 async def allyanna_error_handler(_request: Request, exc: AllyannaError) -> JSONResponse:
@@ -90,6 +96,7 @@ async def get_auth(
         tax=request.app.state.tax_service,
         documents=request.app.state.document_intake_service,
         invoices=request.app.state.invoice_service,
+        worksheets=request.app.state.worksheet_service,
     )
 
 
@@ -153,6 +160,21 @@ async def calculate_tot(
         tot_amount=result.tot_amount,
         source_note=bundle.schedule.source_note,
     )
+
+
+@router.post("/tax/tot/worksheet", response_model=TotWorksheetResponse)
+async def turnover_tax_worksheet(
+    body: TotWorksheetRequest,
+    auth: AuthContext = Depends(get_auth),
+) -> TotWorksheetResponse:
+    worksheet = await auth.worksheets.build(
+        auth.conn,
+        period_start=body.period_start,
+        period_end=body.period_end,
+        tax_year=body.tax_year,
+        country_code=body.country_code,
+    )
+    return _worksheet_response(worksheet)
 
 
 @router.post("/tax/wage", response_model=WageTaxResponse)
@@ -367,6 +389,35 @@ def _invoice_response(invoice: Invoice) -> InvoiceResponse:
                 line_total=line.line_total,
             )
             for line in invoice.lines
+        ],
+    )
+
+
+def _worksheet_response(worksheet: TotWorksheet) -> TotWorksheetResponse:
+    return TotWorksheetResponse(
+        tenant_id=worksheet.tenant_id,
+        period_start=worksheet.period_start,
+        period_end=worksheet.period_end,
+        tax_year=worksheet.tax_year,
+        country_code=worksheet.country_code,
+        currency_code=worksheet.currency_code,
+        schedule_id=worksheet.schedule_id,
+        rate=worksheet.rate,
+        invoice_count=worksheet.invoice_count,
+        subtotal=worksheet.subtotal,
+        tot_amount=worksheet.tot_amount,
+        grand_total=worksheet.grand_total,
+        invoices=[
+            TotWorksheetInvoiceResponse(
+                id=row.id,
+                vendor_name=row.vendor_name,
+                invoice_date=row.invoice_date,
+                subtotal=row.subtotal,
+                tot_rate=row.tot_rate,
+                tot_amount=row.tot_amount,
+                grand_total=row.grand_total,
+            )
+            for row in worksheet.invoices
         ],
     )
 

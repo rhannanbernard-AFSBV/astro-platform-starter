@@ -320,3 +320,38 @@ class InvoiceResponse(BaseModel):
 class InvoiceListResponse(BaseModel):
     tenant_id: UUID
     invoices: list[InvoiceResponse]
+
+
+class TotWorksheetRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    period_start: date
+    period_end: date
+    tax_year: int = Field(ge=2000, le=2100)
+    country_code: str = Field(default="SXM", pattern=r"^[A-Z]{3}$")
+
+
+class TotWorksheetInvoiceResponse(BaseModel):
+    id: UUID
+    vendor_name: str
+    invoice_date: date
+    subtotal: Money
+    tot_rate: Rate
+    tot_amount: Money
+    grand_total: Money
+
+
+class TotWorksheetResponse(BaseModel):
+    tenant_id: UUID
+    period_start: date
+    period_end: date
+    tax_year: int
+    country_code: str
+    currency_code: str
+    schedule_id: UUID
+    rate: Rate
+    invoice_count: int
+    subtotal: Money
+    tot_amount: Money
+    grand_total: Money
+    invoices: list[TotWorksheetInvoiceResponse]
