@@ -20,6 +20,9 @@ from allyanna.tax.repository import TaxRepository
 from allyanna.tax.service import TaxService
 from allyanna.tenancy.repository import TenancyRepository
 from allyanna.tenancy.service import TenancyService
+from allyanna.worksheets.repository import WorksheetRepository
+from allyanna.worksheets.returns import TotReturnRepository
+from allyanna.worksheets.service import TotWorksheetService
 
 
 @asynccontextmanager
@@ -53,6 +56,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         tax_service,
         tenancy_service,
         documents=app.state.document_intake_service,
+    )
+    app.state.worksheet_service = TotWorksheetService(
+        WorksheetRepository(),
+        tax_service,
+        tenancy_service,
+        returns=TotReturnRepository(),
     )
     yield
     pool = app.state.pool
