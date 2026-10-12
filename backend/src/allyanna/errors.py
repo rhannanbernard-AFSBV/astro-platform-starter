@@ -1,0 +1,55 @@
+"""Application errors mapped to HTTP responses by the API layer."""
+
+
+class AllyannaError(Exception):
+    code = "error"
+    status_code = 400
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
+class Unauthenticated(AllyannaError):
+    code = "unauthenticated"
+    status_code = 401
+
+
+class TenantAccessDenied(AllyannaError):
+    code = "tenant_access_denied"
+    status_code = 403
+
+
+class TenantInactive(AllyannaError):
+    code = "tenant_inactive"
+    status_code = 403
+
+
+class TenantContextRequired(AllyannaError):
+    code = "tenant_context_required"
+    status_code = 409
+
+
+class TaxTableNotFound(AllyannaError):
+    code = "tax_table_not_found"
+    status_code = 404
+
+
+class InvalidTaxTable(AllyannaError):
+    code = "invalid_tax_table"
+    status_code = 500
+
+
+class InvalidMoney(AllyannaError):
+    code = "invalid_money"
+    status_code = 422
+
+
+class InvalidOvRate(AllyannaError):
+    code = "invalid_ov_rate"
+    status_code = 422
+
+
+class ServiceUnavailable(AllyannaError):
+    code = "service_unavailable"
+    status_code = 503

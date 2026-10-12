@@ -1,0 +1,100 @@
+"""Session database for row-level security and API tests."""
+
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+DATABASE_NAME = "allyanna_test"
+APP_DSN = f"postgresql://allyanna_app:allyanna_app_dev@127.0.0.1:5432/{DATABASE_NAME}"
+
+
+def _run(command: list[str]) -> None:
+    subprocess.run(command, check=True, capture_output=True, text=True)
+
+
+def _postgres_ready() -> bool:
+    if shutil.which("pg_isready") is None:
+        return False
+    if subprocess.run(["pg_isready", "-h", "127.0.0.1"], check=False).returncode == 0:
+        return True
+    subprocess.run(["sudo", "pg_ctlcluster", "16", "main", "start"], check=False)
+    return subprocess.run(["pg_isready", "-h", "127.0.0.1"], check=False).returncode == 0
+
+
+@pytest.fixture(scope="session")
+def database_url() -> str:
+    if not _postgres_ready():
+        pytest.skip("PostgreSQL is not accepting connections")
+    _run(
+        [
+            "sudo",
+            "-u",
+            "postgres",
+            "psql",
+            "-d",
+            "postgres",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-c",
+            f"DROP DATABASE IF EXISTS {DATABASE_NAME} WITH (FORCE)",
+        ]
+    )
+    _run(
+        [
+            "sudo",
+            "-u",
+            "postgres",
+            "psql",
+            "-d",
+            "postgres",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-c",
+            f"CREATE DATABASE {DATABASE_NAME}",
+        ]
+    )
+    for relative in (
+        "db/000_role.sql",
+        "db/migrations/001_foundation.sql",
+        "db/seeds/001_sxm_2026.sql",
+    ):
+        _run(
+            [
+                "sudo",
+                "-u",
+                "postgres",
+                "psql",
+                "-d",
+                DATABASE_NAME,
+                "-v",
+                "ON_ERROR_STOP=1",
+                "-f",
+                str(BACKEND_ROOT / relative),
+            ]
+        )
+    return APP_DSN
+
+
+def _admin_sql(statement: str) -> None:
+    _run(
+        [
+            "sudo",
+            "-u",
+            "postgres",
+            "psql",
+            "-d",
+            DATABASE_NAME,
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-c",
+            statement,
+        ]
+    )
+
+
+@pytest.fixture
+def admin_sql() -> object:
+    return _admin_sql
