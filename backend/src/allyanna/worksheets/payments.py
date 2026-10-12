@@ -12,7 +12,7 @@ import asyncpg
 
 from allyanna.errors import InvalidPayment
 from allyanna.money import as_decimal
-from allyanna.worksheets.models import TotPayment
+from allyanna.worksheets.models import TotFiledTax, TotPayment
 
 Connection = Any
 
@@ -79,6 +79,49 @@ class TotPaymentRepository:
         if row is None:
             return None
         return _payment_from_row(row)
+
+    async def list_filed_tax(self, conn: Connection) -> tuple[TotFiledTax, ...]:
+        """Stored turnover tax and the payments recorded against each filing.
+
+        amount_paid is the sum of stored payment amounts. This query does not
+        apply a tax rate.
+        """
+        rows = await conn.fetch(
+            """
+            SELECT
+              returns.id AS return_id,
+              returns.tenant_id,
+              returns.country_code,
+              returns.tax_year,
+              returns.period_start,
+              returns.period_end,
+              returns.currency_code,
+              returns.tot_amount,
+              COALESCE(SUM(payments.amount), 0::numeric) AS amount_paid
+            FROM allyanna.tot_returns AS returns
+            LEFT JOIN allyanna.tot_return_payments AS payments
+              ON payments.tot_return_id = returns.id
+             AND payments.tenant_id = returns.tenant_id
+            WHERE returns.tenant_id = current_setting('allyanna.tenant_id', true)::uuid
+            GROUP BY returns.id
+            ORDER BY returns.period_start DESC, returns.period_end DESC, returns.filed_at DESC
+            """
+        )
+        return tuple(_filed_tax_from_row(row) for row in rows)
+
+
+def _filed_tax_from_row(row: Any) -> TotFiledTax:
+    return TotFiledTax(
+        return_id=row["return_id"],
+        tenant_id=row["tenant_id"],
+        country_code=row["country_code"],
+        tax_year=row["tax_year"],
+        period_start=row["period_start"],
+        period_end=row["period_end"],
+        currency_code=row["currency_code"],
+        tax_due=as_decimal(row["tot_amount"]),
+        amount_paid=as_decimal(row["amount_paid"]),
+    )
 
 
 def _payment_from_row(row: Any) -> TotPayment:

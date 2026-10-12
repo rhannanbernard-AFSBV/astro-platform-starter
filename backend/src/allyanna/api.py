@@ -34,10 +34,12 @@ from allyanna.schemas import (
     TotRequest,
     TotResponse,
     TotWorksheetInvoiceResponse,
+    TotBalanceListResponse,
     TotPaymentItem,
     TotPaymentListResponse,
     TotPaymentRequest,
     TotPaymentResponse,
+    TotReturnBalanceResponse,
     TotReturnListResponse,
     TotReturnResponse,
     TotWorksheetRequest,
@@ -52,7 +54,15 @@ from allyanna.tax.models import SzvComponent, TaxBundle, WageTaxBracket
 from allyanna.tax.service import TaxService
 from allyanna.tenancy.models import ContextSnapshot, Membership, Tenant, User
 from allyanna.tenancy.service import TenancyService
-from allyanna.worksheets.models import TotPayment, TotPaymentList, TotPaymentView, TotReturn, TotWorksheet
+from allyanna.worksheets.models import (
+    TotBalanceList,
+    TotPayment,
+    TotPaymentList,
+    TotPaymentView,
+    TotReturn,
+    TotReturnBalance,
+    TotWorksheet,
+)
 from allyanna.worksheets.service import TotWorksheetService
 
 router = APIRouter()
@@ -256,6 +266,14 @@ async def get_turnover_tax_payment(
 ) -> TotPaymentResponse:
     recorded = await auth.worksheets.get_payment(auth.conn, payment_id)
     return _payment_response(recorded)
+
+
+@router.get("/tax/tot/balances", response_model=TotBalanceListResponse)
+async def list_turnover_tax_balances(
+    auth: AuthContext = Depends(get_auth),
+) -> TotBalanceListResponse:
+    listing = await auth.worksheets.list_balances(auth.conn)
+    return _balance_list_response(listing)
 
 
 @router.post("/tax/wage", response_model=WageTaxResponse)
@@ -526,6 +544,31 @@ def _payment_response(view: TotPaymentView) -> TotPaymentResponse:
         tax_due=view.tax_due,
         amount_paid=view.amount_paid,
         balance_due=view.balance_due,
+    )
+
+
+def _balance_item(row: TotReturnBalance) -> TotReturnBalanceResponse:
+    return TotReturnBalanceResponse(
+        return_id=row.return_id,
+        tenant_id=row.tenant_id,
+        country_code=row.country_code,
+        tax_year=row.tax_year,
+        period_start=row.period_start,
+        period_end=row.period_end,
+        currency_code=row.currency_code,
+        tax_due=row.tax_due,
+        amount_paid=row.amount_paid,
+        balance_due=row.balance_due,
+    )
+
+
+def _balance_list_response(listing: TotBalanceList) -> TotBalanceListResponse:
+    return TotBalanceListResponse(
+        tenant_id=listing.tenant_id,
+        tax_due=listing.tax_due,
+        amount_paid=listing.amount_paid,
+        balance_due=listing.balance_due,
+        returns=[_balance_item(row) for row in listing.returns],
     )
 
 

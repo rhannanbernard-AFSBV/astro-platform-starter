@@ -78,3 +78,39 @@ class TotPaymentList:
     amount_paid: Decimal
     balance_due: Decimal
     payments: tuple[TotPayment, ...]
+
+
+@dataclass(frozen=True)
+class TotFiledTax:
+    return_id: UUID
+    tenant_id: UUID
+    country_code: str
+    tax_year: int
+    period_start: date
+    period_end: date
+    currency_code: str
+    tax_due: Decimal
+    amount_paid: Decimal
+
+
+@dataclass(frozen=True)
+class TotReturnBalance:
+    return_id: UUID
+    tenant_id: UUID
+    country_code: str
+    tax_year: int
+    period_start: date
+    period_end: date
+    currency_code: str
+    tax_due: Decimal
+    amount_paid: Decimal
+    balance_due: Decimal
+
+
+@dataclass(frozen=True)
+class TotBalanceList:
+    tenant_id: UUID
+    tax_due: Decimal
+    amount_paid: Decimal
+    balance_due: Decimal
+    returns: tuple[TotReturnBalance, ...]

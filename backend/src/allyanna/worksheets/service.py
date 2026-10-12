@@ -9,7 +9,15 @@ from allyanna.errors import InvalidPayment, InvalidWorksheet, TotPaymentNotFound
 from allyanna.money import money, require_money
 from allyanna.tax.service import TaxService
 from allyanna.tenancy.service import TenancyService
-from allyanna.worksheets.models import TotPayment, TotPaymentList, TotPaymentView, TotReturn, TotWorksheet
+from allyanna.worksheets.models import (
+    TotBalanceList,
+    TotPayment,
+    TotPaymentList,
+    TotPaymentView,
+    TotReturn,
+    TotReturnBalance,
+    TotWorksheet,
+)
 from allyanna.worksheets.payments import TotPaymentRepository
 from allyanna.worksheets.repository import WorksheetRepository
 from allyanna.worksheets.returns import TotReturnRepository
@@ -182,6 +190,41 @@ class TotWorksheetService:
             tax_due=tax_due,
             amount_paid=amount_paid,
             balance_due=balance_due,
+        )
+
+    async def list_balances(self, conn: Connection) -> TotBalanceList:
+        """Tax due, amount paid, and remaining for every filing on the active profile."""
+        tenant, _active = await self._tenancy.require_active_tenant(conn)
+        filed = await self._payments.list_filed_tax(conn)
+        currencies = {row.currency_code for row in filed}
+        if len(currencies) > 1:
+            raise InvalidWorksheet("Filed returns use more than one currency")
+        rows: list[TotReturnBalance] = []
+        for row in filed:
+            tax_due = require_money(row.tax_due)
+            amount_paid = require_money(row.amount_paid)
+            if amount_paid > tax_due:
+                raise InvalidPayment("Payments exceed the filed turnover tax")
+            rows.append(
+                TotReturnBalance(
+                    return_id=row.return_id,
+                    tenant_id=row.tenant_id,
+                    country_code=row.country_code,
+                    tax_year=row.tax_year,
+                    period_start=row.period_start,
+                    period_end=row.period_end,
+                    currency_code=row.currency_code,
+                    tax_due=tax_due,
+                    amount_paid=amount_paid,
+                    balance_due=money(tax_due - amount_paid),
+                )
+            )
+        return TotBalanceList(
+            tenant_id=tenant.id,
+            tax_due=sum_money([row.tax_due for row in rows]),
+            amount_paid=sum_money([row.amount_paid for row in rows]),
+            balance_due=sum_money([row.balance_due for row in rows]),
+            returns=tuple(rows),
         )
 
     async def list_payments(self, conn: Connection, return_id: UUID) -> TotPaymentList:

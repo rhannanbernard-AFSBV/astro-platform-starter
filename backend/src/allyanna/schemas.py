@@ -413,3 +413,24 @@ class TotPaymentListResponse(BaseModel):
     amount_paid: Money
     balance_due: Money
     payments: list[TotPaymentItem]
+
+
+class TotReturnBalanceResponse(BaseModel):
+    return_id: UUID
+    tenant_id: UUID
+    country_code: str
+    tax_year: int
+    period_start: date
+    period_end: date
+    currency_code: str
+    tax_due: Money
+    amount_paid: Money
+    balance_due: Money
+
+
+class TotBalanceListResponse(BaseModel):
+    tenant_id: UUID
+    tax_due: Money
+    amount_paid: Money
+    balance_due: Money
+    returns: list[TotReturnBalanceResponse]

@@ -118,6 +118,8 @@ def test_tot_payment_table_forces_row_level_security() -> None:
     assert "0.05" not in sql
     text = (SRC / "allyanna" / "worksheets" / "payments.py").read_text(encoding="utf-8")
     assert "tenant_id = current_setting('allyanna.tenant_id', true)::uuid" in text
+    assert "payments.tenant_id = returns.tenant_id" in text
+    assert "COALESCE(SUM(payments.amount), 0::numeric)" in text
 
 
 def test_posted_intake_stays_on_the_invoice_tenant() -> None:
