@@ -12,6 +12,7 @@ Multi-tenant foundation for Sint Maarten tax calculations. The Astro app at the 
 - Invoice headers and line items for the active business profile. Subtotal is the sum of the lines. Turnover tax is the existing TOT calculation against that subtotal
 - Asynchronous receipt and invoice intake. GPT-4o copies the printed fields. Python recomputes line totals and turnover tax from the tax tables
 - A turnover-tax worksheet that sums posted invoice subtotals and turnover tax for a period. The rate is read from the tax table
+- A filed turnover-tax return that stores that period's summed subtotal, table rate, and summed tax for the active business profile
 
 Payroll runs are not in this service yet.
 
@@ -64,6 +65,8 @@ The 2026 seed cites the statutory turnover-tax rate, AB 2026 no. 11, and the SZV
 ## Turnover-tax worksheet
 
 `POST /api/v1/tax/tot/worksheet` sums the active business profile's posted invoices for `period_start` through `period_end`. Both dates must fall in `tax_year`. Subtotal and turnover tax are the sums of the posted invoice amounts, added with `decimal.Decimal`. The rate on the worksheet is loaded from the Sint Maarten turnover-tax table for that year. The query is limited to the active profile's `tenant_id`, and row-level security on `invoices` is the backstop. Another firm's worksheet for the same dates does not include these invoices.
+
+`POST /api/v1/tax/tot/returns` files that worksheet. The stored row keeps the summed subtotal, the turnover-tax table rate at filing time, and the summed tax. `GET /api/v1/tax/tot/returns` and `GET /api/v1/tax/tot/returns/{return_id}` read it back for the active business profile. A period can be filed once. Row-level security on `tot_returns` keeps another firm from reading the filing.
 
 ## Document intake
 

@@ -355,3 +355,25 @@ class TotWorksheetResponse(BaseModel):
     tot_amount: Money
     grand_total: Money
     invoices: list[TotWorksheetInvoiceResponse]
+
+
+class TotReturnResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    country_code: str
+    tax_year: int
+    period_start: date
+    period_end: date
+    currency_code: str
+    schedule_id: UUID
+    rate: Rate
+    invoice_count: int
+    subtotal: Money
+    tot_amount: Money
+    grand_total: Money
+    filed_at: datetime
+
+
+class TotReturnListResponse(BaseModel):
+    tenant_id: UUID
+    returns: list[TotReturnResponse]

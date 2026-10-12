@@ -90,6 +90,16 @@ class InvalidWorksheet(AllyannaError):
     status_code = 422
 
 
+class TotReturnNotFound(AllyannaError):
+    code = "tot_return_not_found"
+    status_code = 404
+
+
+class TotReturnAlreadyFiled(AllyannaError):
+    code = "tot_return_already_filed"
+    status_code = 409
+
+
 class ServiceUnavailable(AllyannaError):
     code = "service_unavailable"
     status_code = 503

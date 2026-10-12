@@ -34,6 +34,8 @@ from allyanna.schemas import (
     TotRequest,
     TotResponse,
     TotWorksheetInvoiceResponse,
+    TotReturnListResponse,
+    TotReturnResponse,
     TotWorksheetRequest,
     TotWorksheetResponse,
     WageTaxBracketResponse,
@@ -46,7 +48,7 @@ from allyanna.tax.models import SzvComponent, TaxBundle, WageTaxBracket
 from allyanna.tax.service import TaxService
 from allyanna.tenancy.models import ContextSnapshot, Membership, Tenant, User
 from allyanna.tenancy.service import TenancyService
-from allyanna.worksheets.models import TotWorksheet
+from allyanna.worksheets.models import TotReturn, TotWorksheet
 from allyanna.worksheets.service import TotWorksheetService
 
 router = APIRouter()
@@ -175,6 +177,41 @@ async def turnover_tax_worksheet(
         country_code=body.country_code,
     )
     return _worksheet_response(worksheet)
+
+
+@router.post("/tax/tot/returns", response_model=TotReturnResponse, status_code=201)
+async def file_turnover_tax_return(
+    body: TotWorksheetRequest,
+    auth: AuthContext = Depends(get_auth),
+) -> TotReturnResponse:
+    filed = await auth.worksheets.file_return(
+        auth.conn,
+        period_start=body.period_start,
+        period_end=body.period_end,
+        tax_year=body.tax_year,
+        country_code=body.country_code,
+    )
+    return _return_response(filed)
+
+
+@router.get("/tax/tot/returns", response_model=TotReturnListResponse)
+async def list_turnover_tax_returns(
+    auth: AuthContext = Depends(get_auth),
+) -> TotReturnListResponse:
+    tenant_id, filings = await auth.worksheets.list_returns(auth.conn)
+    return TotReturnListResponse(
+        tenant_id=tenant_id,
+        returns=[_return_response(item) for item in filings],
+    )
+
+
+@router.get("/tax/tot/returns/{return_id}", response_model=TotReturnResponse)
+async def get_turnover_tax_return(
+    return_id: UUID,
+    auth: AuthContext = Depends(get_auth),
+) -> TotReturnResponse:
+    filed = await auth.worksheets.get_return(auth.conn, return_id)
+    return _return_response(filed)
 
 
 @router.post("/tax/wage", response_model=WageTaxResponse)
@@ -419,6 +456,25 @@ def _worksheet_response(worksheet: TotWorksheet) -> TotWorksheetResponse:
             )
             for row in worksheet.invoices
         ],
+    )
+
+
+def _return_response(filed: TotReturn) -> TotReturnResponse:
+    return TotReturnResponse(
+        id=filed.id,
+        tenant_id=filed.tenant_id,
+        country_code=filed.country_code,
+        tax_year=filed.tax_year,
+        period_start=filed.period_start,
+        period_end=filed.period_end,
+        currency_code=filed.currency_code,
+        schedule_id=filed.schedule_id,
+        rate=filed.rate,
+        invoice_count=filed.invoice_count,
+        subtotal=filed.subtotal,
+        tot_amount=filed.tot_amount,
+        grand_total=filed.grand_total,
+        filed_at=filed.filed_at,
     )
 
 

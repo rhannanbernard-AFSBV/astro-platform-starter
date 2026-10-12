@@ -64,6 +64,7 @@ def database_url() -> str:
         "db/migrations/002_invoices.sql",
         "db/migrations/004_document_intakes.sql",
         "db/migrations/005_post_intake.sql",
+        "db/migrations/006_tot_returns.sql",
     ):
         _run(
             [
