@@ -1,6 +1,6 @@
 """Sum posted invoices for a period and read the turnover-tax rate from the table."""
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -26,6 +26,8 @@ from allyanna.worksheets.models import (
     TotRefundList,
     TotRefundView,
     TotReturn,
+    TotStatement,
+    TotStatementLine,
     TotReturnBalance,
     TotWorksheet,
 )
@@ -390,6 +392,30 @@ class TotWorksheetService:
             balance_due=balance_due,
         )
 
+    async def get_statement(self, conn: Connection, return_id: UUID) -> TotStatement:
+        """List the latest filing's payments and refunds with a running balance.
+
+        Both rows stay stored. The balance is the tax still due after each one.
+        """
+        filed = await self.get_return(conn, return_id)
+        if filed.superseded:
+            raise TotReturnSuperseded("This filing has been amended")
+        tax_due, amount_paid, balance_due, payments, refunds = await self._open_statement(conn, filed)
+        lines = _running_lines(tax_due, payments, refunds)
+        if lines:
+            if lines[-1].balance != balance_due:
+                raise InvalidPayment("The statement balance does not match the amount paid")
+        elif balance_due != tax_due:
+            raise InvalidPayment("The statement balance does not match the amount paid")
+        return TotStatement(
+            tenant_id=filed.tenant_id,
+            tot_return_id=filed.id,
+            tax_due=tax_due,
+            amount_paid=amount_paid,
+            balance_due=balance_due,
+            lines=lines,
+        )
+
     async def get_refund(self, conn: Connection, refund_id: UUID) -> TotRefundView:
         await self._tenancy.require_active_tenant(conn)
         found = await self._refunds.get_refund(conn, refund_id)
@@ -473,6 +499,52 @@ def _settle(
         raise InvalidPayment("Payments exceed the filed turnover tax")
     balance_due = money(due - amount_paid)
     return due, amount_paid, balance_due, tuple(payments), tuple(refunds)
+
+
+def _running_lines(
+    tax_due: Decimal,
+    payments: tuple[TotPayment, ...],
+    refunds: tuple[TotRefund, ...],
+) -> tuple[TotStatementLine, ...]:
+    movements: list[tuple[date, datetime, str, UUID, UUID, Decimal]] = []
+    for payment in payments:
+        movements.append(
+            (payment.paid_on, payment.recorded_at, "payment", payment.id, payment.tot_return_id, payment.amount)
+        )
+    for refund in refunds:
+        movements.append(
+            (
+                refund.refunded_on,
+                refund.recorded_at,
+                "refund",
+                refund.id,
+                refund.tot_return_id,
+                refund.amount,
+            )
+        )
+    movements.sort(key=lambda item: (item[0], item[1], item[2], str(item[3])))
+    balance = require_money(tax_due)
+    lines: list[TotStatementLine] = []
+    for entry_date, recorded_at, kind, movement_id, return_id, amount in movements:
+        posted = require_money(amount)
+        if kind == "payment":
+            balance = money(balance - posted)
+        else:
+            balance = money(balance + posted)
+        if balance < 0:
+            raise InvalidPayment("Payments exceed the filed turnover tax")
+        lines.append(
+            TotStatementLine(
+                kind=kind,
+                id=movement_id,
+                tot_return_id=return_id,
+                amount=posted,
+                entry_date=entry_date,
+                recorded_at=recorded_at,
+                balance=balance,
+            )
+        )
+    return tuple(lines)
 
 
 def _paid_along_chain(latest: TotFiledTax, by_id: dict[UUID, TotFiledTax]) -> Decimal:

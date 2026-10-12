@@ -45,6 +45,8 @@ from allyanna.schemas import (
     TotRefundListResponse,
     TotRefundRequest,
     TotRefundResponse,
+    TotStatementLineResponse,
+    TotStatementResponse,
     TotReturnBalanceResponse,
     TotReturnFileRequest,
     TotReturnListResponse,
@@ -70,6 +72,8 @@ from allyanna.worksheets.models import (
     TotRefundList,
     TotRefundView,
     TotReturn,
+    TotStatement,
+    TotStatementLine,
     TotReturnBalance,
     TotWorksheet,
 )
@@ -335,6 +339,18 @@ async def get_turnover_tax_refund(
 ) -> TotRefundResponse:
     recorded = await auth.worksheets.get_refund(auth.conn, refund_id)
     return _refund_response(recorded)
+
+
+@router.get(
+    "/tax/tot/returns/{return_id}/statement",
+    response_model=TotStatementResponse,
+)
+async def get_turnover_tax_statement(
+    return_id: UUID,
+    auth: AuthContext = Depends(get_auth),
+) -> TotStatementResponse:
+    statement = await auth.worksheets.get_statement(auth.conn, return_id)
+    return _statement_response(statement)
 
 
 @router.get("/tax/tot/balances", response_model=TotBalanceListResponse)
@@ -674,6 +690,29 @@ def _refund_response(view: TotRefundView) -> TotRefundResponse:
         tax_due=view.tax_due,
         amount_paid=view.amount_paid,
         balance_due=view.balance_due,
+    )
+
+
+def _statement_line(line: TotStatementLine) -> TotStatementLineResponse:
+    return TotStatementLineResponse(
+        kind=line.kind,
+        id=line.id,
+        tot_return_id=line.tot_return_id,
+        amount=line.amount,
+        entry_date=line.entry_date,
+        recorded_at=line.recorded_at,
+        balance=line.balance,
+    )
+
+
+def _statement_response(statement: TotStatement) -> TotStatementResponse:
+    return TotStatementResponse(
+        tenant_id=statement.tenant_id,
+        tot_return_id=statement.tot_return_id,
+        tax_due=statement.tax_due,
+        amount_paid=statement.amount_paid,
+        balance_due=statement.balance_due,
+        lines=[_statement_line(line) for line in statement.lines],
     )
 
 

@@ -107,6 +107,18 @@ def test_tot_return_table_forces_row_level_security() -> None:
     assert "0.05" not in sql
 
 
+def test_statement_balance_is_decimal_and_keeps_both_rows() -> None:
+    text = (SRC / "allyanna" / "worksheets" / "service.py").read_text(encoding="utf-8")
+    assert "def _running_lines(" in text
+    assert "money(balance - posted)" in text
+    assert "money(balance + posted)" in text
+    assert "0.05" not in text
+    payments = (SRC / "allyanna" / "worksheets" / "payments.py").read_text(encoding="utf-8")
+    refunds = (SRC / "allyanna" / "worksheets" / "refunds.py").read_text(encoding="utf-8")
+    assert "tenant_id = current_setting('allyanna.tenant_id', true)::uuid" in payments
+    assert "tenant_id = current_setting('allyanna.tenant_id', true)::uuid" in refunds
+
+
 def test_tot_refund_reduces_amount_paid_without_removing_the_payment() -> None:
     sql = (Path(__file__).resolve().parents[1] / "db" / "migrations" / "012_tot_return_refunds.sql").read_text(
         encoding="utf-8"

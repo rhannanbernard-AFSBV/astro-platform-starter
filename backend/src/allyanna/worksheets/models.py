@@ -112,6 +112,27 @@ class TotRefundList:
 
 
 @dataclass(frozen=True)
+class TotStatementLine:
+    kind: str
+    id: UUID
+    tot_return_id: UUID
+    amount: Decimal
+    entry_date: date
+    recorded_at: datetime
+    balance: Decimal
+
+
+@dataclass(frozen=True)
+class TotStatement:
+    tenant_id: UUID
+    tot_return_id: UUID
+    tax_due: Decimal
+    amount_paid: Decimal
+    balance_due: Decimal
+    lines: tuple[TotStatementLine, ...]
+
+
+@dataclass(frozen=True)
 class TotFiledTax:
     return_id: UUID
     tenant_id: UUID

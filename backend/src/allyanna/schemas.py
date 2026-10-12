@@ -2,6 +2,7 @@
 
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -464,6 +465,25 @@ class TotRefundListResponse(BaseModel):
     amount_paid: Money
     balance_due: Money
     refunds: list[TotRefundItem]
+
+
+class TotStatementLineResponse(BaseModel):
+    kind: Literal["payment", "refund"]
+    id: UUID
+    tot_return_id: UUID
+    amount: Money
+    entry_date: date
+    recorded_at: datetime
+    balance: Money
+
+
+class TotStatementResponse(BaseModel):
+    tenant_id: UUID
+    tot_return_id: UUID
+    tax_due: Money
+    amount_paid: Money
+    balance_due: Money
+    lines: list[TotStatementLineResponse]
 
 
 class TotReturnBalanceResponse(BaseModel):
