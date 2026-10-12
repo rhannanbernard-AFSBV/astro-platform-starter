@@ -2,13 +2,15 @@
 
 from datetime import date
 from typing import Any
+from uuid import UUID
 
-from allyanna.errors import InvalidWorksheet
+from allyanna.errors import InvalidWorksheet, TotReturnNotFound
 from allyanna.money import money
 from allyanna.tax.service import TaxService
 from allyanna.tenancy.service import TenancyService
-from allyanna.worksheets.models import TotWorksheet
+from allyanna.worksheets.models import TotReturn, TotWorksheet
 from allyanna.worksheets.repository import WorksheetRepository
+from allyanna.worksheets.returns import TotReturnRepository
 from allyanna.worksheets.sum import sum_money
 
 Connection = Any
@@ -20,10 +22,12 @@ class TotWorksheetService:
         repository: WorksheetRepository,
         tax: TaxService,
         tenancy: TenancyService,
+        returns: TotReturnRepository,
     ) -> None:
         self._repository = repository
         self._tax = tax
         self._tenancy = tenancy
+        self._returns = returns
 
     async def build(
         self,
@@ -89,3 +93,49 @@ class TotWorksheetService:
             },
         )
         return worksheet
+
+    async def file_return(
+        self,
+        conn: Connection,
+        *,
+        period_start: date,
+        period_end: date,
+        tax_year: int,
+        country_code: str,
+    ) -> TotReturn:
+        """Store the worksheet sums and the table rate for this period."""
+        worksheet = await self.build(
+            conn,
+            period_start=period_start,
+            period_end=period_end,
+            tax_year=tax_year,
+            country_code=country_code,
+        )
+        filed = await self._returns.insert(conn, worksheet)
+        await self._tenancy.write_audit(
+            conn,
+            action="tax.tot.file",
+            detail={
+                "return_id": str(filed.id),
+                "schedule_id": str(filed.schedule_id),
+                "period_start": filed.period_start.isoformat(),
+                "period_end": filed.period_end.isoformat(),
+                "invoice_count": filed.invoice_count,
+                "subtotal": format(filed.subtotal, "f"),
+                "rate": format(filed.rate, "f"),
+                "tot_amount": format(filed.tot_amount, "f"),
+                "grand_total": format(filed.grand_total, "f"),
+            },
+        )
+        return filed
+
+    async def list_returns(self, conn: Connection) -> tuple[UUID, tuple[TotReturn, ...]]:
+        tenant, _active = await self._tenancy.require_active_tenant(conn)
+        return tenant.id, await self._returns.list_returns(conn)
+
+    async def get_return(self, conn: Connection, return_id: UUID) -> TotReturn:
+        await self._tenancy.require_active_tenant(conn)
+        found = await self._returns.get_return(conn, return_id)
+        if found is None:
+            raise TotReturnNotFound("Turnover-tax return was not found for the active business")
+        return found
