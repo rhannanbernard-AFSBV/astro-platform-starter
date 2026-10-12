@@ -22,6 +22,7 @@ from allyanna.tenancy.repository import TenancyRepository
 from allyanna.tenancy.service import TenancyService
 from allyanna.worksheets.payments import TotPaymentRepository
 from allyanna.worksheets.refunds import TotRefundRepository
+from allyanna.worksheets.summaries import TotAnnualSummaryRepository
 from allyanna.worksheets.repository import WorksheetRepository
 from allyanna.worksheets.returns import TotReturnRepository
 from allyanna.worksheets.service import TotWorksheetService
@@ -66,6 +67,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         returns=TotReturnRepository(),
         payments=TotPaymentRepository(),
         refunds=TotRefundRepository(),
+        summaries=TotAnnualSummaryRepository(),
     )
     yield
     pool = app.state.pool

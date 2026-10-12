@@ -130,6 +130,16 @@ class TotRefundNotFound(AllyannaError):
     status_code = 404
 
 
+class TotAnnualSummaryNotFound(AllyannaError):
+    code = "tot_annual_summary_not_found"
+    status_code = 404
+
+
+class TotAnnualSummaryAlreadyFiled(AllyannaError):
+    code = "tot_annual_summary_already_filed"
+    status_code = 409
+
+
 class ServiceUnavailable(AllyannaError):
     code = "service_unavailable"
     status_code = 503

@@ -22,6 +22,7 @@ Multi-tenant foundation for Sint Maarten tax calculations. The Astro app at the 
 - A refund against the latest filing that reduces the amount paid and leaves the original payment in place
 - A statement for the latest filing that lists each payment and refund in date order with a running balance
 - A year-to-date statement that lists each latest filing in a tax year, with that filing's payments and refunds and a running balance across the year
+- An annual summary that stores that year's tax, amount paid, and balance, while the earlier filings stay readable
 
 Payroll runs are not in this service yet.
 
@@ -88,6 +89,8 @@ One correcting invoice may name the latest filing for that period with `corrects
 `GET /api/v1/tax/tot/returns/{return_id}/statement` lists that latest filing's payments and refunds in date order. Each line keeps the stored amount and shows the balance still due after it. The running balance starts from the tax on the latest filing, subtracts a payment, and adds a refund, using `decimal.Decimal`. Lines on the same date stay in the order they were recorded. A superseded filing does not have its own statement. The payment and refund rows are not removed. The lines are read through the tenant-scoped payment and refund queries, and row-level security on those tables keeps another firm from reading the statement.
 
 `GET /api/v1/tax/tot/statements?tax_year=2026&country_code=SXM` lists every latest filing for that tax year on the active business profile, in period order. A superseded filing is left out. Each filing includes the payments and refunds stored for it, including a payment recorded on an earlier filing in the same chain. The running balance starts at zero, adds the filing's tax, then applies that filing's payments and refunds, and carries the result into the next filing. The header sums the tax, the amount paid, and the balance still due. A year with no filings returns zeros. Row-level security on the return, payment, and refund tables keeps another firm from reading it.
+
+`POST /api/v1/tax/tot/summaries` files that year statement. Send `tax_year` and `country_code`. The stored row keeps the year's tax, the amount paid, and the balance still due, added with `decimal.Decimal`. A later payment does not change the stored summary. The period filings, payments, and refunds stay readable. A tax year can be summarized once. A year with no filings is rejected. `GET /api/v1/tax/tot/summaries` and `GET /api/v1/tax/tot/summaries/{summary_id}` read it back for the active business profile. Row-level security on `tot_annual_summaries` keeps another firm from reading it.
 
 `GET /api/v1/tax/tot/balances` lists every filed return for the active business profile. Each row carries the tax stored on that return, the payments recorded against it, the remaining balance, and the due date. A row is past due when a due date is stored, that date is before `as_of`, and a balance remains. The header sums the open balances that are past due. `as_of` defaults to the current date. A settled return stays on the list and is not past due. When a period has been amended, the list follows the latest filing. The query is limited to the active profile's `tenant_id`, and row-level security on the return and payment tables is the backstop. Another firm does not see these balances.
 

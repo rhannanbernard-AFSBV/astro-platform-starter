@@ -9,6 +9,7 @@ from allyanna.errors import (
     InvalidPayment,
     InvalidWorksheet,
     TotPaymentNotFound,
+    TotAnnualSummaryNotFound,
     TotRefundNotFound,
     TotReturnNotFound,
     TotReturnSuperseded,
@@ -17,6 +18,8 @@ from allyanna.money import money, require_money
 from allyanna.tax.service import TaxService
 from allyanna.tenancy.service import TenancyService
 from allyanna.worksheets.models import (
+    TotAnnualSummary,
+    TotAnnualSummaryList,
     TotBalanceList,
     TotFiledTax,
     TotPayment,
@@ -35,6 +38,7 @@ from allyanna.worksheets.models import (
 )
 from allyanna.worksheets.payments import TotPaymentRepository
 from allyanna.worksheets.refunds import TotRefundRepository
+from allyanna.worksheets.summaries import TotAnnualSummaryRepository
 from allyanna.worksheets.repository import WorksheetRepository
 from allyanna.worksheets.returns import TotReturnRepository
 from allyanna.worksheets.sum import sum_money
@@ -51,6 +55,7 @@ class TotWorksheetService:
         returns: TotReturnRepository,
         payments: TotPaymentRepository,
         refunds: TotRefundRepository,
+        summaries: TotAnnualSummaryRepository,
     ) -> None:
         self._repository = repository
         self._tax = tax
@@ -58,6 +63,7 @@ class TotWorksheetService:
         self._returns = returns
         self._payments = payments
         self._refunds = refunds
+        self._summaries = summaries
 
     async def build(
         self,
@@ -479,6 +485,60 @@ class TotWorksheetService:
             balance_due=money(opening),
             filings=tuple(filings),
         )
+
+    async def file_annual_summary(
+        self,
+        conn: Connection,
+        *,
+        tax_year: int,
+        country_code: str,
+    ) -> TotAnnualSummary:
+        """Freeze the year statement. The period filings stay stored."""
+        statement = await self.get_year_statement(conn, tax_year=tax_year, country_code=country_code)
+        if not statement.filings or statement.currency_code is None:
+            raise InvalidWorksheet("There is no filing to summarize for this tax year")
+        tax_due = require_money(statement.tax_due)
+        amount_paid = require_money(statement.amount_paid)
+        balance_due = require_money(statement.balance_due)
+        if balance_due != money(tax_due - amount_paid):
+            raise InvalidPayment("The annual summary balance does not match the stored tax")
+        recorded = await self._summaries.insert(
+            conn,
+            country_code=statement.country_code,
+            tax_year=statement.tax_year,
+            currency_code=statement.currency_code,
+            filing_count=len(statement.filings),
+            tax_due=tax_due,
+            amount_paid=amount_paid,
+            balance_due=balance_due,
+        )
+        await self._tenancy.write_audit(
+            conn,
+            action="tax.tot.summarize",
+            detail={
+                "summary_id": str(recorded.id),
+                "tax_year": recorded.tax_year,
+                "filing_count": recorded.filing_count,
+                "tax_due": format(recorded.tax_due, "f"),
+                "amount_paid": format(recorded.amount_paid, "f"),
+                "balance_due": format(recorded.balance_due, "f"),
+            },
+        )
+        return recorded
+
+    async def list_annual_summaries(self, conn: Connection) -> TotAnnualSummaryList:
+        tenant, _active = await self._tenancy.require_active_tenant(conn)
+        return TotAnnualSummaryList(
+            tenant_id=tenant.id,
+            summaries=await self._summaries.list_summaries(conn),
+        )
+
+    async def get_annual_summary(self, conn: Connection, summary_id: UUID) -> TotAnnualSummary:
+        await self._tenancy.require_active_tenant(conn)
+        found = await self._summaries.get_summary(conn, summary_id)
+        if found is None:
+            raise TotAnnualSummaryNotFound("Annual summary was not found for the active business")
+        return found
 
     async def get_refund(self, conn: Connection, refund_id: UUID) -> TotRefundView:
         await self._tenancy.require_active_tenant(conn)

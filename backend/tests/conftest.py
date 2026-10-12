@@ -71,6 +71,7 @@ def database_url() -> str:
         "db/migrations/010_tot_return_amendments.sql",
         "db/migrations/011_correcting_invoice.sql",
         "db/migrations/012_tot_return_refunds.sql",
+        "db/migrations/013_tot_annual_summary.sql",
     ):
         _run(
             [

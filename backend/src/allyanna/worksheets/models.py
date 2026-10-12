@@ -146,6 +146,26 @@ class TotYearFiling:
 
 
 @dataclass(frozen=True)
+class TotAnnualSummary:
+    id: UUID
+    tenant_id: UUID
+    country_code: str
+    tax_year: int
+    currency_code: str
+    filing_count: int
+    tax_due: Decimal
+    amount_paid: Decimal
+    balance_due: Decimal
+    filed_at: datetime
+
+
+@dataclass(frozen=True)
+class TotAnnualSummaryList:
+    tenant_id: UUID
+    summaries: tuple[TotAnnualSummary, ...]
+
+
+@dataclass(frozen=True)
 class TotYearStatement:
     tenant_id: UUID
     tax_year: int

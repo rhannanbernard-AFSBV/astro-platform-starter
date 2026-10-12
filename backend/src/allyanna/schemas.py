@@ -498,6 +498,31 @@ class TotYearFilingResponse(BaseModel):
     lines: list[TotStatementLineResponse]
 
 
+class TotAnnualSummaryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tax_year: int = Field(ge=2000, le=2100)
+    country_code: str = Field(default="SXM", pattern=r"^[A-Z]{3}$")
+
+
+class TotAnnualSummaryResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    country_code: str
+    tax_year: int
+    currency_code: str
+    filing_count: int
+    tax_due: Money
+    amount_paid: Money
+    balance_due: Money
+    filed_at: datetime
+
+
+class TotAnnualSummaryListResponse(BaseModel):
+    tenant_id: UUID
+    summaries: list[TotAnnualSummaryResponse]
+
+
 class TotYearStatementResponse(BaseModel):
     tenant_id: UUID
     tax_year: int

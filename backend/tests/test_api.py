@@ -91,6 +91,10 @@ def test_health_and_money_schema_without_a_database(monkeypatch: pytest.MonkeyPa
     assert filing_props["balance_due"]["type"] == "string"
     assert filing_props["opening_balance"]["type"] == "string"
     assert filing_props["closing_balance"]["type"] == "string"
+    summary_props = schema["components"]["schemas"]["TotAnnualSummaryResponse"]["properties"]
+    assert summary_props["tax_due"]["type"] == "string"
+    assert summary_props["amount_paid"]["type"] == "string"
+    assert summary_props["balance_due"]["type"] == "string"
 
 
 def test_json_float_money_is_rejected() -> None:

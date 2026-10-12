@@ -45,6 +45,9 @@ from allyanna.schemas import (
     TotRefundListResponse,
     TotRefundRequest,
     TotRefundResponse,
+    TotAnnualSummaryListResponse,
+    TotAnnualSummaryRequest,
+    TotAnnualSummaryResponse,
     TotStatementLineResponse,
     TotStatementResponse,
     TotYearFilingResponse,
@@ -66,6 +69,8 @@ from allyanna.tax.service import TaxService
 from allyanna.tenancy.models import ContextSnapshot, Membership, Tenant, User
 from allyanna.tenancy.service import TenancyService
 from allyanna.worksheets.models import (
+    TotAnnualSummary,
+    TotAnnualSummaryList,
     TotBalanceList,
     TotPayment,
     TotPaymentList,
@@ -369,6 +374,36 @@ async def get_turnover_tax_year_statement(
         country_code=country_code,
     )
     return _year_statement_response(statement)
+
+
+@router.post("/tax/tot/summaries", response_model=TotAnnualSummaryResponse, status_code=201)
+async def file_turnover_tax_annual_summary(
+    body: TotAnnualSummaryRequest,
+    auth: AuthContext = Depends(get_auth),
+) -> TotAnnualSummaryResponse:
+    recorded = await auth.worksheets.file_annual_summary(
+        auth.conn,
+        tax_year=body.tax_year,
+        country_code=body.country_code,
+    )
+    return _annual_summary_response(recorded)
+
+
+@router.get("/tax/tot/summaries", response_model=TotAnnualSummaryListResponse)
+async def list_turnover_tax_annual_summaries(
+    auth: AuthContext = Depends(get_auth),
+) -> TotAnnualSummaryListResponse:
+    listing = await auth.worksheets.list_annual_summaries(auth.conn)
+    return _annual_summary_list_response(listing)
+
+
+@router.get("/tax/tot/summaries/{summary_id}", response_model=TotAnnualSummaryResponse)
+async def get_turnover_tax_annual_summary(
+    summary_id: UUID,
+    auth: AuthContext = Depends(get_auth),
+) -> TotAnnualSummaryResponse:
+    recorded = await auth.worksheets.get_annual_summary(auth.conn, summary_id)
+    return _annual_summary_response(recorded)
 
 
 @router.get("/tax/tot/balances", response_model=TotBalanceListResponse)
@@ -734,6 +769,28 @@ def _year_filing(filing: TotYearFiling) -> TotYearFilingResponse:
         opening_balance=filing.opening_balance,
         closing_balance=filing.closing_balance,
         lines=[_statement_line(line) for line in filing.lines],
+    )
+
+
+def _annual_summary_response(summary: TotAnnualSummary) -> TotAnnualSummaryResponse:
+    return TotAnnualSummaryResponse(
+        id=summary.id,
+        tenant_id=summary.tenant_id,
+        country_code=summary.country_code,
+        tax_year=summary.tax_year,
+        currency_code=summary.currency_code,
+        filing_count=summary.filing_count,
+        tax_due=summary.tax_due,
+        amount_paid=summary.amount_paid,
+        balance_due=summary.balance_due,
+        filed_at=summary.filed_at,
+    )
+
+
+def _annual_summary_list_response(listing: TotAnnualSummaryList) -> TotAnnualSummaryListResponse:
+    return TotAnnualSummaryListResponse(
+        tenant_id=listing.tenant_id,
+        summaries=[_annual_summary_response(summary) for summary in listing.summaries],
     )
 
 

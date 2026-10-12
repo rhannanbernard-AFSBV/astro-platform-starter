@@ -107,6 +107,21 @@ def test_tot_return_table_forces_row_level_security() -> None:
     assert "0.05" not in sql
 
 
+def test_annual_summary_freezes_the_year_without_a_rate() -> None:
+    sql = (Path(__file__).resolve().parents[1] / "db" / "migrations" / "013_tot_annual_summary.sql").read_text(
+        encoding="utf-8"
+    )
+    assert "tenant_id uuid NOT NULL" in sql
+    assert "ALTER TABLE allyanna.tot_annual_summaries ENABLE ROW LEVEL SECURITY;" in sql
+    assert "ALTER TABLE allyanna.tot_annual_summaries FORCE ROW LEVEL SECURITY;" in sql
+    assert "GRANT UPDATE ON allyanna.tot_annual_summaries" not in sql
+    assert "balance_due = tax_due - amount_paid" in sql
+    assert "user_can_access_tenant(NEW.tenant_id)" in sql
+    assert "0.05" not in sql
+    text = (SRC / "allyanna" / "worksheets" / "summaries.py").read_text(encoding="utf-8")
+    assert "tenant_id = current_setting('allyanna.tenant_id', true)::uuid" in text
+
+
 def test_statement_balance_is_decimal_and_keeps_both_rows() -> None:
     text = (SRC / "allyanna" / "worksheets" / "service.py").read_text(encoding="utf-8")
     assert "def _running_lines(" in text
