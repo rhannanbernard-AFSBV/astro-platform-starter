@@ -36,6 +36,8 @@ def test_calculation_modules_do_not_embed_statutory_rates() -> None:
         SRC / "allyanna" / "ocr" / "price.py",
         SRC / "allyanna" / "ocr" / "service.py",
         SRC / "allyanna" / "ocr" / "extractor.py",
+        SRC / "allyanna" / "invoices" / "totals.py",
+        SRC / "allyanna" / "invoices" / "service.py",
         SRC / "allyanna" / "api.py",
     ]
     for path in watched:
@@ -71,3 +73,14 @@ def test_document_tables_force_row_level_security() -> None:
         assert f"ALTER TABLE allyanna.{table} FORCE ROW LEVEL SECURITY;" in sql
     assert "0.05" not in sql
     assert "GRANT UPDATE ON allyanna.document_intake_lines" not in sql
+
+
+def test_invoice_tables_force_row_level_security() -> None:
+    sql = (Path(__file__).resolve().parents[1] / "db" / "migrations" / "002_invoices.sql").read_text(
+        encoding="utf-8"
+    )
+    for table in ("invoices", "invoice_lines"):
+        assert "tenant_id uuid NOT NULL" in sql
+        assert f"ALTER TABLE allyanna.{table} ENABLE ROW LEVEL SECURITY;" in sql
+        assert f"ALTER TABLE allyanna.{table} FORCE ROW LEVEL SECURITY;" in sql
+    assert "0.05" not in sql

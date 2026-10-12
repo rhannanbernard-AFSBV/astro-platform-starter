@@ -65,6 +65,21 @@ class ExtractionFailed(AllyannaError):
     status_code = 422
 
 
+class InvalidInvoice(AllyannaError):
+    code = "invalid_invoice"
+    status_code = 422
+
+
+class InvoiceNotFound(AllyannaError):
+    code = "invoice_not_found"
+    status_code = 404
+
+
+class DuplicateInvoiceNumber(AllyannaError):
+    code = "duplicate_invoice_number"
+    status_code = 409
+
+
 class ServiceUnavailable(AllyannaError):
     code = "service_unavailable"
     status_code = 503

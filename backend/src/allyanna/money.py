@@ -55,18 +55,19 @@ def money_to_json(value: Decimal) -> str:
     return format(money(value), "f")
 
 
-def rate_to_json(value: Decimal) -> str:
+def plain_decimal(value: Decimal) -> str:
     text = format(value, "f")
     if "." in text:
         text = text.rstrip("0").rstrip(".")
     return text or "0"
+
+
+def rate_to_json(value: Decimal) -> str:
+    return plain_decimal(value)
 
 
 def quantity_to_json(value: Decimal) -> str:
-    text = format(value, "f")
-    if "." in text:
-        text = text.rstrip("0").rstrip(".")
-    return text or "0"
+    return plain_decimal(value)
 
 
 Money = Annotated[

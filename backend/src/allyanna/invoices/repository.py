@@ -1,0 +1,173 @@
+"""Invoice queries. tenant_id always comes from the transaction-local session."""
+
+from datetime import date
+from decimal import Decimal
+from typing import Any
+from uuid import UUID
+
+import asyncpg
+
+from allyanna.errors import DuplicateInvoiceNumber
+from allyanna.invoices.models import Invoice, InvoiceLine, PricedLine
+from allyanna.money import as_decimal
+
+Connection = Any
+
+
+class InvoiceRepository:
+    async def insert_invoice(
+        self,
+        conn: Connection,
+        *,
+        vendor_name: str,
+        invoice_number: str | None,
+        invoice_date: date,
+        due_date: date | None,
+        currency_code: str,
+        tax_year: int,
+        country_code: str,
+        tax_schedule_id: UUID,
+        subtotal: Decimal,
+        tot_rate: Decimal,
+        tot_amount: Decimal,
+        grand_total: Decimal,
+        lines: tuple[PricedLine, ...],
+    ) -> Invoice:
+        try:
+            header = await conn.fetchrow(
+                """
+                INSERT INTO allyanna.invoices (
+                  tenant_id, vendor_name, invoice_number, invoice_date, due_date,
+                  currency_code, tax_year, country_code, tax_schedule_id,
+                  subtotal, tot_rate, tot_amount, grand_total
+                )
+                VALUES (
+                  current_setting('allyanna.tenant_id', true)::uuid,
+                  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+                )
+                RETURNING id, tenant_id, vendor_name, invoice_number, invoice_date, due_date,
+                          currency_code, tax_year, country_code, tax_schedule_id,
+                          subtotal, tot_rate, tot_amount, grand_total
+                """,
+                vendor_name,
+                invoice_number,
+                invoice_date,
+                due_date,
+                currency_code,
+                tax_year,
+                country_code,
+                tax_schedule_id,
+                subtotal,
+                tot_rate,
+                tot_amount,
+                grand_total,
+            )
+        except asyncpg.UniqueViolationError as exc:
+            raise DuplicateInvoiceNumber(
+                "An invoice with this number already exists for the business"
+            ) from exc
+        stored_lines: list[InvoiceLine] = []
+        for line in lines:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO allyanna.invoice_lines (
+                  tenant_id, invoice_id, line_number, description, quantity, unit_price, line_total
+                )
+                VALUES (
+                  current_setting('allyanna.tenant_id', true)::uuid,
+                  $1, $2, $3, $4, $5, $6
+                )
+                RETURNING id, line_number, description, quantity, unit_price, line_total
+                """,
+                header["id"],
+                line.line_number,
+                line.description,
+                line.quantity,
+                line.unit_price,
+                line.line_total,
+            )
+            stored_lines.append(_line_from_row(row))
+        return _invoice_from_row(header, tuple(stored_lines))
+
+    async def list_invoices(self, conn: Connection) -> tuple[Invoice, ...]:
+        headers = await conn.fetch(
+            """
+            SELECT id, tenant_id, vendor_name, invoice_number, invoice_date, due_date,
+                   currency_code, tax_year, country_code, tax_schedule_id,
+                   subtotal, tot_rate, tot_amount, grand_total
+            FROM allyanna.invoices
+            WHERE tenant_id = current_setting('allyanna.tenant_id', true)::uuid
+            ORDER BY invoice_date DESC, created_at DESC
+            """
+        )
+        return await self._with_lines(conn, headers)
+
+    async def get_invoice(self, conn: Connection, invoice_id: UUID) -> Invoice | None:
+        header = await conn.fetchrow(
+            """
+            SELECT id, tenant_id, vendor_name, invoice_number, invoice_date, due_date,
+                   currency_code, tax_year, country_code, tax_schedule_id,
+                   subtotal, tot_rate, tot_amount, grand_total
+            FROM allyanna.invoices
+            WHERE id = $1
+              AND tenant_id = current_setting('allyanna.tenant_id', true)::uuid
+            """,
+            invoice_id,
+        )
+        if header is None:
+            return None
+        invoices = await self._with_lines(conn, [header])
+        return invoices[0]
+
+    async def _with_lines(self, conn: Connection, headers: list[Any]) -> tuple[Invoice, ...]:
+        if not headers:
+            return ()
+        ids = [row["id"] for row in headers]
+        line_rows = await conn.fetch(
+            """
+            SELECT id, invoice_id, line_number, description, quantity, unit_price, line_total
+            FROM allyanna.invoice_lines
+            WHERE invoice_id = ANY($1::uuid[])
+              AND tenant_id = current_setting('allyanna.tenant_id', true)::uuid
+            ORDER BY line_number
+            """,
+            ids,
+        )
+        grouped: dict[UUID, list[InvoiceLine]] = {row["id"]: [] for row in headers}
+        for row in line_rows:
+            grouped[row["invoice_id"]].append(_line_from_row(row))
+        return tuple(
+            _invoice_from_row(header, tuple(grouped[header["id"]]))
+            for header in headers
+        )
+
+
+def _line_from_row(row: Any) -> InvoiceLine:
+    return InvoiceLine(
+        id=row["id"],
+        line_number=row["line_number"],
+        description=row["description"],
+        quantity=as_decimal(row["quantity"]),
+        unit_price=as_decimal(row["unit_price"]),
+        line_total=as_decimal(row["line_total"]),
+    )
+
+
+def _invoice_from_row(row: Any, lines: tuple[InvoiceLine, ...]) -> Invoice:
+    return Invoice(
+        id=row["id"],
+        tenant_id=row["tenant_id"],
+        vendor_name=row["vendor_name"],
+        invoice_number=row["invoice_number"],
+        invoice_date=row["invoice_date"],
+        due_date=row["due_date"],
+        currency_code=row["currency_code"],
+        tax_year=row["tax_year"],
+        country_code=row["country_code"],
+        tax_schedule_id=row["tax_schedule_id"],
+        subtotal=as_decimal(row["subtotal"]),
+        tot_rate=as_decimal(row["tot_rate"]),
+        tot_amount=as_decimal(row["tot_amount"]),
+        grand_total=as_decimal(row["grand_total"]),
+        lines=lines,
+    )

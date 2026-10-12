@@ -16,15 +16,6 @@ DEV_KEY = "allyanna-dev-key"
 OTHER_KEY = "allyanna-other-key"
 
 
-@pytest.fixture
-def client(database_url: str, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("TAX_CACHE_TTL_SECONDS", "0")
-    app = create_app()
-    with TestClient(app) as test_client:
-        yield test_client
-
-
 def _auth(key: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {key}"}
 
@@ -42,8 +33,11 @@ def test_health_and_money_schema_without_a_database(monkeypatch: pytest.MonkeyPa
     document_props = schema["components"]["schemas"]["DocumentIntakeResponse"]["properties"]
     for field_name in ("subtotal", "tot_amount", "grand_total"):
         options = document_props[field_name]["anyOf"]
-        assert {"type": "string"} in [{k: v for k, v in option.items() if k == "type"} for option in options]
         assert any(option.get("type") == "string" for option in options)
+    invoice_props = schema["components"]["schemas"]["InvoiceResponse"]["properties"]
+    assert invoice_props["subtotal"]["type"] == "string"
+    assert invoice_props["tot_amount"]["type"] == "string"
+    assert invoice_props["grand_total"]["type"] == "string"
 
 
 def test_json_float_money_is_rejected() -> None:

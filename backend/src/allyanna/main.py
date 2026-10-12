@@ -10,6 +10,8 @@ from allyanna.api import allyanna_error_handler, router
 from allyanna.config import get_settings
 from allyanna.db import create_pool
 from allyanna.errors import AllyannaError
+from allyanna.invoices.repository import InvoiceRepository
+from allyanna.invoices.service import InvoiceService
 from allyanna.ocr.extractor import OpenAIDocumentExtractor
 from allyanna.ocr.repository import DocumentRepository
 from allyanna.ocr.service import DocumentIntakeService
@@ -46,6 +48,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         tenancy=tenancy_service,
         extractor_provider=lambda: app.state.document_extractor,
     )
+    app.state.invoice_service = InvoiceService(InvoiceRepository(), tax_service, tenancy_service)
     yield
     pool = app.state.pool
     if pool is not None:
