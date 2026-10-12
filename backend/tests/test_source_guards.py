@@ -122,6 +122,19 @@ def test_tot_payment_table_forces_row_level_security() -> None:
     assert "COALESCE(SUM(payments.amount), 0::numeric)" in text
 
 
+def test_filed_period_blocks_a_new_invoice() -> None:
+    sql = (Path(__file__).resolve().parents[1] / "db" / "migrations" / "008_filed_period.sql").read_text(
+        encoding="utf-8"
+    )
+    assert "invoice date falls in a filed period" in sql
+    assert "tenant_id = NEW.tenant_id" in sql
+    assert "country_code = NEW.country_code" in sql
+    assert "0.05" not in sql
+    text = (SRC / "allyanna" / "invoices" / "repository.py").read_text(encoding="utf-8")
+    assert "tenant_id = current_setting('allyanna.tenant_id', true)::uuid" in text
+    assert "period_start <= $2" in text
+
+
 def test_posted_intake_stays_on_the_invoice_tenant() -> None:
     sql = (Path(__file__).resolve().parents[1] / "db" / "migrations" / "005_post_intake.sql").read_text(
         encoding="utf-8"

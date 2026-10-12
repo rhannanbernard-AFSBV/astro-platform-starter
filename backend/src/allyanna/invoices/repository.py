@@ -7,7 +7,7 @@ from uuid import UUID
 
 import asyncpg
 
-from allyanna.errors import DuplicateInvoiceNumber, IntakeAlreadyPosted
+from allyanna.errors import DuplicateInvoiceNumber, IntakeAlreadyPosted, InvoicePeriodFiled
 from allyanna.invoices.models import Invoice, InvoiceLine, PricedLine
 from allyanna.money import as_decimal
 
@@ -74,6 +74,12 @@ class InvoiceRepository:
             raise DuplicateInvoiceNumber(
                 "An invoice with this number already exists for the business"
             ) from exc
+        except asyncpg.RaiseError as exc:
+            if "filed period" in str(exc):
+                raise InvoicePeriodFiled(
+                    "This invoice date falls in a period that is already filed"
+                ) from exc
+            raise
         stored_lines: list[InvoiceLine] = []
         for line in lines:
             row = await conn.fetchrow(
@@ -96,6 +102,27 @@ class InvoiceRepository:
             )
             stored_lines.append(_line_from_row(row))
         return _invoice_from_row(header, tuple(stored_lines))
+
+    async def filed_period_covers(
+        self,
+        conn: Connection,
+        invoice_date: date,
+        country_code: str,
+    ) -> bool:
+        found = await conn.fetchval(
+            """
+            SELECT 1
+            FROM allyanna.tot_returns
+            WHERE tenant_id = current_setting('allyanna.tenant_id', true)::uuid
+              AND country_code = $1
+              AND period_start <= $2
+              AND period_end >= $2
+            LIMIT 1
+            """,
+            country_code,
+            invoice_date,
+        )
+        return found is not None
 
     async def list_invoices(self, conn: Connection) -> tuple[Invoice, ...]:
         headers = await conn.fetch(

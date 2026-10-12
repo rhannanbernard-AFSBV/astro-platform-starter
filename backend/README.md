@@ -15,6 +15,7 @@ Multi-tenant foundation for Sint Maarten tax calculations. The Astro app at the 
 - A filed turnover-tax return that stores that period's summed subtotal, table rate, and summed tax for the active business profile
 - A payment against that filed turnover tax, with the amount, the date, and the return it settles
 - Open balances for every filed return on the active business profile: tax due, amount paid, and remaining
+- A new invoice whose date falls in an already filed period is rejected, so the filed tax stays fixed
 
 Payroll runs are not in this service yet.
 
@@ -63,6 +64,8 @@ The 2026 seed cites the statutory turnover-tax rate, AB 2026 no. 11, and the SZV
 `POST /api/v1/invoices` records a vendor invoice on the active business profile. Send the vendor, dates, and lines (`description`, `quantity`, `unit_price`) as decimal strings. The service prices the lines, then calls the TOT calculation for `tax_year` and `country_code`. `GET /api/v1/invoices` and `GET /api/v1/invoices/{invoice_id}` return only that profile's documents.
 
 `POST /api/v1/documents/{document_id}/invoice` posts a completed intake into that ledger. The vendor, invoice date, subtotal, turnover tax, and grand total are the recomputed intake amounts. Python prices the stored lines again and reads turnover tax from the tax table. The printed model amounts are not used. One intake can be posted once.
+
+An invoice date that falls inside a turnover-tax period already filed for this business is rejected. That applies to a new invoice and to posting an intake. The day before the period and the day after it can still be recorded. Another firm's filing does not block this profile. The filed return and its open balance stay as they were.
 
 ## Turnover-tax worksheet
 

@@ -80,6 +80,11 @@ class DuplicateInvoiceNumber(AllyannaError):
     status_code = 409
 
 
+class InvoicePeriodFiled(AllyannaError):
+    code = "invoice_period_filed"
+    status_code = 409
+
+
 class IntakeAlreadyPosted(AllyannaError):
     code = "intake_already_posted"
     status_code = 409

@@ -8,7 +8,13 @@ from datetime import date
 from typing import Any
 from uuid import UUID
 
-from allyanna.errors import IntakeAlreadyPosted, InvalidDocument, InvalidInvoice, InvoiceNotFound
+from allyanna.errors import (
+    IntakeAlreadyPosted,
+    InvalidDocument,
+    InvalidInvoice,
+    InvoiceNotFound,
+    InvoicePeriodFiled,
+)
 from allyanna.invoices.models import Invoice, InvoiceLineInput
 from allyanna.invoices.repository import InvoiceRepository
 from allyanna.invoices.totals import price_lines
@@ -60,6 +66,7 @@ class InvoiceService:
             gross_taxable_revenue=subtotal,
         )
         grand_total = money(subtotal + tot.tot_amount)
+        await self._ensure_period_open(conn, invoice_date=invoice_date, country_code=country_code)
         invoice = await self._repository.insert_invoice(
             conn,
             vendor_name=vendor,
@@ -143,6 +150,7 @@ class InvoiceService:
             raise InvalidDocument("The recomputed turnover tax does not match the tax table")
         if await self._repository.find_posted_intake(conn, document.id) is not None:
             raise IntakeAlreadyPosted("This intake is already posted to the ledger")
+        await self._ensure_period_open(conn, invoice_date=invoice_date, country_code=country_code)
         invoice = await self._repository.insert_invoice(
             conn,
             vendor_name=vendor,
@@ -174,6 +182,16 @@ class InvoiceService:
             },
         )
         return invoice
+
+    async def _ensure_period_open(
+        self,
+        conn: Connection,
+        *,
+        invoice_date: date,
+        country_code: str,
+    ) -> None:
+        if await self._repository.filed_period_covers(conn, invoice_date, country_code):
+            raise InvoicePeriodFiled("This invoice date falls in a period that is already filed")
 
     async def list_invoices(self, conn: Connection) -> tuple[Invoice, ...]:
         await self._tenancy.require_active_tenant(conn)
