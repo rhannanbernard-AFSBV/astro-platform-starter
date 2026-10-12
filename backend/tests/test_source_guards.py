@@ -107,6 +107,22 @@ def test_tot_return_table_forces_row_level_security() -> None:
     assert "0.05" not in sql
 
 
+def test_annual_summary_amendment_keeps_the_earlier_row() -> None:
+    sql = (
+        Path(__file__).resolve().parents[1] / "db" / "migrations" / "014_tot_annual_summary_amendments.sql"
+    ).read_text(encoding="utf-8")
+    assert "amends_summary_id uuid" in sql
+    assert "WHERE amends_summary_id IS NULL" in sql
+    assert "tot_annual_summaries_amends_unique" in sql
+    assert "user_can_access_tenant(NEW.tenant_id)" in sql
+    assert "amendment does not belong to this tenant summary" in sql
+    assert "GRANT UPDATE ON allyanna.tot_annual_summaries" not in sql
+    assert "0.05" not in sql
+    text = (SRC / "allyanna" / "worksheets" / "summaries.py").read_text(encoding="utf-8")
+    assert "tenant_id = current_setting('allyanna.tenant_id', true)::uuid" in text
+    assert "later.amends_summary_id = filed.id" in text
+
+
 def test_annual_summary_freezes_the_year_without_a_rate() -> None:
     sql = (Path(__file__).resolve().parents[1] / "db" / "migrations" / "013_tot_annual_summary.sql").read_text(
         encoding="utf-8"

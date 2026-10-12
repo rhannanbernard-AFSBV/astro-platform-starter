@@ -156,6 +156,8 @@ class TotAnnualSummary:
     tax_due: Decimal
     amount_paid: Decimal
     balance_due: Decimal
+    amends_summary_id: UUID | None
+    superseded: bool
     filed_at: datetime
 
 

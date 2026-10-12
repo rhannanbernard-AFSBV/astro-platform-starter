@@ -45,6 +45,7 @@ from allyanna.schemas import (
     TotRefundListResponse,
     TotRefundRequest,
     TotRefundResponse,
+    TotAnnualSummaryAmendmentRequest,
     TotAnnualSummaryListResponse,
     TotAnnualSummaryRequest,
     TotAnnualSummaryResponse,
@@ -395,6 +396,21 @@ async def list_turnover_tax_annual_summaries(
 ) -> TotAnnualSummaryListResponse:
     listing = await auth.worksheets.list_annual_summaries(auth.conn)
     return _annual_summary_list_response(listing)
+
+
+@router.post(
+    "/tax/tot/summaries/{summary_id}/amendments",
+    response_model=TotAnnualSummaryResponse,
+    status_code=201,
+)
+async def amend_turnover_tax_annual_summary(
+    summary_id: UUID,
+    body: TotAnnualSummaryAmendmentRequest,
+    auth: AuthContext = Depends(get_auth),
+) -> TotAnnualSummaryResponse:
+    _ = body
+    recorded = await auth.worksheets.amend_annual_summary(auth.conn, summary_id)
+    return _annual_summary_response(recorded)
 
 
 @router.get("/tax/tot/summaries/{summary_id}", response_model=TotAnnualSummaryResponse)
@@ -783,6 +799,8 @@ def _annual_summary_response(summary: TotAnnualSummary) -> TotAnnualSummaryRespo
         tax_due=summary.tax_due,
         amount_paid=summary.amount_paid,
         balance_due=summary.balance_due,
+        amends_summary_id=summary.amends_summary_id,
+        superseded=summary.superseded,
         filed_at=summary.filed_at,
     )
 

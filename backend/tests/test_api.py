@@ -95,6 +95,10 @@ def test_health_and_money_schema_without_a_database(monkeypatch: pytest.MonkeyPa
     assert summary_props["tax_due"]["type"] == "string"
     assert summary_props["amount_paid"]["type"] == "string"
     assert summary_props["balance_due"]["type"] == "string"
+    assert summary_props["superseded"]["type"] == "boolean"
+    amends_options = summary_props["amends_summary_id"]["anyOf"]
+    assert any(option.get("type") == "string" and option.get("format") == "uuid" for option in amends_options)
+    assert any(option.get("type") == "null" for option in amends_options)
 
 
 def test_json_float_money_is_rejected() -> None:

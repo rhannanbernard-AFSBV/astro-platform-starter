@@ -505,6 +505,10 @@ class TotAnnualSummaryRequest(BaseModel):
     country_code: str = Field(default="SXM", pattern=r"^[A-Z]{3}$")
 
 
+class TotAnnualSummaryAmendmentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
 class TotAnnualSummaryResponse(BaseModel):
     id: UUID
     tenant_id: UUID
@@ -515,6 +519,8 @@ class TotAnnualSummaryResponse(BaseModel):
     tax_due: Money
     amount_paid: Money
     balance_due: Money
+    amends_summary_id: UUID | None
+    superseded: bool
     filed_at: datetime
 
 

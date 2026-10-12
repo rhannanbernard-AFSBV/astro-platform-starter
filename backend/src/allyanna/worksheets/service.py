@@ -10,6 +10,7 @@ from allyanna.errors import (
     InvalidWorksheet,
     TotPaymentNotFound,
     TotAnnualSummaryNotFound,
+    TotAnnualSummarySuperseded,
     TotRefundNotFound,
     TotReturnNotFound,
     TotReturnSuperseded,
@@ -486,14 +487,13 @@ class TotWorksheetService:
             filings=tuple(filings),
         )
 
-    async def file_annual_summary(
+    async def _year_snapshot(
         self,
         conn: Connection,
         *,
         tax_year: int,
         country_code: str,
-    ) -> TotAnnualSummary:
-        """Freeze the year statement. The period filings stay stored."""
+    ) -> tuple[TotYearStatement, Decimal, Decimal, Decimal]:
         statement = await self.get_year_statement(conn, tax_year=tax_year, country_code=country_code)
         if not statement.filings or statement.currency_code is None:
             raise InvalidWorksheet("There is no filing to summarize for this tax year")
@@ -502,6 +502,21 @@ class TotWorksheetService:
         balance_due = require_money(statement.balance_due)
         if balance_due != money(tax_due - amount_paid):
             raise InvalidPayment("The annual summary balance does not match the stored tax")
+        return statement, tax_due, amount_paid, balance_due
+
+    async def file_annual_summary(
+        self,
+        conn: Connection,
+        *,
+        tax_year: int,
+        country_code: str,
+    ) -> TotAnnualSummary:
+        """Freeze the year statement. The period filings stay stored."""
+        statement, tax_due, amount_paid, balance_due = await self._year_snapshot(
+            conn,
+            tax_year=tax_year,
+            country_code=country_code,
+        )
         recorded = await self._summaries.insert(
             conn,
             country_code=statement.country_code,
@@ -517,6 +532,44 @@ class TotWorksheetService:
             action="tax.tot.summarize",
             detail={
                 "summary_id": str(recorded.id),
+                "tax_year": recorded.tax_year,
+                "filing_count": recorded.filing_count,
+                "tax_due": format(recorded.tax_due, "f"),
+                "amount_paid": format(recorded.amount_paid, "f"),
+                "balance_due": format(recorded.balance_due, "f"),
+            },
+        )
+        return recorded
+
+    async def amend_annual_summary(self, conn: Connection, summary_id: UUID) -> TotAnnualSummary:
+        """Store the year totals after later payments. The earlier summary stays stored."""
+        current = await self.get_annual_summary(conn, summary_id)
+        if current.superseded:
+            raise TotAnnualSummarySuperseded("This annual summary has been amended")
+        statement, tax_due, amount_paid, balance_due = await self._year_snapshot(
+            conn,
+            tax_year=current.tax_year,
+            country_code=current.country_code,
+        )
+        if statement.currency_code != current.currency_code:
+            raise InvalidWorksheet("The year statement currency does not match the summary")
+        recorded = await self._summaries.insert(
+            conn,
+            country_code=statement.country_code,
+            tax_year=statement.tax_year,
+            currency_code=statement.currency_code,
+            filing_count=len(statement.filings),
+            tax_due=tax_due,
+            amount_paid=amount_paid,
+            balance_due=balance_due,
+            amends_summary_id=current.id,
+        )
+        await self._tenancy.write_audit(
+            conn,
+            action="tax.tot.summarize.amend",
+            detail={
+                "summary_id": str(recorded.id),
+                "amends_summary_id": str(current.id),
                 "tax_year": recorded.tax_year,
                 "filing_count": recorded.filing_count,
                 "tax_due": format(recorded.tax_due, "f"),

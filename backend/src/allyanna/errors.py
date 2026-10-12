@@ -140,6 +140,11 @@ class TotAnnualSummaryAlreadyFiled(AllyannaError):
     status_code = 409
 
 
+class TotAnnualSummarySuperseded(AllyannaError):
+    code = "tot_annual_summary_superseded"
+    status_code = 409
+
+
 class ServiceUnavailable(AllyannaError):
     code = "service_unavailable"
     status_code = 503
