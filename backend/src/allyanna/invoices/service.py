@@ -9,11 +9,14 @@ from typing import Any
 from uuid import UUID
 
 from allyanna.errors import (
+    CorrectingInvoiceExists,
     IntakeAlreadyPosted,
     InvalidDocument,
     InvalidInvoice,
     InvoiceNotFound,
     InvoicePeriodFiled,
+    TotReturnNotFound,
+    TotReturnSuperseded,
 )
 from allyanna.invoices.models import Invoice, InvoiceLineInput
 from allyanna.invoices.repository import InvoiceRepository
@@ -50,6 +53,7 @@ class InvoiceService:
         tax_year: int,
         country_code: str,
         lines: list[InvoiceLineInput],
+        corrects_return_id: UUID | None = None,
     ) -> Invoice:
         vendor = vendor_name.strip()
         if not vendor:
@@ -66,7 +70,16 @@ class InvoiceService:
             gross_taxable_revenue=subtotal,
         )
         grand_total = money(subtotal + tot.tot_amount)
-        await self._ensure_period_open(conn, invoice_date=invoice_date, country_code=country_code)
+        if corrects_return_id is None:
+            await self._ensure_period_open(conn, invoice_date=invoice_date, country_code=country_code)
+        else:
+            await self._ensure_correcting_invoice(
+                conn,
+                corrects_return_id=corrects_return_id,
+                invoice_date=invoice_date,
+                tax_year=tax_year,
+                country_code=country_code,
+            )
         invoice = await self._repository.insert_invoice(
             conn,
             vendor_name=vendor,
@@ -82,6 +95,7 @@ class InvoiceService:
             tot_amount=tot.tot_amount,
             grand_total=grand_total,
             lines=priced,
+            corrects_return_id=corrects_return_id,
         )
         await self._tenancy.write_audit(
             conn,
@@ -93,6 +107,7 @@ class InvoiceService:
                 "tot_rate": format(invoice.tot_rate, "f"),
                 "tot_amount": format(invoice.tot_amount, "f"),
                 "grand_total": format(invoice.grand_total, "f"),
+                "corrects_return_id": None if invoice.corrects_return_id is None else str(invoice.corrects_return_id),
             },
         )
         return invoice
@@ -192,6 +207,27 @@ class InvoiceService:
     ) -> None:
         if await self._repository.filed_period_covers(conn, invoice_date, country_code):
             raise InvoicePeriodFiled("This invoice date falls in a period that is already filed")
+
+    async def _ensure_correcting_invoice(
+        self,
+        conn: Connection,
+        *,
+        corrects_return_id: UUID,
+        invoice_date: date,
+        tax_year: int,
+        country_code: str,
+    ) -> None:
+        filing = await self._repository.get_filed_return(conn, corrects_return_id)
+        if filing is None:
+            raise TotReturnNotFound("Turnover-tax return was not found for the active business")
+        if filing.superseded:
+            raise TotReturnSuperseded("This filing has been amended")
+        if filing.country_code != country_code or filing.tax_year != tax_year:
+            raise InvalidInvoice("The correcting invoice does not match the filed return")
+        if invoice_date < filing.period_start or invoice_date > filing.period_end:
+            raise InvalidInvoice("The invoice date is outside the filed period")
+        if await self._repository.correction_exists(conn, corrects_return_id):
+            raise CorrectingInvoiceExists("This filing already has a correcting invoice")
 
     async def list_invoices(self, conn: Connection) -> tuple[Invoice, ...]:
         await self._tenancy.require_active_tenant(conn)

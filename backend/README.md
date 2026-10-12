@@ -18,6 +18,7 @@ Multi-tenant foundation for Sint Maarten tax calculations. The Astro app at the 
 - A new invoice whose date falls in an already filed period is rejected, so the filed tax stays fixed
 - A due date stored on the filed return, and open balances that are past that date
 - An amendment that supersedes the frozen tax for a period while the earlier filing stays readable
+- One correcting invoice posted into an already filed period, so the next amendment can include it. An ordinary invoice in that period is still rejected
 
 Payroll runs are not in this service yet.
 
@@ -68,6 +69,8 @@ The 2026 seed cites the statutory turnover-tax rate, AB 2026 no. 11, and the SZV
 `POST /api/v1/documents/{document_id}/invoice` posts a completed intake into that ledger. The vendor, invoice date, subtotal, turnover tax, and grand total are the recomputed intake amounts. Python prices the stored lines again and reads turnover tax from the tax table. The printed model amounts are not used. One intake can be posted once.
 
 An invoice date that falls inside a turnover-tax period already filed for this business is rejected. That applies to a new invoice and to posting an intake. The day before the period and the day after it can still be recorded. Another firm's filing does not block this profile. The filed return and its open balance stay as they were.
+
+One correcting invoice may name the latest filing for that period with `corrects_return_id`. Its date has to fall inside that filing, and its turnover tax is still the tax-table calculation for the line subtotal. A second correction against the same filing is rejected. An ordinary invoice in the period, including an intake, stays rejected. The next amendment reads the posted invoices for the period, so it includes the correction. The earlier filing keeps the tax it stored.
 
 ## Turnover-tax worksheet
 

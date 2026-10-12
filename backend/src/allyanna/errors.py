@@ -85,6 +85,11 @@ class InvoicePeriodFiled(AllyannaError):
     status_code = 409
 
 
+class CorrectingInvoiceExists(AllyannaError):
+    code = "correcting_invoice_exists"
+    status_code = 409
+
+
 class IntakeAlreadyPosted(AllyannaError):
     code = "intake_already_posted"
     status_code = 409

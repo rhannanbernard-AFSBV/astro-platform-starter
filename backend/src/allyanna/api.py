@@ -426,6 +426,7 @@ async def create_invoice(
         due_date=body.due_date,
         tax_year=body.tax_year,
         country_code=body.country_code,
+        corrects_return_id=body.corrects_return_id,
         lines=[
             InvoiceLineInput(
                 description=line.description,
@@ -504,6 +505,7 @@ def _invoice_response(invoice: Invoice) -> InvoiceResponse:
         tot_amount=invoice.tot_amount,
         grand_total=invoice.grand_total,
         document_intake_id=invoice.document_intake_id,
+        corrects_return_id=invoice.corrects_return_id,
         lines=[
             InvoiceLineResponse(
                 id=line.id,

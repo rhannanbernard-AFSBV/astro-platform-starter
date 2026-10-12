@@ -33,6 +33,15 @@ class InvoiceLine:
 
 
 @dataclass(frozen=True)
+class FiledReturnWindow:
+    country_code: str
+    tax_year: int
+    period_start: date
+    period_end: date
+    superseded: bool
+
+
+@dataclass(frozen=True)
 class Invoice:
     id: UUID
     tenant_id: UUID
@@ -49,4 +58,5 @@ class Invoice:
     tot_amount: Decimal
     grand_total: Decimal
     document_intake_id: UUID | None
+    corrects_return_id: UUID | None
     lines: tuple[InvoiceLine, ...]

@@ -7,8 +7,14 @@ from uuid import UUID
 
 import asyncpg
 
-from allyanna.errors import DuplicateInvoiceNumber, IntakeAlreadyPosted, InvoicePeriodFiled
-from allyanna.invoices.models import Invoice, InvoiceLine, PricedLine
+from allyanna.errors import (
+    CorrectingInvoiceExists,
+    DuplicateInvoiceNumber,
+    IntakeAlreadyPosted,
+    InvalidInvoice,
+    InvoicePeriodFiled,
+)
+from allyanna.invoices.models import FiledReturnWindow, Invoice, InvoiceLine, PricedLine
 from allyanna.money import as_decimal
 
 Connection = Any
@@ -16,7 +22,7 @@ Connection = Any
 _INVOICE_COLUMNS = """
     id, tenant_id, vendor_name, invoice_number, invoice_date, due_date,
     currency_code, tax_year, country_code, tax_schedule_id,
-    subtotal, tot_rate, tot_amount, grand_total, document_intake_id
+    subtotal, tot_rate, tot_amount, grand_total, document_intake_id, corrects_return_id
 """
 
 
@@ -39,6 +45,7 @@ class InvoiceRepository:
         grand_total: Decimal,
         lines: tuple[PricedLine, ...],
         document_intake_id: UUID | None = None,
+        corrects_return_id: UUID | None = None,
     ) -> Invoice:
         try:
             header = await conn.fetchrow(
@@ -46,11 +53,12 @@ class InvoiceRepository:
                 INSERT INTO allyanna.invoices (
                   tenant_id, vendor_name, invoice_number, invoice_date, due_date,
                   currency_code, tax_year, country_code, tax_schedule_id,
-                  subtotal, tot_rate, tot_amount, grand_total, document_intake_id
+                  subtotal, tot_rate, tot_amount, grand_total, document_intake_id,
+                  corrects_return_id
                 )
                 VALUES (
                   current_setting('allyanna.tenant_id', true)::uuid,
-                  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+                  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
                 )
                 RETURNING {_INVOICE_COLUMNS}
                 """,
@@ -67,18 +75,24 @@ class InvoiceRepository:
                 tot_amount,
                 grand_total,
                 document_intake_id,
+                corrects_return_id,
             )
         except asyncpg.UniqueViolationError as exc:
             if exc.constraint_name == "invoices_document_intake_idx":
                 raise IntakeAlreadyPosted("This intake is already posted to the ledger") from exc
+            if exc.constraint_name == "invoices_one_correction_per_return":
+                raise CorrectingInvoiceExists("This filing already has a correcting invoice") from exc
             raise DuplicateInvoiceNumber(
                 "An invoice with this number already exists for the business"
             ) from exc
         except asyncpg.RaiseError as exc:
-            if "filed period" in str(exc):
+            message = str(exc)
+            if "filed period" in message:
                 raise InvoicePeriodFiled(
                     "This invoice date falls in a period that is already filed"
                 ) from exc
+            if "does not belong" in message:
+                raise InvalidInvoice("The correcting invoice does not match the filed return") from exc
             raise
         stored_lines: list[InvoiceLine] = []
         for line in lines:
@@ -121,6 +135,49 @@ class InvoiceRepository:
             """,
             country_code,
             invoice_date,
+        )
+        return found is not None
+
+    async def get_filed_return(self, conn: Connection, return_id: UUID) -> FiledReturnWindow | None:
+        row = await conn.fetchrow(
+            """
+            SELECT
+              filed.country_code,
+              filed.tax_year,
+              filed.period_start,
+              filed.period_end,
+              EXISTS (
+                SELECT 1
+                FROM allyanna.tot_returns AS later
+                WHERE later.amends_return_id = filed.id
+                  AND later.tenant_id = filed.tenant_id
+              ) AS superseded
+            FROM allyanna.tot_returns AS filed
+            WHERE filed.id = $1
+              AND filed.tenant_id = current_setting('allyanna.tenant_id', true)::uuid
+            """,
+            return_id,
+        )
+        if row is None:
+            return None
+        return FiledReturnWindow(
+            country_code=row["country_code"],
+            tax_year=row["tax_year"],
+            period_start=row["period_start"],
+            period_end=row["period_end"],
+            superseded=bool(row["superseded"]),
+        )
+
+    async def correction_exists(self, conn: Connection, return_id: UUID) -> bool:
+        found = await conn.fetchval(
+            """
+            SELECT 1
+            FROM allyanna.invoices
+            WHERE corrects_return_id = $1
+              AND tenant_id = current_setting('allyanna.tenant_id', true)::uuid
+            LIMIT 1
+            """,
+            return_id,
         )
         return found is not None
 
@@ -212,5 +269,6 @@ def _invoice_from_row(row: Any, lines: tuple[InvoiceLine, ...]) -> Invoice:
         tot_amount=as_decimal(row["tot_amount"]),
         grand_total=as_decimal(row["grand_total"]),
         document_intake_id=row["document_intake_id"],
+        corrects_return_id=row["corrects_return_id"],
         lines=lines,
     )

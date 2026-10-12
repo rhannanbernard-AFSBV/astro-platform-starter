@@ -141,6 +141,19 @@ def test_return_due_date_is_not_a_rate() -> None:
     assert "0.05" not in sql
 
 
+def test_correcting_invoice_targets_the_latest_filing() -> None:
+    sql = (Path(__file__).resolve().parents[1] / "db" / "migrations" / "011_correcting_invoice.sql").read_text(
+        encoding="utf-8"
+    )
+    assert "corrects_return_id uuid" in sql
+    assert "invoices_one_correction_per_return" in sql
+    assert "prior_tenant <> NEW.tenant_id" in sql
+    assert "correcting invoice does not belong to this tenant return" in sql
+    assert "invoice date falls in a filed period" in sql
+    assert "GRANT UPDATE ON allyanna.invoices" not in sql
+    assert "0.05" not in sql
+
+
 def test_filed_period_blocks_a_new_invoice() -> None:
     sql = (Path(__file__).resolve().parents[1] / "db" / "migrations" / "008_filed_period.sql").read_text(
         encoding="utf-8"

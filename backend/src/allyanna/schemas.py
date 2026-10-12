@@ -269,6 +269,7 @@ class InvoiceCreateRequest(BaseModel):
     due_date: date | None = None
     tax_year: int = Field(ge=2000, le=2100)
     country_code: str = Field(default="SXM", pattern=r"^[A-Z]{3}$")
+    corrects_return_id: UUID | None = None
     lines: list[InvoiceLineRequest] = Field(min_length=1, max_length=100)
 
     @field_validator("vendor_name", mode="before")
@@ -314,6 +315,7 @@ class InvoiceResponse(BaseModel):
     tot_amount: Money
     grand_total: Money
     document_intake_id: UUID | None = None
+    corrects_return_id: UUID | None = None
     lines: list[InvoiceLineResponse]
 
 
