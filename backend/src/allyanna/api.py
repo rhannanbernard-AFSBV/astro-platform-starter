@@ -1,6 +1,7 @@
 """Async HTTP routes. Every response uses an explicit Pydantic model."""
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 from uuid import UUID
 
@@ -40,6 +41,7 @@ from allyanna.schemas import (
     TotPaymentRequest,
     TotPaymentResponse,
     TotReturnBalanceResponse,
+    TotReturnFileRequest,
     TotReturnListResponse,
     TotReturnResponse,
     TotWorksheetRequest,
@@ -195,7 +197,7 @@ async def turnover_tax_worksheet(
 
 @router.post("/tax/tot/returns", response_model=TotReturnResponse, status_code=201)
 async def file_turnover_tax_return(
-    body: TotWorksheetRequest,
+    body: TotReturnFileRequest,
     auth: AuthContext = Depends(get_auth),
 ) -> TotReturnResponse:
     filed = await auth.worksheets.file_return(
@@ -204,6 +206,7 @@ async def file_turnover_tax_return(
         period_end=body.period_end,
         tax_year=body.tax_year,
         country_code=body.country_code,
+        due_on=body.due_on,
     )
     return _return_response(filed)
 
@@ -270,9 +273,13 @@ async def get_turnover_tax_payment(
 
 @router.get("/tax/tot/balances", response_model=TotBalanceListResponse)
 async def list_turnover_tax_balances(
+    as_of: date | None = Query(default=None),
     auth: AuthContext = Depends(get_auth),
 ) -> TotBalanceListResponse:
-    listing = await auth.worksheets.list_balances(auth.conn)
+    listing = await auth.worksheets.list_balances(
+        auth.conn,
+        as_of=date.today() if as_of is None else as_of,
+    )
     return _balance_list_response(listing)
 
 
@@ -556,18 +563,22 @@ def _balance_item(row: TotReturnBalance) -> TotReturnBalanceResponse:
         period_start=row.period_start,
         period_end=row.period_end,
         currency_code=row.currency_code,
+        due_on=row.due_on,
         tax_due=row.tax_due,
         amount_paid=row.amount_paid,
         balance_due=row.balance_due,
+        past_due=row.past_due,
     )
 
 
 def _balance_list_response(listing: TotBalanceList) -> TotBalanceListResponse:
     return TotBalanceListResponse(
         tenant_id=listing.tenant_id,
+        as_of=listing.as_of,
         tax_due=listing.tax_due,
         amount_paid=listing.amount_paid,
         balance_due=listing.balance_due,
+        past_due_balance=listing.past_due_balance,
         returns=[_balance_item(row) for row in listing.returns],
     )
 
@@ -598,6 +609,7 @@ def _return_response(filed: TotReturn) -> TotReturnResponse:
         subtotal=filed.subtotal,
         tot_amount=filed.tot_amount,
         grand_total=filed.grand_total,
+        due_on=filed.due_on,
         filed_at=filed.filed_at,
     )
 

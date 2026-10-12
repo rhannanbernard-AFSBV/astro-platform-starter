@@ -331,6 +331,10 @@ class TotWorksheetRequest(BaseModel):
     country_code: str = Field(default="SXM", pattern=r"^[A-Z]{3}$")
 
 
+class TotReturnFileRequest(TotWorksheetRequest):
+    due_on: date | None = None
+
+
 class TotWorksheetInvoiceResponse(BaseModel):
     id: UUID
     vendor_name: str
@@ -371,6 +375,7 @@ class TotReturnResponse(BaseModel):
     subtotal: Money
     tot_amount: Money
     grand_total: Money
+    due_on: date | None
     filed_at: datetime
 
 
@@ -423,14 +428,18 @@ class TotReturnBalanceResponse(BaseModel):
     period_start: date
     period_end: date
     currency_code: str
+    due_on: date | None
     tax_due: Money
     amount_paid: Money
     balance_due: Money
+    past_due: bool
 
 
 class TotBalanceListResponse(BaseModel):
     tenant_id: UUID
+    as_of: date
     tax_due: Money
     amount_paid: Money
     balance_due: Money
+    past_due_balance: Money
     returns: list[TotReturnBalanceResponse]

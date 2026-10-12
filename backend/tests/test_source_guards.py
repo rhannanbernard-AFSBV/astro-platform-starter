@@ -122,6 +122,15 @@ def test_tot_payment_table_forces_row_level_security() -> None:
     assert "COALESCE(SUM(payments.amount), 0::numeric)" in text
 
 
+def test_return_due_date_is_not_a_rate() -> None:
+    sql = (Path(__file__).resolve().parents[1] / "db" / "migrations" / "009_return_due_date.sql").read_text(
+        encoding="utf-8"
+    )
+    assert "due_on date" in sql
+    assert "due_on IS NULL OR due_on >= period_end" in sql
+    assert "0.05" not in sql
+
+
 def test_filed_period_blocks_a_new_invoice() -> None:
     sql = (Path(__file__).resolve().parents[1] / "db" / "migrations" / "008_filed_period.sql").read_text(
         encoding="utf-8"

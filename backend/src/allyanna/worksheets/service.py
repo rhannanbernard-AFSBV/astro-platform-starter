@@ -114,6 +114,7 @@ class TotWorksheetService:
         period_end: date,
         tax_year: int,
         country_code: str,
+        due_on: date | None = None,
     ) -> TotReturn:
         """Store the worksheet sums and the table rate for this period."""
         worksheet = await self.build(
@@ -123,7 +124,9 @@ class TotWorksheetService:
             tax_year=tax_year,
             country_code=country_code,
         )
-        filed = await self._returns.insert(conn, worksheet)
+        if due_on is not None and due_on < worksheet.period_end:
+            raise InvalidWorksheet("The due date is before the period end")
+        filed = await self._returns.insert(conn, worksheet, due_on=due_on)
         await self._tenancy.write_audit(
             conn,
             action="tax.tot.file",
@@ -132,6 +135,7 @@ class TotWorksheetService:
                 "schedule_id": str(filed.schedule_id),
                 "period_start": filed.period_start.isoformat(),
                 "period_end": filed.period_end.isoformat(),
+                "due_on": None if filed.due_on is None else filed.due_on.isoformat(),
                 "invoice_count": filed.invoice_count,
                 "subtotal": format(filed.subtotal, "f"),
                 "rate": format(filed.rate, "f"),
@@ -192,7 +196,7 @@ class TotWorksheetService:
             balance_due=balance_due,
         )
 
-    async def list_balances(self, conn: Connection) -> TotBalanceList:
+    async def list_balances(self, conn: Connection, *, as_of: date) -> TotBalanceList:
         """Tax due, amount paid, and remaining for every filing on the active profile."""
         tenant, _active = await self._tenancy.require_active_tenant(conn)
         filed = await self._payments.list_filed_tax(conn)
@@ -205,6 +209,7 @@ class TotWorksheetService:
             amount_paid = require_money(row.amount_paid)
             if amount_paid > tax_due:
                 raise InvalidPayment("Payments exceed the filed turnover tax")
+            balance_due = money(tax_due - amount_paid)
             rows.append(
                 TotReturnBalance(
                     return_id=row.return_id,
@@ -214,16 +219,20 @@ class TotWorksheetService:
                     period_start=row.period_start,
                     period_end=row.period_end,
                     currency_code=row.currency_code,
+                    due_on=row.due_on,
                     tax_due=tax_due,
                     amount_paid=amount_paid,
-                    balance_due=money(tax_due - amount_paid),
+                    balance_due=balance_due,
+                    past_due=row.due_on is not None and row.due_on < as_of and balance_due > Decimal("0"),
                 )
             )
         return TotBalanceList(
             tenant_id=tenant.id,
+            as_of=as_of,
             tax_due=sum_money([row.tax_due for row in rows]),
             amount_paid=sum_money([row.amount_paid for row in rows]),
             balance_due=sum_money([row.balance_due for row in rows]),
+            past_due_balance=sum_money([row.balance_due for row in rows if row.past_due]),
             returns=tuple(rows),
         )
 

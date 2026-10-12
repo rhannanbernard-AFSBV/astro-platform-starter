@@ -49,6 +49,7 @@ class TotReturn:
     subtotal: Decimal
     tot_amount: Decimal
     grand_total: Decimal
+    due_on: date | None
     filed_at: datetime
 
 
@@ -89,6 +90,7 @@ class TotFiledTax:
     period_start: date
     period_end: date
     currency_code: str
+    due_on: date | None
     tax_due: Decimal
     amount_paid: Decimal
 
@@ -102,15 +104,19 @@ class TotReturnBalance:
     period_start: date
     period_end: date
     currency_code: str
+    due_on: date | None
     tax_due: Decimal
     amount_paid: Decimal
     balance_due: Decimal
+    past_due: bool
 
 
 @dataclass(frozen=True)
 class TotBalanceList:
     tenant_id: UUID
+    as_of: date
     tax_due: Decimal
     amount_paid: Decimal
     balance_due: Decimal
+    past_due_balance: Decimal
     returns: tuple[TotReturnBalance, ...]

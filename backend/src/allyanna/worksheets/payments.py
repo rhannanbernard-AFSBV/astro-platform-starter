@@ -96,6 +96,7 @@ class TotPaymentRepository:
               returns.period_start,
               returns.period_end,
               returns.currency_code,
+              returns.due_on,
               returns.tot_amount,
               COALESCE(SUM(payments.amount), 0::numeric) AS amount_paid
             FROM allyanna.tot_returns AS returns
@@ -119,6 +120,7 @@ def _filed_tax_from_row(row: Any) -> TotFiledTax:
         period_start=row["period_start"],
         period_end=row["period_end"],
         currency_code=row["currency_code"],
+        due_on=row["due_on"],
         tax_due=as_decimal(row["tot_amount"]),
         amount_paid=as_decimal(row["amount_paid"]),
     )
