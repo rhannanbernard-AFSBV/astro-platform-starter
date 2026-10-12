@@ -47,6 +47,15 @@ def test_health_and_money_schema_without_a_database(monkeypatch: pytest.MonkeyPa
     assert return_props["subtotal"]["type"] == "string"
     assert return_props["tot_amount"]["type"] == "string"
     assert return_props["rate"]["type"] == "string"
+    payment_props = schema["components"]["schemas"]["TotPaymentResponse"]["properties"]
+    assert payment_props["amount"]["type"] == "string"
+    assert payment_props["tax_due"]["type"] == "string"
+    assert payment_props["amount_paid"]["type"] == "string"
+    assert payment_props["balance_due"]["type"] == "string"
+    list_props = schema["components"]["schemas"]["TotPaymentListResponse"]["properties"]
+    assert list_props["tax_due"]["type"] == "string"
+    assert list_props["amount_paid"]["type"] == "string"
+    assert list_props["balance_due"]["type"] == "string"
 
 
 def test_json_float_money_is_rejected() -> None:

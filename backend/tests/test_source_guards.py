@@ -42,6 +42,7 @@ def test_calculation_modules_do_not_embed_statutory_rates() -> None:
         SRC / "allyanna" / "worksheets" / "service.py",
         SRC / "allyanna" / "worksheets" / "repository.py",
         SRC / "allyanna" / "worksheets" / "returns.py",
+        SRC / "allyanna" / "worksheets" / "payments.py",
         SRC / "allyanna" / "api.py",
     ]
     for path in watched:
@@ -104,6 +105,19 @@ def test_tot_return_table_forces_row_level_security() -> None:
     assert "ALTER TABLE allyanna.tot_returns FORCE ROW LEVEL SECURITY;" in sql
     assert "GRANT UPDATE ON allyanna.tot_returns" not in sql
     assert "0.05" not in sql
+
+
+def test_tot_payment_table_forces_row_level_security() -> None:
+    sql = (Path(__file__).resolve().parents[1] / "db" / "migrations" / "007_tot_return_payments.sql").read_text(
+        encoding="utf-8"
+    )
+    assert "tenant_id uuid NOT NULL" in sql
+    assert "ALTER TABLE allyanna.tot_return_payments ENABLE ROW LEVEL SECURITY;" in sql
+    assert "ALTER TABLE allyanna.tot_return_payments FORCE ROW LEVEL SECURITY;" in sql
+    assert "GRANT UPDATE ON allyanna.tot_return_payments" not in sql
+    assert "0.05" not in sql
+    text = (SRC / "allyanna" / "worksheets" / "payments.py").read_text(encoding="utf-8")
+    assert "tenant_id = current_setting('allyanna.tenant_id', true)::uuid" in text
 
 
 def test_posted_intake_stays_on_the_invoice_tenant() -> None:

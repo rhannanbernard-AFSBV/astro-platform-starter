@@ -100,6 +100,16 @@ class TotReturnAlreadyFiled(AllyannaError):
     status_code = 409
 
 
+class InvalidPayment(AllyannaError):
+    code = "invalid_payment"
+    status_code = 422
+
+
+class TotPaymentNotFound(AllyannaError):
+    code = "tot_payment_not_found"
+    status_code = 404
+
+
 class ServiceUnavailable(AllyannaError):
     code = "service_unavailable"
     status_code = 503

@@ -34,6 +34,10 @@ from allyanna.schemas import (
     TotRequest,
     TotResponse,
     TotWorksheetInvoiceResponse,
+    TotPaymentItem,
+    TotPaymentListResponse,
+    TotPaymentRequest,
+    TotPaymentResponse,
     TotReturnListResponse,
     TotReturnResponse,
     TotWorksheetRequest,
@@ -48,7 +52,7 @@ from allyanna.tax.models import SzvComponent, TaxBundle, WageTaxBracket
 from allyanna.tax.service import TaxService
 from allyanna.tenancy.models import ContextSnapshot, Membership, Tenant, User
 from allyanna.tenancy.service import TenancyService
-from allyanna.worksheets.models import TotReturn, TotWorksheet
+from allyanna.worksheets.models import TotPayment, TotPaymentList, TotPaymentView, TotReturn, TotWorksheet
 from allyanna.worksheets.service import TotWorksheetService
 
 router = APIRouter()
@@ -212,6 +216,46 @@ async def get_turnover_tax_return(
 ) -> TotReturnResponse:
     filed = await auth.worksheets.get_return(auth.conn, return_id)
     return _return_response(filed)
+
+
+@router.post(
+    "/tax/tot/returns/{return_id}/payments",
+    response_model=TotPaymentResponse,
+    status_code=201,
+)
+async def record_turnover_tax_payment(
+    return_id: UUID,
+    body: TotPaymentRequest,
+    auth: AuthContext = Depends(get_auth),
+) -> TotPaymentResponse:
+    recorded = await auth.worksheets.record_payment(
+        auth.conn,
+        return_id=return_id,
+        amount=body.amount,
+        paid_on=body.paid_on,
+    )
+    return _payment_response(recorded)
+
+
+@router.get(
+    "/tax/tot/returns/{return_id}/payments",
+    response_model=TotPaymentListResponse,
+)
+async def list_turnover_tax_payments(
+    return_id: UUID,
+    auth: AuthContext = Depends(get_auth),
+) -> TotPaymentListResponse:
+    listing = await auth.worksheets.list_payments(auth.conn, return_id)
+    return _payment_list_response(listing)
+
+
+@router.get("/tax/tot/payments/{payment_id}", response_model=TotPaymentResponse)
+async def get_turnover_tax_payment(
+    payment_id: UUID,
+    auth: AuthContext = Depends(get_auth),
+) -> TotPaymentResponse:
+    recorded = await auth.worksheets.get_payment(auth.conn, payment_id)
+    return _payment_response(recorded)
 
 
 @router.post("/tax/wage", response_model=WageTaxResponse)
@@ -456,6 +500,43 @@ def _worksheet_response(worksheet: TotWorksheet) -> TotWorksheetResponse:
             )
             for row in worksheet.invoices
         ],
+    )
+
+
+def _payment_item(payment: TotPayment) -> TotPaymentItem:
+    return TotPaymentItem(
+        id=payment.id,
+        tenant_id=payment.tenant_id,
+        tot_return_id=payment.tot_return_id,
+        amount=payment.amount,
+        paid_on=payment.paid_on,
+        recorded_at=payment.recorded_at,
+    )
+
+
+def _payment_response(view: TotPaymentView) -> TotPaymentResponse:
+    item = _payment_item(view.payment)
+    return TotPaymentResponse(
+        id=item.id,
+        tenant_id=item.tenant_id,
+        tot_return_id=item.tot_return_id,
+        amount=item.amount,
+        paid_on=item.paid_on,
+        recorded_at=item.recorded_at,
+        tax_due=view.tax_due,
+        amount_paid=view.amount_paid,
+        balance_due=view.balance_due,
+    )
+
+
+def _payment_list_response(listing: TotPaymentList) -> TotPaymentListResponse:
+    return TotPaymentListResponse(
+        tenant_id=listing.tenant_id,
+        tot_return_id=listing.tot_return_id,
+        tax_due=listing.tax_due,
+        amount_paid=listing.amount_paid,
+        balance_due=listing.balance_due,
+        payments=[_payment_item(payment) for payment in listing.payments],
     )
 
 

@@ -50,3 +50,31 @@ class TotReturn:
     tot_amount: Decimal
     grand_total: Decimal
     filed_at: datetime
+
+
+@dataclass(frozen=True)
+class TotPayment:
+    id: UUID
+    tenant_id: UUID
+    tot_return_id: UUID
+    amount: Decimal
+    paid_on: date
+    recorded_at: datetime
+
+
+@dataclass(frozen=True)
+class TotPaymentView:
+    payment: TotPayment
+    tax_due: Decimal
+    amount_paid: Decimal
+    balance_due: Decimal
+
+
+@dataclass(frozen=True)
+class TotPaymentList:
+    tenant_id: UUID
+    tot_return_id: UUID
+    tax_due: Decimal
+    amount_paid: Decimal
+    balance_due: Decimal
+    payments: tuple[TotPayment, ...]

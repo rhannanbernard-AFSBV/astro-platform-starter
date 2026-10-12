@@ -1,14 +1,16 @@
 """Sum posted invoices for a period and read the turnover-tax rate from the table."""
 
 from datetime import date
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from allyanna.errors import InvalidWorksheet, TotReturnNotFound
-from allyanna.money import money
+from allyanna.errors import InvalidPayment, InvalidWorksheet, TotPaymentNotFound, TotReturnNotFound
+from allyanna.money import money, require_money
 from allyanna.tax.service import TaxService
 from allyanna.tenancy.service import TenancyService
-from allyanna.worksheets.models import TotReturn, TotWorksheet
+from allyanna.worksheets.models import TotPayment, TotPaymentList, TotPaymentView, TotReturn, TotWorksheet
+from allyanna.worksheets.payments import TotPaymentRepository
 from allyanna.worksheets.repository import WorksheetRepository
 from allyanna.worksheets.returns import TotReturnRepository
 from allyanna.worksheets.sum import sum_money
@@ -23,11 +25,13 @@ class TotWorksheetService:
         tax: TaxService,
         tenancy: TenancyService,
         returns: TotReturnRepository,
+        payments: TotPaymentRepository,
     ) -> None:
         self._repository = repository
         self._tax = tax
         self._tenancy = tenancy
         self._returns = returns
+        self._payments = payments
 
     async def build(
         self,
@@ -139,3 +143,84 @@ class TotWorksheetService:
         if found is None:
             raise TotReturnNotFound("Turnover-tax return was not found for the active business")
         return found
+
+    async def record_payment(
+        self,
+        conn: Connection,
+        *,
+        return_id: UUID,
+        amount: Decimal,
+        paid_on: date,
+    ) -> TotPaymentView:
+        """Apply a payment to the filed turnover tax. The amount is not a rate."""
+        filed = await self.get_return(conn, return_id)
+        payment_amount = require_money(amount)
+        if payment_amount == 0:
+            raise InvalidPayment("A payment must be greater than zero")
+        _tax_due, _paid, remaining, _existing = await self._statement(conn, filed)
+        if payment_amount > remaining:
+            raise InvalidPayment("The payment exceeds the unpaid turnover tax")
+        recorded = await self._payments.insert(
+            conn,
+            return_id=filed.id,
+            amount=payment_amount,
+            paid_on=paid_on,
+        )
+        tax_due, amount_paid, balance_due, _payments = await self._statement(conn, filed)
+        await self._tenancy.write_audit(
+            conn,
+            action="tax.tot.pay",
+            detail={
+                "return_id": str(filed.id),
+                "payment_id": str(recorded.id),
+                "amount": format(recorded.amount, "f"),
+                "balance": format(balance_due, "f"),
+            },
+        )
+        return TotPaymentView(
+            payment=recorded,
+            tax_due=tax_due,
+            amount_paid=amount_paid,
+            balance_due=balance_due,
+        )
+
+    async def list_payments(self, conn: Connection, return_id: UUID) -> TotPaymentList:
+        filed = await self.get_return(conn, return_id)
+        tax_due, amount_paid, balance_due, payments = await self._statement(conn, filed)
+        return TotPaymentList(
+            tenant_id=filed.tenant_id,
+            tot_return_id=filed.id,
+            tax_due=tax_due,
+            amount_paid=amount_paid,
+            balance_due=balance_due,
+            payments=payments,
+        )
+
+    async def get_payment(self, conn: Connection, payment_id: UUID) -> TotPaymentView:
+        await self._tenancy.require_active_tenant(conn)
+        found = await self._payments.get_payment(conn, payment_id)
+        if found is None:
+            raise TotPaymentNotFound("Turnover-tax payment was not found for the active business")
+        filed = await self._returns.get_return(conn, found.tot_return_id)
+        if filed is None:
+            raise TotReturnNotFound("Turnover-tax return was not found for the active business")
+        tax_due, amount_paid, balance_due, _payments = await self._statement(conn, filed)
+        return TotPaymentView(
+            payment=found,
+            tax_due=tax_due,
+            amount_paid=amount_paid,
+            balance_due=balance_due,
+        )
+
+    async def _statement(
+        self,
+        conn: Connection,
+        filed: TotReturn,
+    ) -> tuple[Decimal, Decimal, Decimal, tuple[TotPayment, ...]]:
+        payments = await self._payments.list_for_return(conn, filed.id)
+        tax_due = require_money(filed.tot_amount)
+        amount_paid = sum_money([row.amount for row in payments])
+        if amount_paid > tax_due:
+            raise InvalidPayment("Payments exceed the filed turnover tax")
+        balance_due = money(tax_due - amount_paid)
+        return tax_due, amount_paid, balance_due, payments
