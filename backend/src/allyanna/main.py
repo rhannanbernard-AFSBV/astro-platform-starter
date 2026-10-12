@@ -48,7 +48,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         tenancy=tenancy_service,
         extractor_provider=lambda: app.state.document_extractor,
     )
-    app.state.invoice_service = InvoiceService(InvoiceRepository(), tax_service, tenancy_service)
+    app.state.invoice_service = InvoiceService(
+        InvoiceRepository(),
+        tax_service,
+        tenancy_service,
+        documents=app.state.document_intake_service,
+    )
     yield
     pool = app.state.pool
     if pool is not None:

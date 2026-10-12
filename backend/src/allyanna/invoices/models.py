@@ -48,4 +48,5 @@ class Invoice:
     tot_rate: Decimal
     tot_amount: Decimal
     grand_total: Decimal
+    document_intake_id: UUID | None
     lines: tuple[InvoiceLine, ...]

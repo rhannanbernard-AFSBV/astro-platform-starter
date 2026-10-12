@@ -80,6 +80,11 @@ class DuplicateInvoiceNumber(AllyannaError):
     status_code = 409
 
 
+class IntakeAlreadyPosted(AllyannaError):
+    code = "intake_already_posted"
+    status_code = 409
+
+
 class ServiceUnavailable(AllyannaError):
     code = "service_unavailable"
     status_code = 503

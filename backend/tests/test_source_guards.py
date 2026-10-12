@@ -84,3 +84,14 @@ def test_invoice_tables_force_row_level_security() -> None:
         assert f"ALTER TABLE allyanna.{table} ENABLE ROW LEVEL SECURITY;" in sql
         assert f"ALTER TABLE allyanna.{table} FORCE ROW LEVEL SECURITY;" in sql
     assert "0.05" not in sql
+
+
+def test_posted_intake_stays_on_the_invoice_tenant() -> None:
+    sql = (Path(__file__).resolve().parents[1] / "db" / "migrations" / "005_post_intake.sql").read_text(
+        encoding="utf-8"
+    )
+    assert "document_intake_id" in sql
+    assert "tenant_id = NEW.tenant_id" in sql
+    assert "status = 'completed'" in sql
+    assert "invoices_document_intake_idx" in sql
+    assert "0.05" not in sql

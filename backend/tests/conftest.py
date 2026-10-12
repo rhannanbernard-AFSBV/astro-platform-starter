@@ -63,6 +63,7 @@ def database_url() -> str:
         "db/seeds/001_sxm_2026.sql",
         "db/migrations/002_invoices.sql",
         "db/migrations/004_document_intakes.sql",
+        "db/migrations/005_post_intake.sql",
     ):
         _run(
             [
@@ -103,12 +104,19 @@ def admin_sql() -> object:
     return _admin_sql
 
 
+class _GuardExtractor:
+    async def extract(self, *, content: bytes, content_type: str, filename: str) -> object:
+        raise AssertionError("tests must not call OpenAI")
+
+
 @pytest.fixture
 def client(database_url: str, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setenv("DATABASE_URL", database_url)
     monkeypatch.setenv("TAX_CACHE_TTL_SECONDS", "0")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     from allyanna.main import create_app
 
     app = create_app()
     with TestClient(app) as test_client:
+        test_client.app.state.document_extractor = _GuardExtractor()
         yield test_client

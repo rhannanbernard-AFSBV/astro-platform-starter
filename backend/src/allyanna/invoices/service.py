@@ -8,11 +8,12 @@ from datetime import date
 from typing import Any
 from uuid import UUID
 
-from allyanna.errors import InvalidInvoice, InvoiceNotFound
+from allyanna.errors import IntakeAlreadyPosted, InvalidDocument, InvalidInvoice, InvoiceNotFound
 from allyanna.invoices.models import Invoice, InvoiceLineInput
 from allyanna.invoices.repository import InvoiceRepository
 from allyanna.invoices.totals import price_lines
 from allyanna.money import money
+from allyanna.ocr.service import DocumentIntakeService
 from allyanna.tax.service import TaxService
 from allyanna.tenancy.service import TenancyService
 
@@ -25,10 +26,12 @@ class InvoiceService:
         repository: InvoiceRepository,
         tax: TaxService,
         tenancy: TenancyService,
+        documents: DocumentIntakeService,
     ) -> None:
         self._repository = repository
         self._tax = tax
         self._tenancy = tenancy
+        self._documents = documents
 
     async def create_invoice(
         self,
@@ -78,6 +81,91 @@ class InvoiceService:
             action="invoice.record",
             detail={
                 "invoice_id": str(invoice.id),
+                "tax_schedule_id": str(bundle.schedule.id),
+                "subtotal": format(invoice.subtotal, "f"),
+                "tot_rate": format(invoice.tot_rate, "f"),
+                "tot_amount": format(invoice.tot_amount, "f"),
+                "grand_total": format(invoice.grand_total, "f"),
+            },
+        )
+        return invoice
+
+    async def post_intake(self, conn: Connection, document_id: UUID) -> Invoice:
+        """Post the intake's recomputed vendor, date, subtotal, tax, and total.
+
+        Line amounts are priced again with Decimal. Turnover tax is the tax
+        service result for that subtotal. Printed model amounts are not read.
+        """
+        document = await self._documents.get_document(conn, document_id)
+        if document.status != "completed":
+            raise InvalidDocument("Only a completed intake can be posted")
+        vendor = document.vendor_name
+        invoice_date = document.invoice_date
+        reviewed_subtotal = document.subtotal
+        reviewed_tot = document.tot_amount
+        reviewed_grand = document.grand_total
+        country_code = document.country_code
+        if (
+            vendor is None
+            or invoice_date is None
+            or reviewed_subtotal is None
+            or reviewed_tot is None
+            or reviewed_grand is None
+            or country_code is None
+            or not document.lines
+        ):
+            raise InvalidDocument("The completed intake is missing recomputed amounts")
+        if document.tax_year is not None and document.tax_year != invoice_date.year:
+            raise InvalidDocument("The intake tax year does not match the invoice date")
+        priced, subtotal = price_lines(
+            [
+                InvoiceLineInput(
+                    description=line.description,
+                    quantity=line.quantity,
+                    unit_price=line.unit_price,
+                )
+                for line in document.lines
+            ]
+        )
+        if subtotal != reviewed_subtotal:
+            raise InvalidDocument("The recomputed subtotal does not match the priced lines")
+        for stored, priced_line in zip(document.lines, priced, strict=True):
+            if priced_line.line_total != stored.line_total:
+                raise InvalidDocument("A recomputed line total does not match the priced line")
+        _tenant, bundle, tot = await self._tax.calculate_tot(
+            conn,
+            country_code=country_code,
+            tax_year=invoice_date.year,
+            gross_taxable_revenue=subtotal,
+        )
+        grand_total = money(subtotal + tot.tot_amount)
+        if tot.tot_amount != reviewed_tot or grand_total != reviewed_grand:
+            raise InvalidDocument("The recomputed turnover tax does not match the tax table")
+        if await self._repository.find_posted_intake(conn, document.id) is not None:
+            raise IntakeAlreadyPosted("This intake is already posted to the ledger")
+        invoice = await self._repository.insert_invoice(
+            conn,
+            vendor_name=vendor,
+            invoice_number=None,
+            invoice_date=invoice_date,
+            due_date=None,
+            currency_code=bundle.schedule.currency_code,
+            tax_year=invoice_date.year,
+            country_code=country_code,
+            tax_schedule_id=bundle.schedule.id,
+            subtotal=subtotal,
+            tot_rate=tot.rate,
+            tot_amount=tot.tot_amount,
+            grand_total=grand_total,
+            lines=priced,
+            document_intake_id=document.id,
+        )
+        await self._tenancy.write_audit(
+            conn,
+            action="invoice.post_intake",
+            detail={
+                "invoice_id": str(invoice.id),
+                "document_id": str(document.id),
                 "tax_schedule_id": str(bundle.schedule.id),
                 "subtotal": format(invoice.subtotal, "f"),
                 "tot_rate": format(invoice.tot_rate, "f"),

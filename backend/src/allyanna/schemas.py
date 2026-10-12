@@ -313,6 +313,7 @@ class InvoiceResponse(BaseModel):
     tot_rate: Rate
     tot_amount: Money
     grand_total: Money
+    document_intake_id: UUID | None = None
     lines: list[InvoiceLineResponse]
 
 

@@ -58,6 +58,8 @@ The 2026 seed cites the statutory turnover-tax rate, AB 2026 no. 11, and the SZV
 
 `POST /api/v1/invoices` records a vendor invoice on the active business profile. Send the vendor, dates, and lines (`description`, `quantity`, `unit_price`) as decimal strings. The service prices the lines, then calls the TOT calculation for `tax_year` and `country_code`. `GET /api/v1/invoices` and `GET /api/v1/invoices/{invoice_id}` return only that profile's documents.
 
+`POST /api/v1/documents/{document_id}/invoice` posts a completed intake into that ledger. The vendor, invoice date, subtotal, turnover tax, and grand total are the recomputed intake amounts. Python prices the stored lines again and reads turnover tax from the tax table. The printed model amounts are not used. One intake can be posted once.
+
 ## Document intake
 
 Receipt and invoice capture is queued, then finished off the request. The upload is stored for the active business profile. Row-level security stays on `document_intakes` and `document_intake_lines`.

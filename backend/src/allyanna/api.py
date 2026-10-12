@@ -257,6 +257,15 @@ async def get_document(
     return _document_response(stored)
 
 
+@router.post("/documents/{document_id}/invoice", response_model=InvoiceResponse, status_code=201)
+async def post_document_invoice(
+    document_id: UUID,
+    auth: AuthContext = Depends(get_auth),
+) -> InvoiceResponse:
+    invoice = await auth.invoices.post_intake(auth.conn, document_id)
+    return _invoice_response(invoice)
+
+
 @router.post("/invoices", response_model=InvoiceResponse, status_code=201)
 async def create_invoice(
     body: InvoiceCreateRequest,
@@ -347,6 +356,7 @@ def _invoice_response(invoice: Invoice) -> InvoiceResponse:
         tot_rate=invoice.tot_rate,
         tot_amount=invoice.tot_amount,
         grand_total=invoice.grand_total,
+        document_intake_id=invoice.document_intake_id,
         lines=[
             InvoiceLineResponse(
                 id=line.id,

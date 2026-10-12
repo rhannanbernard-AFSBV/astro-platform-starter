@@ -7,11 +7,17 @@ from uuid import UUID
 
 import asyncpg
 
-from allyanna.errors import DuplicateInvoiceNumber
+from allyanna.errors import DuplicateInvoiceNumber, IntakeAlreadyPosted
 from allyanna.invoices.models import Invoice, InvoiceLine, PricedLine
 from allyanna.money import as_decimal
 
 Connection = Any
+
+_INVOICE_COLUMNS = """
+    id, tenant_id, vendor_name, invoice_number, invoice_date, due_date,
+    currency_code, tax_year, country_code, tax_schedule_id,
+    subtotal, tot_rate, tot_amount, grand_total, document_intake_id
+"""
 
 
 class InvoiceRepository:
@@ -32,22 +38,21 @@ class InvoiceRepository:
         tot_amount: Decimal,
         grand_total: Decimal,
         lines: tuple[PricedLine, ...],
+        document_intake_id: UUID | None = None,
     ) -> Invoice:
         try:
             header = await conn.fetchrow(
-                """
+                f"""
                 INSERT INTO allyanna.invoices (
                   tenant_id, vendor_name, invoice_number, invoice_date, due_date,
                   currency_code, tax_year, country_code, tax_schedule_id,
-                  subtotal, tot_rate, tot_amount, grand_total
+                  subtotal, tot_rate, tot_amount, grand_total, document_intake_id
                 )
                 VALUES (
                   current_setting('allyanna.tenant_id', true)::uuid,
-                  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+                  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
                 )
-                RETURNING id, tenant_id, vendor_name, invoice_number, invoice_date, due_date,
-                          currency_code, tax_year, country_code, tax_schedule_id,
-                          subtotal, tot_rate, tot_amount, grand_total
+                RETURNING {_INVOICE_COLUMNS}
                 """,
                 vendor_name,
                 invoice_number,
@@ -61,8 +66,11 @@ class InvoiceRepository:
                 tot_rate,
                 tot_amount,
                 grand_total,
+                document_intake_id,
             )
         except asyncpg.UniqueViolationError as exc:
+            if exc.constraint_name == "invoices_document_intake_idx":
+                raise IntakeAlreadyPosted("This intake is already posted to the ledger") from exc
             raise DuplicateInvoiceNumber(
                 "An invoice with this number already exists for the business"
             ) from exc
@@ -91,10 +99,8 @@ class InvoiceRepository:
 
     async def list_invoices(self, conn: Connection) -> tuple[Invoice, ...]:
         headers = await conn.fetch(
-            """
-            SELECT id, tenant_id, vendor_name, invoice_number, invoice_date, due_date,
-                   currency_code, tax_year, country_code, tax_schedule_id,
-                   subtotal, tot_rate, tot_amount, grand_total
+            f"""
+            SELECT {_INVOICE_COLUMNS}
             FROM allyanna.invoices
             WHERE tenant_id = current_setting('allyanna.tenant_id', true)::uuid
             ORDER BY invoice_date DESC, created_at DESC
@@ -104,10 +110,8 @@ class InvoiceRepository:
 
     async def get_invoice(self, conn: Connection, invoice_id: UUID) -> Invoice | None:
         header = await conn.fetchrow(
-            """
-            SELECT id, tenant_id, vendor_name, invoice_number, invoice_date, due_date,
-                   currency_code, tax_year, country_code, tax_schedule_id,
-                   subtotal, tot_rate, tot_amount, grand_total
+            f"""
+            SELECT {_INVOICE_COLUMNS}
             FROM allyanna.invoices
             WHERE id = $1
               AND tenant_id = current_setting('allyanna.tenant_id', true)::uuid
@@ -118,6 +122,17 @@ class InvoiceRepository:
             return None
         invoices = await self._with_lines(conn, [header])
         return invoices[0]
+
+    async def find_posted_intake(self, conn: Connection, document_id: UUID) -> UUID | None:
+        return await conn.fetchval(
+            """
+            SELECT id
+            FROM allyanna.invoices
+            WHERE document_intake_id = $1
+              AND tenant_id = current_setting('allyanna.tenant_id', true)::uuid
+            """,
+            document_id,
+        )
 
     async def _with_lines(self, conn: Connection, headers: list[Any]) -> tuple[Invoice, ...]:
         if not headers:
@@ -169,5 +184,6 @@ def _invoice_from_row(row: Any, lines: tuple[InvoiceLine, ...]) -> Invoice:
         tot_rate=as_decimal(row["tot_rate"]),
         tot_amount=as_decimal(row["tot_amount"]),
         grand_total=as_decimal(row["grand_total"]),
+        document_intake_id=row["document_intake_id"],
         lines=lines,
     )
