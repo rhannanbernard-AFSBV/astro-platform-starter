@@ -43,6 +43,20 @@ class SzvComponent:
     employer_rate_min: Decimal | None
     employer_rate_max: Decimal | None
     rate_is_variable: bool
+    reduces_wage_tax_base: bool = False
+
+
+@dataclass(frozen=True)
+class WageTaxLookupRow:
+    wage_amount: Decimal
+    tax_amount: Decimal
+
+
+@dataclass(frozen=True)
+class WageTaxWithholdingRules:
+    withholding_free_maximum: Decimal
+    excess_rate: Decimal
+    monthly_acquisition_cost: Decimal
 
 
 @dataclass(frozen=True)
@@ -51,6 +65,8 @@ class TaxBundle:
     tot_rate: Decimal | None
     brackets: tuple[WageTaxBracket, ...]
     components: tuple[SzvComponent, ...]
+    withholding_rules: WageTaxWithholdingRules | None = None
+    lookup_rows: tuple[WageTaxLookupRow, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -65,6 +81,17 @@ class WageTaxResult:
     taxable_wage: Decimal
     tax_amount: Decimal
     bracket: WageTaxBracket | None
+
+
+@dataclass(frozen=True)
+class MonthlyWageTaxResult:
+    wage_tax_base: Decimal
+    tax_amount: Decimal
+    method: str
+    table_wage_amount: Decimal | None
+    table_tax_amount: Decimal | None
+    excess_wage: Decimal
+    excess_rate: Decimal
 
 
 @dataclass(frozen=True)

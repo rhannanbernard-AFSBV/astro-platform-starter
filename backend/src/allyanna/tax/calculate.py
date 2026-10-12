@@ -10,12 +10,14 @@ from decimal import Decimal
 from allyanna.errors import InvalidOvRate, InvalidTaxTable
 from allyanna.money import money, require_money, require_rate
 from allyanna.tax.models import (
+    MonthlyWageTaxResult,
     SzvComponent,
     SzvGroupTotal,
     SzvLine,
     SzvResult,
     TotResult,
     WageTaxBracket,
+    WageTaxLookupRow,
     WageTaxResult,
 )
 
@@ -221,4 +223,87 @@ def calculate_szv(
         groups=groups,
         employee_total=money(sum((line.employee_amount for line in lines), Decimal("0"))),
         employer_total=money(sum((line.employer_amount for line in lines), Decimal("0"))),
+    )
+
+
+def _validate_lookup_rows(
+    rows: tuple[WageTaxLookupRow, ...] | list[WageTaxLookupRow],
+) -> tuple[WageTaxLookupRow, ...]:
+    ordered = tuple(rows)
+    if not ordered:
+        raise InvalidTaxTable("monthly wage-tax table has no rows")
+    previous: Decimal | None = None
+    for row in ordered:
+        wage_amount = require_money(row.wage_amount)
+        require_money(row.tax_amount)
+        if previous is not None and wage_amount <= previous:
+            raise InvalidTaxTable("monthly wage-tax rows must increase by wage")
+        previous = wage_amount
+    return ordered
+
+
+def calculate_monthly_wage_tax(
+    wage_tax_base: Decimal,
+    rows: tuple[WageTaxLookupRow, ...] | list[WageTaxLookupRow],
+    *,
+    withholding_free_maximum: Decimal,
+    excess_rate: Decimal,
+) -> MonthlyWageTaxResult:
+    """Withhold from the monthly lookup table.
+
+    At or below the free maximum, the tax is zero. Otherwise use the greatest
+    stored wage class that does not exceed the base. Above the last class, add
+    the stored excess rate applied to the amount over that class.
+    """
+    base = require_money(wage_tax_base)
+    free_maximum = require_money(withholding_free_maximum)
+    applied_rate = require_rate(excess_rate)
+    ordered = _validate_lookup_rows(rows)
+    if base <= free_maximum:
+        return MonthlyWageTaxResult(
+            wage_tax_base=base,
+            tax_amount=Decimal("0.00"),
+            method="free_threshold",
+            table_wage_amount=None,
+            table_tax_amount=None,
+            excess_wage=Decimal("0.00"),
+            excess_rate=applied_rate,
+        )
+    selected: WageTaxLookupRow | None = None
+    for row in ordered:
+        if row.wage_amount <= base:
+            selected = row
+        else:
+            break
+    if selected is None:
+        return MonthlyWageTaxResult(
+            wage_tax_base=base,
+            tax_amount=Decimal("0.00"),
+            method="below_table",
+            table_wage_amount=None,
+            table_tax_amount=None,
+            excess_wage=Decimal("0.00"),
+            excess_rate=applied_rate,
+        )
+    last = ordered[-1]
+    if base <= last.wage_amount:
+        return MonthlyWageTaxResult(
+            wage_tax_base=base,
+            tax_amount=selected.tax_amount,
+            method="table",
+            table_wage_amount=selected.wage_amount,
+            table_tax_amount=selected.tax_amount,
+            excess_wage=Decimal("0.00"),
+            excess_rate=applied_rate,
+        )
+    excess = money(base - last.wage_amount)
+    extra = money(excess * applied_rate)
+    return MonthlyWageTaxResult(
+        wage_tax_base=base,
+        tax_amount=money(last.tax_amount + extra),
+        method="table_plus_excess",
+        table_wage_amount=last.wage_amount,
+        table_tax_amount=last.tax_amount,
+        excess_wage=excess,
+        excess_rate=applied_rate,
     )

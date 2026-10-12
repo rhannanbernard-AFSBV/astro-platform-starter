@@ -139,6 +139,7 @@ class SzvComponentTableResponse(BaseModel):
     employer_rate_min: Rate | None
     employer_rate_max: Rate | None
     rate_is_variable: bool
+    reduces_wage_tax_base: bool
 
 
 class SzvComponentResponse(BaseModel):
@@ -175,6 +176,42 @@ class SzvResponse(BaseModel):
     source_note: str
 
 
+class WageTaxLookupSummary(BaseModel):
+    withholding_free_maximum: Money
+    excess_rate: Rate
+    monthly_acquisition_cost: Money
+    row_count: int
+    first_wage_amount: Money
+    last_wage_amount: Money
+    last_tax_amount: Money
+
+
+class MonthlyWageTaxRequest(TaxQuery):
+    wage_tax_base: Decimal
+
+    @field_validator("wage_tax_base", mode="before")
+    @classmethod
+    def money_is_decimal(cls, value: object) -> object:
+        return _reject_json_float(value)
+
+
+class MonthlyWageTaxResponse(BaseModel):
+    tenant_id: UUID
+    tax_year: int
+    country_code: str
+    currency_code: str
+    amount_period: str
+    schedule_id: UUID
+    wage_tax_base: Money
+    tax_amount: Money
+    method: str
+    table_wage_amount: Money | None
+    table_tax_amount: Money | None
+    excess_wage: Money
+    excess_rate: Rate
+    source_note: str
+
+
 class TaxScheduleResponse(BaseModel):
     id: UUID
     country_code: str
@@ -191,6 +228,97 @@ class TaxScheduleResponse(BaseModel):
     tot_rate: Rate | None
     brackets: list[WageTaxBracketResponse]
     components: list[SzvComponentTableResponse]
+    withholding: WageTaxLookupSummary | None = None
+
+
+class PayrollLineRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    employee_name: str = Field(min_length=1, max_length=200)
+    employee_code: str | None = Field(default=None, max_length=40)
+    gross_wage: Decimal
+
+    @field_validator("employee_name", "employee_code", mode="before")
+    @classmethod
+    def strip_text(cls, value: object) -> object:
+        if isinstance(value, str):
+            stripped = value.strip()
+            return None if stripped == "" else stripped
+        return value
+
+    @field_validator("gross_wage", mode="before")
+    @classmethod
+    def money_is_decimal(cls, value: object) -> object:
+        return _reject_json_float(value)
+
+
+class PayrollRunCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    period_year: int = Field(ge=2000, le=2100)
+    period_month: int = Field(ge=1, le=12)
+    ov_employer_rate: Decimal | None = None
+    lines: list[PayrollLineRequest] = Field(min_length=1, max_length=100)
+
+    @field_validator("ov_employer_rate", mode="before")
+    @classmethod
+    def money_is_decimal(cls, value: object) -> object:
+        return _reject_json_float(value)
+
+
+class PayrollSzvLineResponse(BaseModel):
+    component_code: str
+    group_code: str
+    capped_wage: Money
+    employee_rate: Rate
+    employer_rate: Rate
+    employee_amount: Money
+    employer_amount: Money
+
+
+class PayrollLineResponse(BaseModel):
+    id: UUID
+    line_number: int
+    employee_name: str
+    employee_code: str | None
+    gross_wage: Money
+    acquisition_cost: Money
+    aov_aww_employee_deduction: Money
+    wage_tax_base: Money
+    wage_tax_withheld: Money
+    withholding_method: str
+    table_wage_amount: Money | None
+    table_tax_amount: Money | None
+    excess_wage: Money
+    excess_rate: Rate
+    employee_szv_total: Money
+    employer_szv_total: Money
+    net_wage: Money
+    szv_lines: list[PayrollSzvLineResponse]
+
+
+class PayrollRunResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    period_year: int
+    period_month: int
+    country_code: str
+    currency_code: str
+    wage_tax_schedule_id: UUID
+    szv_schedule_id: UUID
+    employee_count: int
+    gross_wages: Money
+    employee_szv_total: Money
+    employer_szv_total: Money
+    wage_tax_total: Money
+    net_wages: Money
+    created_at: datetime
+    lines: list[PayrollLineResponse]
+
+
+class PayrollRunListResponse(BaseModel):
+    tenant_id: UUID
+    runs: list[PayrollRunResponse]
 
 
 class TaxSchedulesResponse(BaseModel):
