@@ -168,6 +168,33 @@ class TotAnnualSummaryList:
 
 
 @dataclass(frozen=True)
+class TotAnnualSummaryVersion:
+    summary_id: UUID
+    amends_summary_id: UUID | None
+    superseded: bool
+    filing_count: int
+    tax_due: Decimal
+    amount_paid: Decimal
+    balance_due: Decimal
+    tax_change: Decimal
+    amount_paid_change: Decimal
+    balance_change: Decimal
+    filed_at: datetime
+
+
+@dataclass(frozen=True)
+class TotAnnualSummaryStatement:
+    tenant_id: UUID
+    country_code: str
+    tax_year: int
+    currency_code: str
+    tax_due: Decimal
+    amount_paid: Decimal
+    balance_due: Decimal
+    versions: tuple[TotAnnualSummaryVersion, ...]
+
+
+@dataclass(frozen=True)
 class TotYearStatement:
     tenant_id: UUID
     tax_year: int

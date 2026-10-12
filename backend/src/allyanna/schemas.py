@@ -529,6 +529,31 @@ class TotAnnualSummaryListResponse(BaseModel):
     summaries: list[TotAnnualSummaryResponse]
 
 
+class TotAnnualSummaryVersionResponse(BaseModel):
+    summary_id: UUID
+    amends_summary_id: UUID | None
+    superseded: bool
+    filing_count: int
+    tax_due: Money
+    amount_paid: Money
+    balance_due: Money
+    tax_change: Money
+    amount_paid_change: Money
+    balance_change: Money
+    filed_at: datetime
+
+
+class TotAnnualSummaryStatementResponse(BaseModel):
+    tenant_id: UUID
+    country_code: str
+    tax_year: int
+    currency_code: str
+    tax_due: Money
+    amount_paid: Money
+    balance_due: Money
+    versions: list[TotAnnualSummaryVersionResponse]
+
+
 class TotYearStatementResponse(BaseModel):
     tenant_id: UUID
     tax_year: int

@@ -99,6 +99,20 @@ def test_health_and_money_schema_without_a_database(monkeypatch: pytest.MonkeyPa
     amends_options = summary_props["amends_summary_id"]["anyOf"]
     assert any(option.get("type") == "string" and option.get("format") == "uuid" for option in amends_options)
     assert any(option.get("type") == "null" for option in amends_options)
+    chain_props = schema["components"]["schemas"]["TotAnnualSummaryStatementResponse"]["properties"]
+    assert chain_props["tax_due"]["type"] == "string"
+    assert chain_props["amount_paid"]["type"] == "string"
+    assert chain_props["balance_due"]["type"] == "string"
+    version_props = schema["components"]["schemas"]["TotAnnualSummaryVersionResponse"]["properties"]
+    assert version_props["tax_due"]["type"] == "string"
+    assert version_props["amount_paid"]["type"] == "string"
+    assert version_props["balance_due"]["type"] == "string"
+    assert version_props["tax_change"]["type"] == "string"
+    assert version_props["amount_paid_change"]["type"] == "string"
+    assert version_props["balance_change"]["type"] == "string"
+    version_amends = version_props["amends_summary_id"]["anyOf"]
+    assert any(option.get("type") == "string" and option.get("format") == "uuid" for option in version_amends)
+    assert any(option.get("type") == "null" for option in version_amends)
 
 
 def test_json_float_money_is_rejected() -> None:

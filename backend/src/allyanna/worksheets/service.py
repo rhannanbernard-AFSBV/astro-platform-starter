@@ -21,6 +21,8 @@ from allyanna.tenancy.service import TenancyService
 from allyanna.worksheets.models import (
     TotAnnualSummary,
     TotAnnualSummaryList,
+    TotAnnualSummaryStatement,
+    TotAnnualSummaryVersion,
     TotBalanceList,
     TotFiledTax,
     TotPayment,
@@ -593,6 +595,64 @@ class TotWorksheetService:
             raise TotAnnualSummaryNotFound("Annual summary was not found for the active business")
         return found
 
+    async def get_annual_summary_statement(
+        self,
+        conn: Connection,
+        summary_id: UUID,
+    ) -> TotAnnualSummaryStatement:
+        """List each stored version and the change from the one before it.
+
+        The earlier rows stay as they were filed. The changes are differences
+        of those stored amounts.
+        """
+        tenant, _active = await self._tenancy.require_active_tenant(conn)
+        summaries = await self._summaries.list_summaries(conn)
+        ordered = _summary_chain(summaries, summary_id)
+        previous_tax = Decimal("0")
+        previous_paid = Decimal("0")
+        previous_balance = Decimal("0")
+        versions: list[TotAnnualSummaryVersion] = []
+        for item in ordered:
+            tax_due = require_money(item.tax_due)
+            amount_paid = require_money(item.amount_paid)
+            balance_due = require_money(item.balance_due)
+            if balance_due != money(tax_due - amount_paid):
+                raise InvalidPayment("The annual summary balance does not match the stored tax")
+            tax_change = money(tax_due - previous_tax)
+            amount_paid_change = money(amount_paid - previous_paid)
+            balance_change = money(balance_due - previous_balance)
+            if balance_change != money(tax_change - amount_paid_change):
+                raise InvalidPayment("The summary change does not match the stored tax")
+            versions.append(
+                TotAnnualSummaryVersion(
+                    summary_id=item.id,
+                    amends_summary_id=item.amends_summary_id,
+                    superseded=item.superseded,
+                    filing_count=item.filing_count,
+                    tax_due=tax_due,
+                    amount_paid=amount_paid,
+                    balance_due=balance_due,
+                    tax_change=tax_change,
+                    amount_paid_change=amount_paid_change,
+                    balance_change=balance_change,
+                    filed_at=item.filed_at,
+                )
+            )
+            previous_tax = tax_due
+            previous_paid = amount_paid
+            previous_balance = balance_due
+        latest = versions[-1]
+        return TotAnnualSummaryStatement(
+            tenant_id=tenant.id,
+            country_code=ordered[-1].country_code,
+            tax_year=ordered[-1].tax_year,
+            currency_code=ordered[-1].currency_code,
+            tax_due=latest.tax_due,
+            amount_paid=latest.amount_paid,
+            balance_due=latest.balance_due,
+            versions=tuple(versions),
+        )
+
     async def get_refund(self, conn: Connection, refund_id: UUID) -> TotRefundView:
         await self._tenancy.require_active_tenant(conn)
         found = await self._refunds.get_refund(conn, refund_id)
@@ -739,3 +799,53 @@ def _paid_along_chain(latest: TotFiledTax, by_id: dict[UUID, TotFiledTax]) -> De
     if refunded > paid:
         raise InvalidPayment("Refunds exceed the amount paid")
     return money(paid - refunded)
+
+
+def _same_summary_year(left: TotAnnualSummary, right: TotAnnualSummary) -> None:
+    if (
+        left.tax_year != right.tax_year
+        or left.country_code != right.country_code
+        or left.currency_code != right.currency_code
+    ):
+        raise InvalidWorksheet("The annual summary chain does not stay in one tax year")
+
+
+def _summary_chain(
+    summaries: tuple[TotAnnualSummary, ...],
+    summary_id: UUID,
+) -> tuple[TotAnnualSummary, ...]:
+    """Original first, then each amendment. Every row stays in the list."""
+    by_id = {item.id: item for item in summaries}
+    if summary_id not in by_id:
+        raise TotAnnualSummaryNotFound("Annual summary was not found for the active business")
+    current = by_id[summary_id]
+    seen: set[UUID] = set()
+    while True:
+        if current.id in seen:
+            raise InvalidWorksheet("The annual summary chain repeats a summary")
+        seen.add(current.id)
+        if current.amends_summary_id is None:
+            break
+        prior = by_id.get(current.amends_summary_id)
+        if prior is None:
+            raise TotAnnualSummaryNotFound("Annual summary was not found for the active business")
+        _same_summary_year(prior, current)
+        current = prior
+    children: dict[UUID, TotAnnualSummary] = {}
+    for item in summaries:
+        if item.amends_summary_id is None:
+            continue
+        if item.amends_summary_id in children:
+            raise InvalidWorksheet("An annual summary has more than one amendment")
+        children[item.amends_summary_id] = item
+    ordered = [current]
+    followed = {current.id}
+    while current.id in children:
+        nxt = children[current.id]
+        if nxt.id in followed:
+            raise InvalidWorksheet("The annual summary chain repeats a summary")
+        _same_summary_year(nxt, ordered[0])
+        followed.add(nxt.id)
+        ordered.append(nxt)
+        current = nxt
+    return tuple(ordered)

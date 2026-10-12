@@ -49,6 +49,8 @@ from allyanna.schemas import (
     TotAnnualSummaryListResponse,
     TotAnnualSummaryRequest,
     TotAnnualSummaryResponse,
+    TotAnnualSummaryStatementResponse,
+    TotAnnualSummaryVersionResponse,
     TotStatementLineResponse,
     TotStatementResponse,
     TotYearFilingResponse,
@@ -72,6 +74,8 @@ from allyanna.tenancy.service import TenancyService
 from allyanna.worksheets.models import (
     TotAnnualSummary,
     TotAnnualSummaryList,
+    TotAnnualSummaryStatement,
+    TotAnnualSummaryVersion,
     TotBalanceList,
     TotPayment,
     TotPaymentList,
@@ -411,6 +415,18 @@ async def amend_turnover_tax_annual_summary(
     _ = body
     recorded = await auth.worksheets.amend_annual_summary(auth.conn, summary_id)
     return _annual_summary_response(recorded)
+
+
+@router.get(
+    "/tax/tot/summaries/{summary_id}/statement",
+    response_model=TotAnnualSummaryStatementResponse,
+)
+async def get_turnover_tax_annual_summary_statement(
+    summary_id: UUID,
+    auth: AuthContext = Depends(get_auth),
+) -> TotAnnualSummaryStatementResponse:
+    statement = await auth.worksheets.get_annual_summary_statement(auth.conn, summary_id)
+    return _annual_summary_statement_response(statement)
 
 
 @router.get("/tax/tot/summaries/{summary_id}", response_model=TotAnnualSummaryResponse)
@@ -802,6 +818,37 @@ def _annual_summary_response(summary: TotAnnualSummary) -> TotAnnualSummaryRespo
         amends_summary_id=summary.amends_summary_id,
         superseded=summary.superseded,
         filed_at=summary.filed_at,
+    )
+
+
+def _annual_summary_version(version: TotAnnualSummaryVersion) -> TotAnnualSummaryVersionResponse:
+    return TotAnnualSummaryVersionResponse(
+        summary_id=version.summary_id,
+        amends_summary_id=version.amends_summary_id,
+        superseded=version.superseded,
+        filing_count=version.filing_count,
+        tax_due=version.tax_due,
+        amount_paid=version.amount_paid,
+        balance_due=version.balance_due,
+        tax_change=version.tax_change,
+        amount_paid_change=version.amount_paid_change,
+        balance_change=version.balance_change,
+        filed_at=version.filed_at,
+    )
+
+
+def _annual_summary_statement_response(
+    statement: TotAnnualSummaryStatement,
+) -> TotAnnualSummaryStatementResponse:
+    return TotAnnualSummaryStatementResponse(
+        tenant_id=statement.tenant_id,
+        country_code=statement.country_code,
+        tax_year=statement.tax_year,
+        currency_code=statement.currency_code,
+        tax_due=statement.tax_due,
+        amount_paid=statement.amount_paid,
+        balance_due=statement.balance_due,
+        versions=[_annual_summary_version(version) for version in statement.versions],
     )
 
 

@@ -107,6 +107,18 @@ def test_tot_return_table_forces_row_level_security() -> None:
     assert "0.05" not in sql
 
 
+def test_annual_summary_statement_changes_are_decimal() -> None:
+    text = (SRC / "allyanna" / "worksheets" / "service.py").read_text(encoding="utf-8")
+    assert "def get_annual_summary_statement(" in text
+    assert "money(tax_due - previous_tax)" in text
+    assert "money(amount_paid - previous_paid)" in text
+    assert "money(balance_due - previous_balance)" in text
+    assert "money(tax_change - amount_paid_change)" in text
+    assert "0.05" not in text
+    summaries = (SRC / "allyanna" / "worksheets" / "summaries.py").read_text(encoding="utf-8")
+    assert "tenant_id = current_setting('allyanna.tenant_id', true)::uuid" in summaries
+
+
 def test_annual_summary_amendment_keeps_the_earlier_row() -> None:
     sql = (
         Path(__file__).resolve().parents[1] / "db" / "migrations" / "014_tot_annual_summary_amendments.sql"
