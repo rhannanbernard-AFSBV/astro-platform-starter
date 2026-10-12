@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
@@ -17,6 +18,10 @@ from allyanna.schemas import (
     SzvGroupResponse,
     SzvRequest,
     SzvResponse,
+    InvoiceCreateRequest,
+    InvoiceLineResponse,
+    InvoiceListResponse,
+    InvoiceResponse,
     SwitchContextRequest,
     TaxScheduleResponse,
     TaxSchedulesResponse,
@@ -27,6 +32,8 @@ from allyanna.schemas import (
     WageTaxRequest,
     WageTaxResponse,
 )
+from allyanna.invoices.models import Invoice, InvoiceLineInput
+from allyanna.invoices.service import InvoiceService
 from allyanna.tax.models import SzvComponent, TaxBundle, WageTaxBracket
 from allyanna.tax.service import TaxService
 from allyanna.tenancy.models import ContextSnapshot, Membership, Tenant, User
@@ -41,6 +48,7 @@ class AuthContext:
     user: User
     tenancy: TenancyService
     tax: TaxService
+    invoices: InvoiceService
 
 
 async def allyanna_error_handler(_request: Request, exc: AllyannaError) -> JSONResponse:
@@ -74,6 +82,7 @@ async def get_auth(
         user=user,
         tenancy=tenancy,
         tax=request.app.state.tax_service,
+        invoices=request.app.state.invoice_service,
     )
 
 
@@ -204,6 +213,47 @@ async def calculate_szv(
     )
 
 
+@router.post("/invoices", response_model=InvoiceResponse, status_code=201)
+async def create_invoice(
+    body: InvoiceCreateRequest,
+    auth: AuthContext = Depends(get_auth),
+) -> InvoiceResponse:
+    invoice = await auth.invoices.create_invoice(
+        auth.conn,
+        vendor_name=body.vendor_name,
+        invoice_number=body.invoice_number,
+        invoice_date=body.invoice_date,
+        due_date=body.due_date,
+        tax_year=body.tax_year,
+        country_code=body.country_code,
+        lines=[
+            InvoiceLineInput(
+                description=line.description,
+                quantity=line.quantity,
+                unit_price=line.unit_price,
+            )
+            for line in body.lines
+        ],
+    )
+    return _invoice_response(invoice)
+
+
+@router.get("/invoices", response_model=InvoiceListResponse)
+async def list_invoices(auth: AuthContext = Depends(get_auth)) -> InvoiceListResponse:
+    invoices = await auth.invoices.list_invoices(auth.conn)
+    tenant_id = invoices[0].tenant_id if invoices else await _active_tenant_id(auth)
+    return InvoiceListResponse(
+        tenant_id=tenant_id,
+        invoices=[_invoice_response(invoice) for invoice in invoices],
+    )
+
+
+@router.get("/invoices/{invoice_id}", response_model=InvoiceResponse)
+async def get_invoice(invoice_id: UUID, auth: AuthContext = Depends(get_auth)) -> InvoiceResponse:
+    invoice = await auth.invoices.get_invoice(auth.conn, invoice_id)
+    return _invoice_response(invoice)
+
+
 def _context_response(user: User, snapshot: ContextSnapshot) -> ContextResponse:
     accounts = [_membership_response(item) for item in snapshot.memberships]
     tenants = [_tenant_response(item) for item in snapshot.tenants]
@@ -229,6 +279,41 @@ def _context_response(user: User, snapshot: ContextSnapshot) -> ContextResponse:
         active_tenant=active_tenant,
         available_tenants=tenants,
         switched_at=switched_at,
+    )
+
+
+async def _active_tenant_id(auth: AuthContext) -> UUID:
+    _tenant, _active = await auth.tenancy.require_active_tenant(auth.conn)
+    return _tenant.id
+
+
+def _invoice_response(invoice: Invoice) -> InvoiceResponse:
+    return InvoiceResponse(
+        id=invoice.id,
+        tenant_id=invoice.tenant_id,
+        vendor_name=invoice.vendor_name,
+        invoice_number=invoice.invoice_number,
+        invoice_date=invoice.invoice_date,
+        due_date=invoice.due_date,
+        currency_code=invoice.currency_code,
+        tax_year=invoice.tax_year,
+        country_code=invoice.country_code,
+        tax_schedule_id=invoice.tax_schedule_id,
+        subtotal=invoice.subtotal,
+        tot_rate=invoice.tot_rate,
+        tot_amount=invoice.tot_amount,
+        grand_total=invoice.grand_total,
+        lines=[
+            InvoiceLineResponse(
+                id=line.id,
+                line_number=line.line_number,
+                description=line.description,
+                quantity=line.quantity,
+                unit_price=line.unit_price,
+                line_total=line.line_total,
+            )
+            for line in invoice.lines
+        ],
     )
 
 

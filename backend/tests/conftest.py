@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 DATABASE_NAME = "allyanna_test"
@@ -60,6 +61,7 @@ def database_url() -> str:
         "db/000_role.sql",
         "db/migrations/001_foundation.sql",
         "db/seeds/001_sxm_2026.sql",
+        "db/migrations/002_invoices.sql",
     ):
         _run(
             [
@@ -98,3 +100,14 @@ def _admin_sql(statement: str) -> None:
 @pytest.fixture
 def admin_sql() -> object:
     return _admin_sql
+
+
+@pytest.fixture
+def client(database_url: str, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("TAX_CACHE_TTL_SECONDS", "0")
+    from allyanna.main import create_app
+
+    app = create_app()
+    with TestClient(app) as test_client:
+        yield test_client

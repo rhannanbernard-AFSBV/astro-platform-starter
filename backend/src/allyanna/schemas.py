@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from allyanna.money import Money, Rate
+from allyanna.money import Money, Quantity, Rate
 
 
 def _reject_json_float(value: object) -> object:
@@ -197,3 +197,84 @@ class TaxSchedulesResponse(BaseModel):
     country_code: str
     tax_year: int
     schedules: list[TaxScheduleResponse]
+
+
+class InvoiceLineRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    description: str = Field(min_length=1, max_length=400)
+    quantity: Decimal
+    unit_price: Decimal
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def strip_description(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+    @field_validator("quantity", "unit_price", mode="before")
+    @classmethod
+    def money_is_decimal(cls, value: object) -> object:
+        return _reject_json_float(value)
+
+
+class InvoiceCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    vendor_name: str = Field(min_length=1, max_length=200)
+    invoice_number: str | None = Field(default=None, max_length=40)
+    invoice_date: date
+    due_date: date | None = None
+    tax_year: int = Field(ge=2000, le=2100)
+    country_code: str = Field(default="SXM", pattern=r"^[A-Z]{3}$")
+    lines: list[InvoiceLineRequest] = Field(min_length=1, max_length=100)
+
+    @field_validator("vendor_name", mode="before")
+    @classmethod
+    def strip_vendor(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+    @field_validator("invoice_number", mode="before")
+    @classmethod
+    def blank_number(cls, value: object) -> object:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
+
+
+class InvoiceLineResponse(BaseModel):
+    id: UUID
+    line_number: int
+    description: str
+    quantity: Quantity
+    unit_price: Money
+    line_total: Money
+
+
+class InvoiceResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    vendor_name: str
+    invoice_number: str | None
+    invoice_date: date
+    due_date: date | None
+    currency_code: str
+    tax_year: int
+    country_code: str
+    tax_schedule_id: UUID
+    subtotal: Money
+    tot_rate: Rate
+    tot_amount: Money
+    grand_total: Money
+    lines: list[InvoiceLineResponse]
+
+
+class InvoiceListResponse(BaseModel):
+    tenant_id: UUID
+    invoices: list[InvoiceResponse]

@@ -9,8 +9,9 @@ Multi-tenant foundation for Sint Maarten tax calculations. The Astro app at the 
 - Turnover tax, annual wage-tax step brackets, and SZV ZV/OV plus AOV/AWW splits and monthly wage ceilings
 - Rates, brackets, and ceilings are rows for `country_code = SXM` and a `tax_year`. The Python functions only multiply and cap the decimals they are given
 - Async FastAPI routes with Pydantic responses. Money is a decimal string
+- Invoice headers and line items for the active business profile. Subtotal is the sum of the lines. Turnover tax is the existing TOT calculation against that subtotal
 
-Invoices, payroll runs, and OCR intake are not in this slice.
+Payroll runs and OCR intake are not in this service yet.
 
 ## Run locally
 
@@ -49,6 +50,10 @@ All three require an active business profile. Amounts are decimal strings, not J
 - `GET /api/v1/tax/schedules?tax_year=2026&country_code=SXM` — the rows the calculators will read
 
 The 2026 seed cites the statutory turnover-tax rate, AB 2026 no. 11, and the SZV AOV/AWW notice plus the published premium splits. The ZV/OV monthly ceiling is the Cg 10,000.00 maximum in force from 1 August 2022; SZV's public index did not show a later amendment. Confirm those rows before filing.
+
+## Invoices
+
+`POST /api/v1/invoices` records a vendor invoice on the active business profile. Send the vendor, dates, and lines (`description`, `quantity`, `unit_price`) as decimal strings. The service prices the lines, then calls the TOT calculation for `tax_year` and `country_code`. `GET /api/v1/invoices` and `GET /api/v1/invoices/{invoice_id}` return only that profile's documents.
 
 ## Tests
 

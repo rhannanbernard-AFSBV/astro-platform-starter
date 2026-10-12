@@ -10,6 +10,8 @@ from allyanna.api import allyanna_error_handler, router
 from allyanna.config import get_settings
 from allyanna.db import create_pool
 from allyanna.errors import AllyannaError
+from allyanna.invoices.repository import InvoiceRepository
+from allyanna.invoices.service import InvoiceService
 from allyanna.tax.cache import TaxTableCache
 from allyanna.tax.repository import TaxRepository
 from allyanna.tax.service import TaxService
@@ -24,11 +26,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     tenancy_service = TenancyService(TenancyRepository())
     app.state.pool = None
     app.state.tenancy_service = tenancy_service
-    app.state.tax_service = TaxService(
+    tax_service = TaxService(
         TaxTableCache(settings.tax_cache_ttl_seconds, tax_repository),
         tax_repository,
         tenancy_service,
     )
+    app.state.tax_service = tax_service
+    app.state.invoice_service = InvoiceService(InvoiceRepository(), tax_service, tenancy_service)
     if settings.database_url:
         app.state.pool = await create_pool(settings.database_url)
     yield
