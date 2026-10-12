@@ -39,6 +39,11 @@ def test_health_and_money_schema_without_a_database(monkeypatch: pytest.MonkeyPa
         schema = test_client.get("/openapi.json").json()
     assert schema["components"]["schemas"]["TotResponse"]["properties"]["tot_amount"]["type"] == "string"
     assert schema["components"]["schemas"]["TotResponse"]["properties"]["rate"]["type"] == "string"
+    document_props = schema["components"]["schemas"]["DocumentIntakeResponse"]["properties"]
+    for field_name in ("subtotal", "tot_amount", "grand_total"):
+        options = document_props[field_name]["anyOf"]
+        assert {"type": "string"} in [{k: v for k, v in option.items() if k == "type"} for option in options]
+        assert any(option.get("type") == "string" for option in options)
 
 
 def test_json_float_money_is_rejected() -> None:

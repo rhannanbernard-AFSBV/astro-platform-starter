@@ -32,6 +32,25 @@ class TenancyService:
         active = await self._repository.get_active_context(conn)
         return ContextSnapshot(memberships=memberships, tenants=tenants, active=active)
 
+    async def bind_tenant(self, conn: Connection, *, user_id: UUID, tenant_id: UUID) -> Tenant:
+        """Bind a known user and business for this transaction.
+
+        Used when work was accepted for a profile and must finish on that same
+        profile even if the user has since switched.
+        """
+        await self._repository.set_user(conn, user_id)
+        tenant = await self._repository.get_tenant(conn, tenant_id)
+        if tenant is None:
+            raise TenantAccessDenied("Business profile is not available to this account")
+        if tenant.status != "active":
+            raise TenantInactive("Business profile is inactive")
+        await self._repository.set_scope(
+            conn,
+            master_account_id=tenant.master_account_id,
+            tenant_id=tenant.id,
+        )
+        return tenant
+
     async def require_active_tenant(self, conn: Connection) -> tuple[Tenant, ActiveContext]:
         active = await self._repository.get_active_context(conn)
         if active is None:

@@ -60,6 +60,7 @@ def database_url() -> str:
         "db/000_role.sql",
         "db/migrations/001_foundation.sql",
         "db/seeds/001_sxm_2026.sql",
+        "db/migrations/004_document_intakes.sql",
     ):
         _run(
             [

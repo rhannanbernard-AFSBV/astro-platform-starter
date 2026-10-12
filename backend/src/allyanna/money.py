@@ -62,6 +62,13 @@ def rate_to_json(value: Decimal) -> str:
     return text or "0"
 
 
+def quantity_to_json(value: Decimal) -> str:
+    text = format(value, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text or "0"
+
+
 Money = Annotated[
     Decimal,
     PlainSerializer(money_to_json, return_type=str, when_used="json"),
@@ -72,4 +79,10 @@ Rate = Annotated[
     Decimal,
     PlainSerializer(rate_to_json, return_type=str, when_used="json"),
     WithJsonSchema({"type": "string", "examples": ["0.05"]}),
+]
+
+Quantity = Annotated[
+    Decimal,
+    PlainSerializer(quantity_to_json, return_type=str, when_used="json"),
+    WithJsonSchema({"type": "string", "examples": ["1.5"]}),
 ]

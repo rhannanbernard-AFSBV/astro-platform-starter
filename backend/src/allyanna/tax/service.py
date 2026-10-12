@@ -57,6 +57,28 @@ class TaxService:
         gross_taxable_revenue: Decimal,
     ) -> tuple[Any, TaxBundle, TotResult]:
         tenant, _active = await self._tenancy.require_active_tenant(conn)
+        bundle, result = await self.calculate_tot_for_bound_tenant(
+            conn,
+            country_code=country_code,
+            tax_year=tax_year,
+            gross_taxable_revenue=gross_taxable_revenue,
+        )
+        return tenant, bundle, result
+
+    async def calculate_tot_for_bound_tenant(
+        self,
+        conn: Connection,
+        *,
+        country_code: str,
+        tax_year: int,
+        gross_taxable_revenue: Decimal,
+    ) -> tuple[TaxBundle, TotResult]:
+        """Price turnover tax for a tenant the caller already bound.
+
+        Document intake uses this so a later profile switch cannot move the job
+        onto another business. The caller must set the user and tenant session
+        values first. The rate still comes from the tax table.
+        """
         bundle = await self._require_bundle(
             conn,
             country_code=country_code,
@@ -79,7 +101,7 @@ class TaxService:
                 "tot_amount": format(result.tot_amount, "f"),
             },
         )
-        return tenant, bundle, result
+        return bundle, result
 
     async def calculate_wage_tax(
         self,

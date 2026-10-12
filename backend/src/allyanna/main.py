@@ -10,6 +10,9 @@ from allyanna.api import allyanna_error_handler, router
 from allyanna.config import get_settings
 from allyanna.db import create_pool
 from allyanna.errors import AllyannaError
+from allyanna.ocr.extractor import OpenAIDocumentExtractor
+from allyanna.ocr.repository import DocumentRepository
+from allyanna.ocr.service import DocumentIntakeService
 from allyanna.tax.cache import TaxTableCache
 from allyanna.tax.repository import TaxRepository
 from allyanna.tax.service import TaxService
@@ -24,13 +27,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     tenancy_service = TenancyService(TenancyRepository())
     app.state.pool = None
     app.state.tenancy_service = tenancy_service
-    app.state.tax_service = TaxService(
+    if settings.database_url:
+        app.state.pool = await create_pool(settings.database_url)
+    tax_service = TaxService(
         TaxTableCache(settings.tax_cache_ttl_seconds, tax_repository),
         tax_repository,
         tenancy_service,
     )
-    if settings.database_url:
-        app.state.pool = await create_pool(settings.database_url)
+    app.state.tax_service = tax_service
+    app.state.document_extractor = OpenAIDocumentExtractor(
+        api_key=settings.openai_api_key,
+        model=settings.openai_model,
+    )
+    app.state.document_intake_service = DocumentIntakeService(
+        pool=app.state.pool,
+        repository=DocumentRepository(),
+        tax=tax_service,
+        tenancy=tenancy_service,
+        extractor_provider=lambda: app.state.document_extractor,
+    )
     yield
     pool = app.state.pool
     if pool is not None:

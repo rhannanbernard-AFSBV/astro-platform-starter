@@ -8,6 +8,8 @@ class Settings(BaseSettings):
 
     database_url: str | None = None
     tax_cache_ttl_seconds: int = 300
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-4o"
 
 
 def get_settings() -> Settings:

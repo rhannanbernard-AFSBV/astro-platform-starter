@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from allyanna.money import Money, Rate
+from allyanna.money import Money, Quantity, Rate
 
 
 def _reject_json_float(value: object) -> object:
@@ -197,3 +197,44 @@ class TaxSchedulesResponse(BaseModel):
     country_code: str
     tax_year: int
     schedules: list[TaxScheduleResponse]
+
+
+class DocumentLineResponse(BaseModel):
+    line_number: int
+    description: str
+    quantity: Quantity
+    unit_price: Money
+    extracted_line_total: Money | None
+    line_total: Money
+
+
+class DocumentIntakeResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    status: str
+    source_filename: str
+    content_type: str
+    vendor_name: str | None
+    invoice_date: date | None
+    currency_code: str | None
+    tax_year: int | None
+    country_code: str | None
+    tax_schedule_id: UUID | None
+    extracted_subtotal: Money | None
+    extracted_tot_amount: Money | None
+    extracted_grand_total: Money | None
+    subtotal: Money | None
+    tot_rate: Rate | None
+    tot_amount: Money | None
+    grand_total: Money | None
+    amounts_match: bool | None
+    discrepancies: list[str]
+    error_message: str | None
+    lines: list[DocumentLineResponse]
+    created_at: datetime
+    completed_at: datetime | None
+
+
+class DocumentIntakeListResponse(BaseModel):
+    tenant_id: UUID
+    documents: list[DocumentIntakeResponse]

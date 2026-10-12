@@ -10,8 +10,10 @@ requires-python = ">=3.12"
 dependencies = [
     "asyncpg>=0.30",
     "fastapi>=0.115",
+    "openai>=1.68",
     "pydantic>=2.10",
     "pydantic-settings>=2.6",
+    "python-multipart>=0.0.9",
     "uvicorn>=0.32",
 ]
 

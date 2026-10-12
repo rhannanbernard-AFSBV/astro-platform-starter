@@ -2,13 +2,19 @@
 
 from dataclasses import dataclass
 from typing import Any
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from allyanna.errors import AllyannaError, ServiceUnavailable, Unauthenticated
+from allyanna.ocr.models import DocumentIntake
+from allyanna.ocr.service import DocumentIntakeService
 from allyanna.schemas import (
     ContextResponse,
+    DocumentIntakeListResponse,
+    DocumentIntakeResponse,
+    DocumentLineResponse,
     ErrorResponse,
     HealthResponse,
     MasterAccountResponse,
@@ -41,6 +47,7 @@ class AuthContext:
     user: User
     tenancy: TenancyService
     tax: TaxService
+    documents: DocumentIntakeService
 
 
 async def allyanna_error_handler(_request: Request, exc: AllyannaError) -> JSONResponse:
@@ -74,6 +81,7 @@ async def get_auth(
         user=user,
         tenancy=tenancy,
         tax=request.app.state.tax_service,
+        documents=request.app.state.document_intake_service,
     )
 
 
@@ -204,6 +212,43 @@ async def calculate_szv(
     )
 
 
+@router.post("/documents", response_model=DocumentIntakeResponse, status_code=202)
+async def create_document(
+    background: BackgroundTasks,
+    file: UploadFile = File(...),
+    auth: AuthContext = Depends(get_auth),
+) -> DocumentIntakeResponse:
+    content = await file.read()
+    stored = await auth.documents.submit(
+        auth.conn,
+        user_id=auth.user.id,
+        filename=file.filename or "upload",
+        content_type=file.content_type or "",
+        content=content,
+    )
+    background.add_task(auth.documents.process, stored.id, auth.user.id, stored.tenant_id)
+    return _document_response(stored)
+
+
+@router.get("/documents", response_model=DocumentIntakeListResponse)
+async def list_documents(auth: AuthContext = Depends(get_auth)) -> DocumentIntakeListResponse:
+    documents = await auth.documents.list_documents(auth.conn)
+    tenant, _active = await auth.tenancy.require_active_tenant(auth.conn)
+    return DocumentIntakeListResponse(
+        tenant_id=tenant.id,
+        documents=[_document_response(item) for item in documents],
+    )
+
+
+@router.get("/documents/{document_id}", response_model=DocumentIntakeResponse)
+async def get_document(
+    document_id: UUID,
+    auth: AuthContext = Depends(get_auth),
+) -> DocumentIntakeResponse:
+    stored = await auth.documents.get_document(auth.conn, document_id)
+    return _document_response(stored)
+
+
 def _context_response(user: User, snapshot: ContextSnapshot) -> ContextResponse:
     accounts = [_membership_response(item) for item in snapshot.memberships]
     tenants = [_tenant_response(item) for item in snapshot.tenants]
@@ -312,4 +357,43 @@ def _stored_component_response(component: SzvComponent) -> SzvComponentTableResp
         employer_rate_min=component.employer_rate_min,
         employer_rate_max=component.employer_rate_max,
         rate_is_variable=component.rate_is_variable,
+    )
+
+
+def _document_response(document: DocumentIntake) -> DocumentIntakeResponse:
+    return DocumentIntakeResponse(
+        id=document.id,
+        tenant_id=document.tenant_id,
+        status=document.status,
+        source_filename=document.source_filename,
+        content_type=document.content_type,
+        vendor_name=document.vendor_name,
+        invoice_date=document.invoice_date,
+        currency_code=document.currency_code,
+        tax_year=document.tax_year,
+        country_code=document.country_code,
+        tax_schedule_id=document.tax_schedule_id,
+        extracted_subtotal=document.extracted_subtotal,
+        extracted_tot_amount=document.extracted_tot_amount,
+        extracted_grand_total=document.extracted_grand_total,
+        subtotal=document.subtotal,
+        tot_rate=document.tot_rate,
+        tot_amount=document.tot_amount,
+        grand_total=document.grand_total,
+        amounts_match=document.amounts_match,
+        discrepancies=list(document.discrepancies),
+        error_message=document.error_message,
+        lines=[
+            DocumentLineResponse(
+                line_number=line.line_number,
+                description=line.description,
+                quantity=line.quantity,
+                unit_price=line.unit_price,
+                extracted_line_total=line.extracted_line_total,
+                line_total=line.line_total,
+            )
+            for line in document.lines
+        ],
+        created_at=document.created_at,
+        completed_at=document.completed_at,
     )

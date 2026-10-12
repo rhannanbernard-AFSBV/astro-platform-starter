@@ -50,6 +50,21 @@ class InvalidOvRate(AllyannaError):
     status_code = 422
 
 
+class InvalidDocument(AllyannaError):
+    code = "invalid_document"
+    status_code = 422
+
+
+class DocumentNotFound(AllyannaError):
+    code = "document_not_found"
+    status_code = 404
+
+
+class ExtractionFailed(AllyannaError):
+    code = "extraction_failed"
+    status_code = 422
+
+
 class ServiceUnavailable(AllyannaError):
     code = "service_unavailable"
     status_code = 503

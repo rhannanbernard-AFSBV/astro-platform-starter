@@ -9,8 +9,9 @@ Multi-tenant foundation for Sint Maarten tax calculations. The Astro app at the 
 - Turnover tax, annual wage-tax step brackets, and SZV ZV/OV plus AOV/AWW splits and monthly wage ceilings
 - Rates, brackets, and ceilings are rows for `country_code = SXM` and a `tax_year`. The Python functions only multiply and cap the decimals they are given
 - Async FastAPI routes with Pydantic responses. Money is a decimal string
+- Asynchronous receipt and invoice intake. GPT-4o copies the printed fields. Python recomputes line totals and turnover tax from the tax tables
 
-Invoices, payroll runs, and OCR intake are not in this slice.
+Invoice documents and payroll runs are not in this slice.
 
 ## Run locally
 
@@ -23,6 +24,8 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ./scripts/apply_schema.sh allyanna
 export DATABASE_URL=postgresql://allyanna_app:allyanna_app_dev@127.0.0.1:5432/allyanna
+export OPENAI_API_KEY=sk-your-key
+export OPENAI_MODEL=gpt-4o
 uvicorn allyanna.main:app --reload
 ```
 
@@ -49,6 +52,17 @@ All three require an active business profile. Amounts are decimal strings, not J
 - `GET /api/v1/tax/schedules?tax_year=2026&country_code=SXM` — the rows the calculators will read
 
 The 2026 seed cites the statutory turnover-tax rate, AB 2026 no. 11, and the SZV AOV/AWW notice plus the published premium splits. The ZV/OV monthly ceiling is the Cg 10,000.00 maximum in force from 1 August 2022; SZV's public index did not show a later amendment. Confirm those rows before filing.
+
+## Document intake
+
+Receipt and invoice capture is queued, then finished off the request. The upload is stored for the active business profile. Row-level security stays on `document_intakes` and `document_intake_lines`.
+
+- `POST /api/v1/documents` — multipart field `file`. JPEG, PNG, WEBP, or PDF, up to 8 MB. Returns 202 with status `queued`
+- `GET /api/v1/documents` and `GET /api/v1/documents/{document_id}` — the intake, including recomputed amounts once processing finishes
+
+GPT-4o is asked to copy `vendor_name`, `invoice_date`, `subtotal`, `tot_amount`, `grand_total`, and the line items as decimal strings. The instructions tell it not to calculate tax, totals, percentages, or line amounts. `OPENAI_API_KEY` is read from the environment. `OPENAI_MODEL` defaults to `gpt-4o`.
+
+Python validates that payload, prices each line as quantity times unit price with `decimal.Decimal`, and sums those rounded line totals. Turnover tax is the existing tax service applied to that subtotal for the invoice year and the business country. The rate comes from the tax table. The stored subtotal, TOT amount, and grand total are those recomputed figures. Printed amounts are stored beside them and compared. A later profile switch does not move a job that was already accepted.
 
 ## Tests
 
