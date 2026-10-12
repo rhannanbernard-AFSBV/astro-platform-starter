@@ -122,6 +122,16 @@ def test_tot_payment_table_forces_row_level_security() -> None:
     assert "COALESCE(SUM(payments.amount), 0::numeric)" in text
 
 
+def test_return_amendment_keeps_the_earlier_filing() -> None:
+    sql = (Path(__file__).resolve().parents[1] / "db" / "migrations" / "010_tot_return_amendments.sql").read_text(
+        encoding="utf-8"
+    )
+    assert "amends_return_id uuid" in sql
+    assert "prior_tenant <> NEW.tenant_id" in sql
+    assert "GRANT UPDATE ON allyanna.tot_returns" not in sql
+    assert "0.05" not in sql
+
+
 def test_return_due_date_is_not_a_rate() -> None:
     sql = (Path(__file__).resolve().parents[1] / "db" / "migrations" / "009_return_due_date.sql").read_text(
         encoding="utf-8"

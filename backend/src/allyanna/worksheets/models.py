@@ -50,6 +50,8 @@ class TotReturn:
     tot_amount: Decimal
     grand_total: Decimal
     due_on: date | None
+    amends_return_id: UUID | None
+    superseded: bool
     filed_at: datetime
 
 
@@ -91,6 +93,7 @@ class TotFiledTax:
     period_end: date
     currency_code: str
     due_on: date | None
+    amends_return_id: UUID | None
     tax_due: Decimal
     amount_paid: Decimal
 

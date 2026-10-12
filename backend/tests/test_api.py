@@ -47,6 +47,7 @@ def test_health_and_money_schema_without_a_database(monkeypatch: pytest.MonkeyPa
     assert return_props["subtotal"]["type"] == "string"
     assert return_props["tot_amount"]["type"] == "string"
     assert return_props["rate"]["type"] == "string"
+    assert return_props["superseded"]["type"] == "boolean"
     payment_props = schema["components"]["schemas"]["TotPaymentResponse"]["properties"]
     assert payment_props["amount"]["type"] == "string"
     assert payment_props["tax_due"]["type"] == "string"

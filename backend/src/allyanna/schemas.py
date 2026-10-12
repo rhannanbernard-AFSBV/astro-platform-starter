@@ -335,6 +335,12 @@ class TotReturnFileRequest(TotWorksheetRequest):
     due_on: date | None = None
 
 
+class TotAmendmentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    due_on: date | None = None
+
+
 class TotWorksheetInvoiceResponse(BaseModel):
     id: UUID
     vendor_name: str
@@ -376,6 +382,8 @@ class TotReturnResponse(BaseModel):
     tot_amount: Money
     grand_total: Money
     due_on: date | None
+    amends_return_id: UUID | None
+    superseded: bool
     filed_at: datetime
 
 

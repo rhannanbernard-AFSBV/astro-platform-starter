@@ -5,12 +5,19 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from allyanna.errors import InvalidPayment, InvalidWorksheet, TotPaymentNotFound, TotReturnNotFound
+from allyanna.errors import (
+    InvalidPayment,
+    InvalidWorksheet,
+    TotPaymentNotFound,
+    TotReturnNotFound,
+    TotReturnSuperseded,
+)
 from allyanna.money import money, require_money
 from allyanna.tax.service import TaxService
 from allyanna.tenancy.service import TenancyService
 from allyanna.worksheets.models import (
     TotBalanceList,
+    TotFiledTax,
     TotPayment,
     TotPaymentList,
     TotPaymentView,
@@ -145,6 +152,50 @@ class TotWorksheetService:
         )
         return filed
 
+    async def amend_return(
+        self,
+        conn: Connection,
+        *,
+        return_id: UUID,
+        due_on: date | None = None,
+    ) -> TotReturn:
+        """File a correction for the same period. The earlier filing stays stored."""
+        current = await self.get_return(conn, return_id)
+        if current.superseded:
+            raise TotReturnSuperseded("This filing has been amended")
+        worksheet = await self.build(
+            conn,
+            period_start=current.period_start,
+            period_end=current.period_end,
+            tax_year=current.tax_year,
+            country_code=current.country_code,
+        )
+        chosen_due = current.due_on if due_on is None else due_on
+        if chosen_due is not None and chosen_due < worksheet.period_end:
+            raise InvalidWorksheet("The due date is before the period end")
+        _tax_due, amount_paid, _balance_due, _payments = await self._open_statement(conn, current)
+        corrected_tax = require_money(worksheet.tot_amount)
+        if amount_paid > corrected_tax:
+            raise InvalidPayment("The corrected tax is less than the amount already paid")
+        amended = await self._returns.insert(
+            conn,
+            worksheet,
+            due_on=chosen_due,
+            amends_return_id=current.id,
+        )
+        tax_due, amount_paid, balance_due, _payments = await self._open_statement(conn, amended)
+        await self._tenancy.write_audit(
+            conn,
+            action="tax.tot.amend",
+            detail={
+                "return_id": str(amended.id),
+                "amends_return_id": str(current.id),
+                "tot_amount": format(amended.tot_amount, "f"),
+                "balance": format(balance_due, "f"),
+            },
+        )
+        return amended
+
     async def list_returns(self, conn: Connection) -> tuple[UUID, tuple[TotReturn, ...]]:
         tenant, _active = await self._tenancy.require_active_tenant(conn)
         return tenant.id, await self._returns.list_returns(conn)
@@ -166,10 +217,12 @@ class TotWorksheetService:
     ) -> TotPaymentView:
         """Apply a payment to the filed turnover tax. The amount is not a rate."""
         filed = await self.get_return(conn, return_id)
+        if filed.superseded:
+            raise TotReturnSuperseded("This filing has been amended")
         payment_amount = require_money(amount)
         if payment_amount == 0:
             raise InvalidPayment("A payment must be greater than zero")
-        _tax_due, _paid, remaining, _existing = await self._statement(conn, filed)
+        _tax_due, _paid, remaining, _existing = await self._open_statement(conn, filed)
         if payment_amount > remaining:
             raise InvalidPayment("The payment exceeds the unpaid turnover tax")
         recorded = await self._payments.insert(
@@ -178,7 +231,7 @@ class TotWorksheetService:
             amount=payment_amount,
             paid_on=paid_on,
         )
-        tax_due, amount_paid, balance_due, _payments = await self._statement(conn, filed)
+        tax_due, amount_paid, balance_due, _payments = await self._open_statement(conn, filed)
         await self._tenancy.write_audit(
             conn,
             action="tax.tot.pay",
@@ -203,10 +256,14 @@ class TotWorksheetService:
         currencies = {row.currency_code for row in filed}
         if len(currencies) > 1:
             raise InvalidWorksheet("Filed returns use more than one currency")
+        by_id = {row.return_id: row for row in filed}
+        superseded_ids = {row.amends_return_id for row in filed if row.amends_return_id is not None}
         rows: list[TotReturnBalance] = []
         for row in filed:
+            if row.return_id in superseded_ids:
+                continue
             tax_due = require_money(row.tax_due)
-            amount_paid = require_money(row.amount_paid)
+            amount_paid = _paid_along_chain(row, by_id)
             if amount_paid > tax_due:
                 raise InvalidPayment("Payments exceed the filed turnover tax")
             balance_due = money(tax_due - amount_paid)
@@ -238,7 +295,10 @@ class TotWorksheetService:
 
     async def list_payments(self, conn: Connection, return_id: UUID) -> TotPaymentList:
         filed = await self.get_return(conn, return_id)
-        tax_due, amount_paid, balance_due, payments = await self._statement(conn, filed)
+        if filed.superseded:
+            tax_due, amount_paid, balance_due, payments = await self._statement(conn, filed)
+        else:
+            tax_due, amount_paid, balance_due, payments = await self._open_statement(conn, filed)
         return TotPaymentList(
             tenant_id=filed.tenant_id,
             tot_return_id=filed.id,
@@ -256,7 +316,8 @@ class TotWorksheetService:
         filed = await self._returns.get_return(conn, found.tot_return_id)
         if filed is None:
             raise TotReturnNotFound("Turnover-tax return was not found for the active business")
-        tax_due, amount_paid, balance_due, _payments = await self._statement(conn, filed)
+        latest = await self._latest(conn, filed)
+        tax_due, amount_paid, balance_due, _payments = await self._open_statement(conn, latest)
         return TotPaymentView(
             payment=found,
             tax_due=tax_due,
@@ -276,3 +337,51 @@ class TotWorksheetService:
             raise InvalidPayment("Payments exceed the filed turnover tax")
         balance_due = money(tax_due - amount_paid)
         return tax_due, amount_paid, balance_due, payments
+
+    async def _latest(self, conn: Connection, filed: TotReturn) -> TotReturn:
+        current = filed
+        seen = {filed.id}
+        while True:
+            successor = await self._returns.get_successor(conn, current.id)
+            if successor is None:
+                return current
+            if successor.id in seen:
+                raise TotReturnSuperseded("This filing has been amended")
+            seen.add(successor.id)
+            current = successor
+
+    async def _open_statement(
+        self,
+        conn: Connection,
+        filed: TotReturn,
+    ) -> tuple[Decimal, Decimal, Decimal, tuple[TotPayment, ...]]:
+        if filed.superseded:
+            raise TotReturnSuperseded("This filing has been amended")
+        payments: list[TotPayment] = []
+        current: TotReturn | None = filed
+        seen: set[UUID] = set()
+        while current is not None and current.id not in seen:
+            seen.add(current.id)
+            payments.extend(await self._payments.list_for_return(conn, current.id))
+            if current.amends_return_id is None:
+                break
+            current = await self._returns.get_return(conn, current.amends_return_id)
+        ordered = tuple(sorted(payments, key=lambda item: (item.paid_on, item.recorded_at, str(item.id))))
+        tax_due = require_money(filed.tot_amount)
+        amount_paid = sum_money([row.amount for row in ordered])
+        if amount_paid > tax_due:
+            raise InvalidPayment("Payments exceed the filed turnover tax")
+        balance_due = money(tax_due - amount_paid)
+        return tax_due, amount_paid, balance_due, ordered
+
+
+def _paid_along_chain(latest: TotFiledTax, by_id: dict[UUID, TotFiledTax]) -> Decimal:
+    total = Decimal("0")
+    seen: set[UUID] = set()
+    current: TotFiledTax | None = latest
+    while current is not None and current.return_id not in seen:
+        seen.add(current.return_id)
+        total = money(total + require_money(current.amount_paid))
+        parent_id = current.amends_return_id
+        current = None if parent_id is None else by_id.get(parent_id)
+    return money(total)

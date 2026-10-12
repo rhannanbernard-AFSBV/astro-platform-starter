@@ -35,6 +35,7 @@ from allyanna.schemas import (
     TotRequest,
     TotResponse,
     TotWorksheetInvoiceResponse,
+    TotAmendmentRequest,
     TotBalanceListResponse,
     TotPaymentItem,
     TotPaymentListResponse,
@@ -229,6 +230,24 @@ async def get_turnover_tax_return(
 ) -> TotReturnResponse:
     filed = await auth.worksheets.get_return(auth.conn, return_id)
     return _return_response(filed)
+
+
+@router.post(
+    "/tax/tot/returns/{return_id}/amendments",
+    response_model=TotReturnResponse,
+    status_code=201,
+)
+async def amend_turnover_tax_return(
+    return_id: UUID,
+    body: TotAmendmentRequest,
+    auth: AuthContext = Depends(get_auth),
+) -> TotReturnResponse:
+    amended = await auth.worksheets.amend_return(
+        auth.conn,
+        return_id=return_id,
+        due_on=body.due_on,
+    )
+    return _return_response(amended)
 
 
 @router.post(
@@ -610,6 +629,8 @@ def _return_response(filed: TotReturn) -> TotReturnResponse:
         tot_amount=filed.tot_amount,
         grand_total=filed.grand_total,
         due_on=filed.due_on,
+        amends_return_id=filed.amends_return_id,
+        superseded=filed.superseded,
         filed_at=filed.filed_at,
     )
 

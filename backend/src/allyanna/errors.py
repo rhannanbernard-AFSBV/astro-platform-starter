@@ -105,6 +105,11 @@ class TotReturnAlreadyFiled(AllyannaError):
     status_code = 409
 
 
+class TotReturnSuperseded(AllyannaError):
+    code = "tot_return_superseded"
+    status_code = 409
+
+
 class InvalidPayment(AllyannaError):
     code = "invalid_payment"
     status_code = 422
