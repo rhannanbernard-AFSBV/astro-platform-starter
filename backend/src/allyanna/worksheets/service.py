@@ -28,6 +28,8 @@ from allyanna.worksheets.models import (
     TotReturn,
     TotStatement,
     TotStatementLine,
+    TotYearFiling,
+    TotYearStatement,
     TotReturnBalance,
     TotWorksheet,
 )
@@ -416,6 +418,68 @@ class TotWorksheetService:
             lines=lines,
         )
 
+    async def get_year_statement(
+        self,
+        conn: Connection,
+        *,
+        tax_year: int,
+        country_code: str,
+    ) -> TotYearStatement:
+        """Latest filings for one tax year, with a balance that carries forward.
+
+        Superseded filings are omitted. Each latest filing keeps its payments
+        and refunds. The running balance starts at zero and continues across
+        the year.
+        """
+        tenant, _active = await self._tenancy.require_active_tenant(conn)
+        filed = await self._payments.list_filed_tax(conn)
+        superseded_ids = {row.amends_return_id for row in filed if row.amends_return_id is not None}
+        chosen = [
+            row
+            for row in filed
+            if row.tax_year == tax_year
+            and row.country_code == country_code
+            and row.return_id not in superseded_ids
+        ]
+        chosen.sort(key=lambda row: (row.period_start, row.period_end, str(row.return_id)))
+        currencies = {row.currency_code for row in chosen}
+        if len(currencies) > 1:
+            raise InvalidWorksheet("Filed returns use more than one currency")
+        opening = Decimal("0")
+        filings: list[TotYearFiling] = []
+        for row in chosen:
+            current = await self.get_return(conn, row.return_id)
+            tax_due, amount_paid, balance_due, payments, refunds = await self._open_statement(conn, current)
+            start = money(opening + tax_due)
+            lines = _running_lines(tax_due, payments, refunds, starting_balance=start)
+            closing = lines[-1].balance if lines else start
+            if closing != money(opening + balance_due):
+                raise InvalidPayment("The statement balance does not match the amount paid")
+            filings.append(
+                TotYearFiling(
+                    return_id=current.id,
+                    period_start=current.period_start,
+                    period_end=current.period_end,
+                    tax_due=tax_due,
+                    amount_paid=amount_paid,
+                    balance_due=balance_due,
+                    opening_balance=money(opening),
+                    closing_balance=closing,
+                    lines=lines,
+                )
+            )
+            opening = closing
+        return TotYearStatement(
+            tenant_id=tenant.id,
+            tax_year=tax_year,
+            country_code=country_code,
+            currency_code=None if not currencies else next(iter(currencies)),
+            tax_due=sum_money([item.tax_due for item in filings]),
+            amount_paid=sum_money([item.amount_paid for item in filings]),
+            balance_due=money(opening),
+            filings=tuple(filings),
+        )
+
     async def get_refund(self, conn: Connection, refund_id: UUID) -> TotRefundView:
         await self._tenancy.require_active_tenant(conn)
         found = await self._refunds.get_refund(conn, refund_id)
@@ -505,6 +569,7 @@ def _running_lines(
     tax_due: Decimal,
     payments: tuple[TotPayment, ...],
     refunds: tuple[TotRefund, ...],
+    starting_balance: Decimal | None = None,
 ) -> tuple[TotStatementLine, ...]:
     movements: list[tuple[date, datetime, str, UUID, UUID, Decimal]] = []
     for payment in payments:
@@ -523,7 +588,7 @@ def _running_lines(
             )
         )
     movements.sort(key=lambda item: (item[0], item[1], item[2], str(item[3])))
-    balance = require_money(tax_due)
+    balance = require_money(tax_due if starting_balance is None else starting_balance)
     lines: list[TotStatementLine] = []
     for entry_date, recorded_at, kind, movement_id, return_id, amount in movements:
         posted = require_money(amount)

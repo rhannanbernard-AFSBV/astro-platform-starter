@@ -112,6 +112,8 @@ def test_statement_balance_is_decimal_and_keeps_both_rows() -> None:
     assert "def _running_lines(" in text
     assert "money(balance - posted)" in text
     assert "money(balance + posted)" in text
+    assert "money(opening + tax_due)" in text
+    assert "row.return_id not in superseded_ids" in text
     assert "0.05" not in text
     payments = (SRC / "allyanna" / "worksheets" / "payments.py").read_text(encoding="utf-8")
     refunds = (SRC / "allyanna" / "worksheets" / "refunds.py").read_text(encoding="utf-8")

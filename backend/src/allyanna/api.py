@@ -47,6 +47,8 @@ from allyanna.schemas import (
     TotRefundResponse,
     TotStatementLineResponse,
     TotStatementResponse,
+    TotYearFilingResponse,
+    TotYearStatementResponse,
     TotReturnBalanceResponse,
     TotReturnFileRequest,
     TotReturnListResponse,
@@ -74,6 +76,8 @@ from allyanna.worksheets.models import (
     TotReturn,
     TotStatement,
     TotStatementLine,
+    TotYearFiling,
+    TotYearStatement,
     TotReturnBalance,
     TotWorksheet,
 )
@@ -351,6 +355,20 @@ async def get_turnover_tax_statement(
 ) -> TotStatementResponse:
     statement = await auth.worksheets.get_statement(auth.conn, return_id)
     return _statement_response(statement)
+
+
+@router.get("/tax/tot/statements", response_model=TotYearStatementResponse)
+async def get_turnover_tax_year_statement(
+    tax_year: int = Query(ge=2000, le=2100),
+    country_code: str = Query(default="SXM", pattern=r"^[A-Z]{3}$"),
+    auth: AuthContext = Depends(get_auth),
+) -> TotYearStatementResponse:
+    statement = await auth.worksheets.get_year_statement(
+        auth.conn,
+        tax_year=tax_year,
+        country_code=country_code,
+    )
+    return _year_statement_response(statement)
 
 
 @router.get("/tax/tot/balances", response_model=TotBalanceListResponse)
@@ -702,6 +720,33 @@ def _statement_line(line: TotStatementLine) -> TotStatementLineResponse:
         entry_date=line.entry_date,
         recorded_at=line.recorded_at,
         balance=line.balance,
+    )
+
+
+def _year_filing(filing: TotYearFiling) -> TotYearFilingResponse:
+    return TotYearFilingResponse(
+        return_id=filing.return_id,
+        period_start=filing.period_start,
+        period_end=filing.period_end,
+        tax_due=filing.tax_due,
+        amount_paid=filing.amount_paid,
+        balance_due=filing.balance_due,
+        opening_balance=filing.opening_balance,
+        closing_balance=filing.closing_balance,
+        lines=[_statement_line(line) for line in filing.lines],
+    )
+
+
+def _year_statement_response(statement: TotYearStatement) -> TotYearStatementResponse:
+    return TotYearStatementResponse(
+        tenant_id=statement.tenant_id,
+        tax_year=statement.tax_year,
+        country_code=statement.country_code,
+        currency_code=statement.currency_code,
+        tax_due=statement.tax_due,
+        amount_paid=statement.amount_paid,
+        balance_due=statement.balance_due,
+        filings=[_year_filing(filing) for filing in statement.filings],
     )
 
 

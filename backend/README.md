@@ -21,6 +21,7 @@ Multi-tenant foundation for Sint Maarten tax calculations. The Astro app at the 
 - One correcting invoice posted into an already filed period, so the next amendment can include it. An ordinary invoice in that period is still rejected
 - A refund against the latest filing that reduces the amount paid and leaves the original payment in place
 - A statement for the latest filing that lists each payment and refund in date order with a running balance
+- A year-to-date statement that lists each latest filing in a tax year, with that filing's payments and refunds and a running balance across the year
 
 Payroll runs are not in this service yet.
 
@@ -85,6 +86,8 @@ One correcting invoice may name the latest filing for that period with `corrects
 `POST /api/v1/tax/tot/returns/{return_id}/refunds` records a refund against the latest filing. Send `amount` and `refunded_on` as a decimal string and a date. The refund reduces the amount paid and raises the balance still due. The original payment stays, with the amount that was recorded. A refund cannot be larger than the amount paid, and a superseded filing cannot take one. `GET /api/v1/tax/tot/returns/{return_id}/refunds` lists the refunds. `GET /api/v1/tax/tot/refunds/{refund_id}` reads one refund. Row-level security on `tot_return_refunds` keeps another firm from reading them.
 
 `GET /api/v1/tax/tot/returns/{return_id}/statement` lists that latest filing's payments and refunds in date order. Each line keeps the stored amount and shows the balance still due after it. The running balance starts from the tax on the latest filing, subtracts a payment, and adds a refund, using `decimal.Decimal`. Lines on the same date stay in the order they were recorded. A superseded filing does not have its own statement. The payment and refund rows are not removed. The lines are read through the tenant-scoped payment and refund queries, and row-level security on those tables keeps another firm from reading the statement.
+
+`GET /api/v1/tax/tot/statements?tax_year=2026&country_code=SXM` lists every latest filing for that tax year on the active business profile, in period order. A superseded filing is left out. Each filing includes the payments and refunds stored for it, including a payment recorded on an earlier filing in the same chain. The running balance starts at zero, adds the filing's tax, then applies that filing's payments and refunds, and carries the result into the next filing. The header sums the tax, the amount paid, and the balance still due. A year with no filings returns zeros. Row-level security on the return, payment, and refund tables keeps another firm from reading it.
 
 `GET /api/v1/tax/tot/balances` lists every filed return for the active business profile. Each row carries the tax stored on that return, the payments recorded against it, the remaining balance, and the due date. A row is past due when a due date is stored, that date is before `as_of`, and a balance remains. The header sums the open balances that are past due. `as_of` defaults to the current date. A settled return stays on the list and is not past due. When a period has been amended, the list follows the latest filing. The query is limited to the active profile's `tenant_id`, and row-level security on the return and payment tables is the backstop. Another firm does not see these balances.
 

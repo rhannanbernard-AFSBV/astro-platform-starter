@@ -133,6 +133,31 @@ class TotStatement:
 
 
 @dataclass(frozen=True)
+class TotYearFiling:
+    return_id: UUID
+    period_start: date
+    period_end: date
+    tax_due: Decimal
+    amount_paid: Decimal
+    balance_due: Decimal
+    opening_balance: Decimal
+    closing_balance: Decimal
+    lines: tuple[TotStatementLine, ...]
+
+
+@dataclass(frozen=True)
+class TotYearStatement:
+    tenant_id: UUID
+    tax_year: int
+    country_code: str
+    currency_code: str | None
+    tax_due: Decimal
+    amount_paid: Decimal
+    balance_due: Decimal
+    filings: tuple[TotYearFiling, ...]
+
+
+@dataclass(frozen=True)
 class TotFiledTax:
     return_id: UUID
     tenant_id: UUID

@@ -486,6 +486,29 @@ class TotStatementResponse(BaseModel):
     lines: list[TotStatementLineResponse]
 
 
+class TotYearFilingResponse(BaseModel):
+    return_id: UUID
+    period_start: date
+    period_end: date
+    tax_due: Money
+    amount_paid: Money
+    balance_due: Money
+    opening_balance: Money
+    closing_balance: Money
+    lines: list[TotStatementLineResponse]
+
+
+class TotYearStatementResponse(BaseModel):
+    tenant_id: UUID
+    tax_year: int
+    country_code: str
+    currency_code: str | None
+    tax_due: Money
+    amount_paid: Money
+    balance_due: Money
+    filings: list[TotYearFilingResponse]
+
+
 class TotReturnBalanceResponse(BaseModel):
     return_id: UUID
     tenant_id: UUID
