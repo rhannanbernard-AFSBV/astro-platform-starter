@@ -1,29 +1,43 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { getDb, exec, query } from './db/client.js';
-import { migrationsDir } from './db/client.js';
 import fs from 'node:fs';
 import path from 'node:path';
-import { tenantMiddleware } from './middleware/tenant.js';
+import { fileURLToPath } from 'node:url';
+import { getDb, exec, query, migrationsDir } from './db/client.js';
+import { ensureDemoUser } from './services/auth.js';
+import { emailTransportName } from './services/email.js';
+import authRouter from './routes/auth.js';
 import bidsRouter from './routes/bids.js';
+import publicProposalsRouter from './routes/publicProposals.js';
 
 dotenv.config();
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
 
 app.use(cors());
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '4mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+const signaturesDir = path.resolve(__dirname, '../data/signatures');
+fs.mkdirSync(signaturesDir, { recursive: true });
+app.use('/signatures', express.static(signaturesDir));
 
 app.get('/', (_req, res) => {
   res.json({
     name: 'OmniClean AI Scanner API',
-    docs: 'POST /api/scan — walkthrough → bid → checklist → proposal',
+    auth: 'POST /api/auth/login | /api/auth/register',
+    scan: 'POST /api/scan (Bearer JWT)',
+    e_sign: 'GET /p/:token',
+    email_transport: emailTransportName(),
   });
 });
 
-app.use('/api', tenantMiddleware, bidsRouter);
+app.use('/api/auth', authRouter);
+app.use(publicProposalsRouter);
+app.use('/api', bidsRouter);
 
 app.use((err, _req, res, _next) => {
   console.error(err);
@@ -53,7 +67,6 @@ async function ensureMigrated() {
     );
     if (rows.length) continue;
     const sql = fs.readFileSync(path.join(dir, file), 'utf8');
-    // Skip setval line that may fail on PGlite — wrap softly
     const cleaned = sql
       .split('\n')
       .filter((line) => !/setval\(/i.test(line))
@@ -63,7 +76,6 @@ async function ensureMigrated() {
     await query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);
   }
 
-  // Ensure demo tenant settings
   const t = await query('SELECT tenant_id FROM tenants WHERE tenant_id = 1');
   if (!t.rows.length) {
     await query(
@@ -83,6 +95,8 @@ async function ensureMigrated() {
       ) VALUES (1, 'USD', TRUE, 'XCG', 0.00, 18.00, 30.00, 260, 'office_low')`
     );
   }
+
+  await ensureDemoUser();
 }
 
 async function main() {
@@ -90,8 +104,10 @@ async function main() {
   app.listen(PORT, () => {
     console.log(`OmniClean API listening on http://localhost:${PORT}`);
     console.log(
-      `OpenAI vision: ${process.env.OPENAI_API_KEY?.trim() ? 'enabled' : 'mock fallback (set OPENAI_API_KEY)'}`
+      `OpenAI vision: ${process.env.OPENAI_API_KEY?.trim() ? 'enabled' : 'mock fallback'}`
     );
+    console.log(`Email transport: ${emailTransportName()}`);
+    console.log('Demo login: demo@omniclean.demo / demo1234');
   });
 }
 

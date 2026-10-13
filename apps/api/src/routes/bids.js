@@ -6,6 +6,12 @@ import {
   listBids,
   getTenantSettings,
 } from '../services/bidService.js';
+import { requireAuth } from '../middleware/auth.js';
+import {
+  proposalSecureUrl,
+  sendProposalEmail,
+} from '../services/proposalActions.js';
+import { emailTransportName } from '../services/email.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -19,8 +25,13 @@ router.get('/health', (_req, res) => {
     ok: true,
     service: 'omniclean-api',
     openai_configured: Boolean(process.env.OPENAI_API_KEY?.trim()),
+    email_transport: emailTransportName(),
+    auth_required: true,
   });
 });
+
+// All routes below require JWT; tenant_id comes from the token
+router.use(requireAuth);
 
 router.get('/settings', async (req, res, next) => {
   try {
@@ -64,7 +75,7 @@ router.get('/bids', async (req, res, next) => {
 router.get('/bids/:bidId', async (req, res, next) => {
   try {
     const detail = await getBid(req.tenantId, Number(req.params.bidId));
-    res.json(detail);
+    res.json(enrichProposalLinks(detail));
   } catch (err) {
     next(err);
   }
@@ -86,7 +97,35 @@ router.get('/bids/:bidId/proposal', async (req, res, next) => {
   try {
     const detail = await getBid(req.tenantId, Number(req.params.bidId));
     const proposal = detail.proposals[0] || null;
-    res.json({ bid_id: detail.bid.bid_id, proposal });
+    res.json({
+      bid_id: detail.bid.bid_id,
+      proposal: proposal
+        ? {
+            ...proposal,
+            proposal_secure_url: proposal.access_token
+              ? proposalSecureUrl(proposal.access_token)
+              : null,
+          }
+        : null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Send proposal email (localized HTML template) to client.
+ * POST /api/bids/:bidId/send-proposal  { to_email, recipient_name? }
+ */
+router.post('/bids/:bidId/send-proposal', async (req, res, next) => {
+  try {
+    const result = await sendProposalEmail({
+      tenantId: req.tenantId,
+      bidId: Number(req.params.bidId),
+      toEmail: req.body.to_email,
+      recipientName: req.body.recipient_name,
+    });
+    res.json(result);
   } catch (err) {
     next(err);
   }
@@ -94,7 +133,6 @@ router.get('/bids/:bidId/proposal', async (req, res, next) => {
 
 /**
  * Working demo path: upload/walkthrough → bid ledger → checklist → proposal draft
- * POST /api/scan  multipart: image?, client_name, property_address, frequency, hint_sq_ft, mock=1
  */
 router.post('/scan', upload.single('image'), async (req, res, next) => {
   try {
@@ -120,6 +158,10 @@ router.post('/scan', upload.single('image'), async (req, res, next) => {
       useMock,
     });
 
+    const secureUrl = result.proposal.access_token
+      ? proposalSecureUrl(result.proposal.access_token)
+      : null;
+
     res.status(201).json({
       bid_id: result.bid.bid_id,
       proposal_id: result.proposal.proposal_id,
@@ -132,11 +174,25 @@ router.post('/scan', upload.single('image'), async (req, res, next) => {
         status: result.proposal.status,
         email_html: result.proposal.email_html,
         proposal_text: result.proposal.proposal_text,
+        access_token: result.proposal.access_token,
+        proposal_secure_url: secureUrl,
       },
     });
   } catch (err) {
     next(err);
   }
 });
+
+function enrichProposalLinks(detail) {
+  return {
+    ...detail,
+    proposals: (detail.proposals || []).map((p) => ({
+      ...p,
+      proposal_secure_url: p.access_token
+        ? proposalSecureUrl(p.access_token)
+        : null,
+    })),
+  };
+}
 
 export default router;

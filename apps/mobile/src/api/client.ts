@@ -2,13 +2,34 @@ import Constants from 'expo-constants';
 
 const extra = Constants.expoConfig?.extra as { apiUrl?: string } | undefined;
 
-/** Local API — Android emulator uses 10.0.2.2; iOS simulator / web use localhost */
 export const API_URL =
   extra?.apiUrl ||
   process.env.EXPO_PUBLIC_API_URL ||
   'http://localhost:4000';
 
-const TENANT_ID = process.env.EXPO_PUBLIC_TENANT_ID || '1';
+let authToken: string | null = null;
+
+export function setAuthToken(token: string | null) {
+  authToken = token;
+}
+
+export function getAuthToken() {
+  return authToken;
+}
+
+function authHeaders(extraHeaders: Record<string, string> = {}) {
+  const headers: Record<string, string> = { ...extraHeaders };
+  if (authToken) headers.Authorization = `Bearer ${authToken}`;
+  return headers;
+}
+
+export type AuthUser = {
+  user_id: number;
+  tenant_id: number;
+  email: string;
+  full_name: string;
+  role: string;
+};
 
 export type ScanResponse = {
   bid_id: number;
@@ -57,14 +78,68 @@ export type ScanResponse = {
     status: string;
     email_html: string;
     proposal_text: string;
+    access_token?: string;
+    proposal_secure_url?: string | null;
   };
 };
 
 export async function healthCheck() {
-  const res = await fetch(`${API_URL}/api/health`, {
-    headers: { 'X-Tenant-Id': TENANT_ID },
-  });
+  const res = await fetch(`${API_URL}/api/health`);
   if (!res.ok) throw new Error(`API health failed (${res.status})`);
+  return res.json();
+}
+
+export async function login(email: string, password: string, tenantId?: string) {
+  const res = await fetch(`${API_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email,
+      password,
+      tenant_id: tenantId ? Number(tenantId) : undefined,
+    }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Login failed (${res.status})`);
+  return body as {
+    token: string;
+    user: AuthUser;
+    tenant: { tenant_id: number; name: string };
+  };
+}
+
+export async function register(input: {
+  email: string;
+  password: string;
+  fullName: string;
+  tenantId?: string;
+  companyName?: string;
+}) {
+  const res = await fetch(`${API_URL}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: input.email,
+      password: input.password,
+      full_name: input.fullName,
+      tenant_id: input.tenantId ? Number(input.tenantId) : undefined,
+      company_name: input.companyName,
+    }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Register failed (${res.status})`);
+  return body as {
+    token: string;
+    user: AuthUser;
+    tenant: { tenant_id: number; name: string };
+  };
+}
+
+export async function fetchMe() {
+  const res = await fetch(`${API_URL}/api/auth/me`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Session invalid (${res.status})`);
   return res.json();
 }
 
@@ -95,7 +170,7 @@ export async function createScan(input: {
 
   const res = await fetch(`${API_URL}/api/scan`, {
     method: 'POST',
-    headers: { 'X-Tenant-Id': TENANT_ID },
+    headers: authHeaders(),
     body: form,
   });
 
@@ -106,9 +181,56 @@ export async function createScan(input: {
   return res.json();
 }
 
+export async function sendProposal(
+  bidId: number,
+  toEmail: string,
+  recipientName?: string
+) {
+  const res = await fetch(`${API_URL}/api/bids/${bidId}/send-proposal`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
+      to_email: toEmail,
+      recipient_name: recipientName,
+    }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Send failed (${res.status})`);
+  return body as {
+    status: string;
+    transport: string;
+    proposal_secure_url: string;
+    email_id: number;
+  };
+}
+
+export async function signPublicProposal(
+  token: string,
+  input: {
+    signerName: string;
+    signerEmail?: string;
+    typedSignature?: string;
+    signatureDataUrl?: string;
+  }
+) {
+  const res = await fetch(`${API_URL}/api/public/proposals/${token}/sign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      signer_name: input.signerName,
+      signer_email: input.signerEmail,
+      typed_signature: input.typedSignature,
+      signature_data_url: input.signatureDataUrl,
+    }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Sign failed (${res.status})`);
+  return body;
+}
+
 export async function fetchBid(bidId: number) {
   const res = await fetch(`${API_URL}/api/bids/${bidId}`, {
-    headers: { 'X-Tenant-Id': TENANT_ID },
+    headers: authHeaders(),
   });
   if (!res.ok) throw new Error(`Bid fetch failed (${res.status})`);
   return res.json();

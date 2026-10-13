@@ -11,14 +11,16 @@ import {
   Image,
   Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { API_URL, createScan, healthCheck } from '../src/api/client';
 import { useBid } from '../src/state/BidContext';
+import { useAuth } from '../src/state/AuthContext';
 
 export default function ScanScreen() {
   const router = useRouter();
   const { setScan } = useBid();
+  const { ready, token, user, tenantName, logout } = useAuth();
   const [clientName, setClientName] = useState('Philipsburg Medical Plaza');
   const [address, setAddress] = useState('1 Front Street, Philipsburg, SXM');
   const [frequency, setFrequency] = useState('5x / week');
@@ -26,6 +28,15 @@ export default function ScanScreen() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [apiNote, setApiNote] = useState(`API: ${API_URL}`);
+
+  if (ready && !token) return <Redirect href="/login" />;
+  if (!ready) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color="#0f766e" />
+      </View>
+    );
+  }
 
   async function pickImage() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -52,7 +63,7 @@ export default function ScanScreen() {
       try {
         const h = await healthCheck();
         setApiNote(
-          `API ok · vision ${h.openai_configured ? 'GPT-4o' : 'mock'}`
+          `API ok · vision ${h.openai_configured ? 'GPT-4o' : 'mock'} · email ${h.email_transport}`
         );
       } catch {
         setApiNote(`Cannot reach API at ${API_URL}`);
@@ -70,11 +81,8 @@ export default function ScanScreen() {
       router.push('/ledger');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Scan failed';
-      if (Platform.OS === 'web') {
-        window.alert(message);
-      } else {
-        Alert.alert('Scan failed', message);
-      }
+      if (Platform.OS === 'web') window.alert(message);
+      else Alert.alert('Scan failed', message);
     } finally {
       setBusy(false);
     }
@@ -87,7 +95,12 @@ export default function ScanScreen() {
         <Text style={styles.tagline}>
           Site walkthrough → ISSA bid → crew checklist → proposal
         </Text>
-        <Text style={styles.meta}>{apiNote}</Text>
+        <Text style={styles.meta}>
+          {tenantName || 'Tenant'} · {user?.email} · {apiNote}
+        </Text>
+        <Pressable onPress={() => logout()} style={styles.logout}>
+          <Text style={styles.logoutText}>Sign out</Text>
+        </Pressable>
       </View>
 
       <Text style={styles.label}>Client name</Text>
@@ -140,6 +153,7 @@ export default function ScanScreen() {
 
       <Text style={styles.footnote}>
         Bidding math always runs in the API with Decimal arithmetic — never in the LLM.
+        Scans require a JWT; tenant_id is taken from the authenticated principal.
       </Text>
     </ScrollView>
   );
@@ -160,6 +174,8 @@ const styles = StyleSheet.create({
   },
   tagline: { marginTop: 8, color: '#99f6e4', fontSize: 15, lineHeight: 22 },
   meta: { marginTop: 12, color: '#5eead4', fontSize: 12 },
+  logout: { marginTop: 10, alignSelf: 'flex-start' },
+  logoutText: { color: '#ccfbf1', fontWeight: '600', fontSize: 13 },
   label: { marginTop: 8, fontSize: 13, color: '#475569', fontWeight: '600' },
   input: {
     backgroundColor: '#fff',

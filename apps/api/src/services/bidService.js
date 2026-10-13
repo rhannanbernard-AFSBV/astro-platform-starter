@@ -1,7 +1,9 @@
 import { query, withTransaction } from '../db/client.js';
+import { newAccessToken } from './auth.js';
 import { calculateBidLedger } from './biddingMath.js';
 import { buildCrewChecklist } from './checklist.js';
 import { buildProposalCopy, buildProposalEmailHtml } from './proposalCopy.js';
+import { proposalSecureUrl } from './proposalActions.js';
 import { processWalkthroughImage, mockSpatialExtraction } from './visionExtract.js';
 
 async function loadTenantContext(tenantId) {
@@ -177,7 +179,8 @@ export async function saveAIBidToDatabase({
       aiResponse.proposal_copy.detailed_scope_of_work,
     ].join('\n');
 
-    const secureUrl = `omniclean://proposals/${bid.bid_id}`;
+    const accessToken = newAccessToken();
+    const secureUrl = proposalSecureUrl(accessToken);
     const emailHtml = buildProposalEmailHtml({
       tenantName: tenant.name,
       logoUrl: tenant.logo_url,
@@ -194,10 +197,10 @@ export async function saveAIBidToDatabase({
     });
 
     const propIns = await tx(
-      `INSERT INTO proposals (bid_id, status, proposal_text, email_html)
-       VALUES ($1, 'Draft', $2, $3)
+      `INSERT INTO proposals (bid_id, status, proposal_text, email_html, access_token)
+       VALUES ($1, 'Draft', $2, $3, $4)
        RETURNING *`,
-      [bid.bid_id, proposalText, emailHtml]
+      [bid.bid_id, proposalText, emailHtml, accessToken]
     );
 
     const checklists = [];

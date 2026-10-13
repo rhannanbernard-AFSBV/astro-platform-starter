@@ -1,16 +1,76 @@
+import { useState } from 'react';
 import { Redirect, useRouter } from 'expo-router';
-import { View, Text, StyleSheet, ScrollView, Pressable, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  Platform,
+  TextInput,
+  Alert,
+  ActivityIndicator,
+  Linking,
+} from 'react-native';
 import { useBid } from '../src/state/BidContext';
+import { sendProposal } from '../src/api/client';
 
 export default function ProposalScreen() {
   const { scan, setScan } = useBid();
   const router = useRouter();
+  const [toEmail, setToEmail] = useState('client@example.com');
+  const [busy, setBusy] = useState(false);
+  const [sendResult, setSendResult] = useState<{
+    status: string;
+    transport: string;
+    proposal_secure_url: string;
+  } | null>(null);
+
   if (!scan) return <Redirect href="/" />;
+
+  const secureUrl =
+    sendResult?.proposal_secure_url || scan.proposal.proposal_secure_url || '';
+
+  async function onSend() {
+    if (!toEmail.trim()) {
+      Alert.alert('Email required', 'Enter a client email to send the proposal.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await sendProposal(scan!.bid_id, toEmail.trim());
+      setSendResult(result);
+      scan!.proposal.status = result.status;
+      if (Platform.OS === 'web') {
+        window.alert(`Proposal ${result.status} via ${result.transport}`);
+      } else {
+        Alert.alert('Proposal sent', `Status ${result.status} · transport ${result.transport}`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Send failed';
+      if (Platform.OS === 'web') window.alert(message);
+      else Alert.alert('Send failed', message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openSign() {
+    if (!secureUrl) return;
+    const token = scan!.proposal.access_token;
+    if (token) {
+      router.push(`/sign/${token}`);
+      return;
+    }
+    Linking.openURL(secureUrl);
+  }
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.h1}>Proposal draft</Text>
-      <Text style={styles.status}>Status: {scan.proposal.status}</Text>
+      <Text style={styles.status}>
+        Status: {sendResult?.status || scan.proposal.status}
+      </Text>
 
       <View style={styles.priceBox}>
         <Text style={styles.priceLabel}>Monthly investment</Text>
@@ -29,13 +89,45 @@ export default function ProposalScreen() {
       <Text style={styles.section}>Detailed scope of work</Text>
       <Text style={styles.body}>{scan.proposal_copy.detailed_scope_of_work}</Text>
 
-      <Text style={styles.section}>Email HTML preview (truncated)</Text>
-      <Text style={styles.html} numberOfLines={12}>
-        {scan.proposal.email_html.replace(/<\/?[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()}
-      </Text>
+      <Text style={styles.section}>Send proposal email</Text>
+      <TextInput
+        style={styles.input}
+        autoCapitalize="none"
+        keyboardType="email-address"
+        value={toEmail}
+        onChangeText={setToEmail}
+        placeholder="client@company.com"
+      />
+      <Pressable style={styles.btn} disabled={busy} onPress={onSend}>
+        {busy ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.btnText}>Send proposal</Text>
+        )}
+      </Pressable>
+      {sendResult ? (
+        <Text style={styles.hint}>
+          Delivered via {sendResult.transport}
+          {sendResult.transport === 'dry_run'
+            ? ' (console log — set RESEND_API_KEY / SMTP to send for real)'
+            : ''}
+        </Text>
+      ) : null}
+
+      {secureUrl ? (
+        <>
+          <Text style={styles.section}>E-sign link</Text>
+          <Text style={styles.link} numberOfLines={3}>
+            {secureUrl}
+          </Text>
+          <Pressable style={styles.outlineBtn} onPress={openSign}>
+            <Text style={styles.outlineBtnText}>Open e-sign (typed signature)</Text>
+          </Pressable>
+        </>
+      ) : null}
 
       <Pressable
-        style={styles.btn}
+        style={[styles.btn, { backgroundColor: '#334155', marginTop: 24 }]}
         onPress={() => {
           setScan(null);
           router.replace('/');
@@ -72,22 +164,31 @@ const styles = StyleSheet.create({
     color: '#0f172a',
   },
   body: { color: '#334155', lineHeight: 22 },
-  html: {
+  input: {
     backgroundColor: '#fff',
-    padding: 12,
-    borderRadius: 4,
-    color: '#64748b',
-    fontSize: 12,
-    lineHeight: 18,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#cbd5e1',
+    borderRadius: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
   },
+  hint: { marginTop: 8, color: '#64748b', fontSize: 12 },
+  link: { color: '#0f766e', fontSize: 12, marginBottom: 8 },
   btn: {
-    marginTop: 20,
+    marginTop: 12,
     backgroundColor: '#0f766e',
     paddingVertical: 14,
     borderRadius: 4,
     alignItems: 'center',
   },
   btnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
+  outlineBtn: {
+    borderWidth: 1.5,
+    borderColor: '#0f766e',
+    paddingVertical: 12,
+    borderRadius: 4,
+    alignItems: 'center',
+  },
+  outlineBtnText: { color: '#0f766e', fontWeight: '600' },
 });
