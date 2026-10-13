@@ -413,7 +413,55 @@ export function mockSpatialExtraction(modifiers = {}) {
     });
   }
 
-  return applyScaleCalibration(base, modifiers);
+  const calibrated = applyScaleCalibration(base, modifiers);
+  const frameCount = Number(modifiers.frame_count) || 1;
+  calibrated._frame_count = frameCount;
+  calibrated._video_received = Boolean(modifiers.video_received);
+  if (frameCount > 1 || modifiers.video_received) {
+    calibrated.property_notes =
+      `${calibrated.property_notes || ''} | Multi-frame walkthrough mock (${frameCount} frame(s)${modifiers.video_received ? ', video attached' : ''}).`.trim();
+    calibrated._source = 'mock-multiframe';
+  }
+  return calibrated;
+}
+
+/**
+ * Normalize multer / client uploads into a media list.
+ * Supports single `image`, multi `images[]`, and optional `video` (coverage meta;
+ * live vision uses image frames — video alone falls back to mock or errors).
+ * @param {{ image?: object, images?: object[], video?: object }} files
+ * @returns {{ frames: {buffer: Buffer, mimeType: string, filename?: string}[], video: object|null }}
+ */
+export function collectWalkthroughMedia(files = {}) {
+  const frames = [];
+  const pushFile = (f) => {
+    if (!f?.buffer?.length) return;
+    const mime = (f.mimetype || '').toLowerCase();
+    if (mime.startsWith('video/')) return;
+    frames.push({
+      buffer: f.buffer,
+      mimeType: f.mimetype || 'image/jpeg',
+      filename: f.originalname,
+    });
+  };
+  if (files.image) pushFile(Array.isArray(files.image) ? files.image[0] : files.image);
+  for (const f of files.images || []) pushFile(f);
+  // Legacy single-file field sometimes arrives as `image` only
+  const videoFile = files.video
+    ? Array.isArray(files.video)
+      ? files.video[0]
+      : files.video
+    : null;
+  const video =
+    videoFile?.buffer?.length &&
+    String(videoFile.mimetype || '').toLowerCase().startsWith('video/')
+      ? {
+          mimeType: videoFile.mimetype,
+          filename: videoFile.originalname,
+          byte_length: videoFile.buffer.length,
+        }
+      : null;
+  return { frames, video };
 }
 
 /**
@@ -426,6 +474,22 @@ export async function processWalkthroughImage(
   mimeType,
   customPromptModifiers = {}
 ) {
+  return processWalkthroughMedia(
+    [{ buffer: imageBuffer, mimeType }],
+    customPromptModifiers
+  );
+}
+
+/**
+ * Multi-frame / multi-image walkthrough extraction.
+ * GPT-4o receives up to MAX_FRAMES images in one call for spatial coverage.
+ * @param {{buffer: Buffer, mimeType: string}[]} frames
+ * @param {object} customPromptModifiers
+ */
+export async function processWalkthroughMedia(
+  frames = [],
+  customPromptModifiers = {}
+) {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
     throw Object.assign(
@@ -436,15 +500,31 @@ export async function processWalkthroughImage(
     );
   }
 
-  if (!imageBuffer?.length) {
+  const usable = (frames || []).filter((f) => f?.buffer?.length);
+  if (!usable.length) {
     throw Object.assign(
-      new Error('Image buffer required for GPT-4o walkthrough path'),
+      new Error(
+        'At least one image frame is required for GPT-4o walkthrough. Video-only uploads need accompanying photos/frames (or use mock=1).'
+      ),
       { status: 400, code: 'VISION_IMAGE_REQUIRED' }
     );
   }
 
+  const maxFrames = Math.max(
+    1,
+    Math.min(12, Number(process.env.VISION_MAX_FRAMES || 8))
+  );
+  const selected = usable.slice(0, maxFrames);
+
   try {
     const openai = new OpenAI({ apiKey });
+    const imageParts = selected.map((f) => ({
+      type: 'image_url',
+      image_url: {
+        url: `data:${f.mimeType || 'image/jpeg'};base64,${f.buffer.toString('base64')}`,
+        detail: 'high',
+      },
+    }));
     const response = await openai.chat.completions.create({
       model: process.env.OPENAI_VISION_MODEL?.trim() || 'gpt-4o',
       response_format: {
@@ -458,16 +538,10 @@ export async function processWalkthroughImage(
           content: [
             {
               type: 'text',
-              text: `Analyze this site walkthrough / floorplan upload. Contextual parameters: ${JSON.stringify(customPromptModifiers)}.
-Prioritize reading any scale bar or written legend. Isolate cleanable area from structural voids. Extract spatial data and room zones only — no financial math.`,
+              text: `Analyze this multi-frame site walkthrough / floorplan upload (${selected.length} image frame(s)${customPromptModifiers.video_received ? ' + video coverage note' : ''}). Contextual parameters: ${JSON.stringify(customPromptModifiers)}.
+Merge spatial coverage across frames — rooms visible in later frames should appear in room_zones. Prefer scale legend when any frame shows one. Extract spatial data and room zones only — no financial math.`,
             },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:${mimeType};base64,${imageBuffer.toString('base64')}`,
-                detail: 'high',
-              },
-            },
+            ...imageParts,
           ],
         },
       ],
@@ -481,7 +555,8 @@ Prioritize reading any scale bar or written legend. Isolate cleanable area from 
       });
     }
     const parsed = JSON.parse(content);
-    parsed._source = 'gpt-4o';
+    parsed._source = selected.length > 1 ? 'gpt-4o-multiframe' : 'gpt-4o';
+    parsed._frame_count = selected.length;
     return applyScaleCalibration(parsed, customPromptModifiers);
   } catch (err) {
     if (err.code && err.status) throw err;

@@ -58,7 +58,7 @@ export async function ensureProposalToken(proposalId) {
   return token;
 }
 
-export async function getProposalByToken(accessToken) {
+export async function getProposalByToken(accessToken, { forSign = false } = {}) {
   const { rows } = await query(
     `SELECT p.*,
             b.bid_id, b.tenant_id, b.client_name, b.property_address, b.frequency,
@@ -90,6 +90,13 @@ export async function getProposalByToken(accessToken) {
       { status: 410, code: 'PROPOSAL_TOKEN_EXPIRED' }
     );
   }
+  // After sign, link remains viewable but cannot be used to re-sign
+  if (forSign && row.access_token_revoked_at) {
+    throw Object.assign(
+      new Error('This proposal link can no longer be used to sign.'),
+      { status: 410, code: 'PROPOSAL_TOKEN_REVOKED' }
+    );
+  }
   return row;
 }
 
@@ -103,8 +110,16 @@ export async function signProposal({
   signerEmail,
   signatureDataUrl,
   typedSignature,
+  signToken,
+  otp,
 }) {
-  const proposal = await getProposalByToken(accessToken);
+  // Email OTP / one-time token required so portal links are not freely forwardable forever
+  const { assertSignAuthorization, revokeProposalSignAccess } = await import(
+    './proposalSignAuth.js'
+  );
+  await assertSignAuthorization({ accessToken, signToken, otp });
+
+  const proposal = await getProposalByToken(accessToken, { forSign: true });
   if (proposal.status === 'Signed') {
     throw Object.assign(new Error('Proposal already signed'), { status: 409 });
   }
@@ -167,6 +182,9 @@ export async function signProposal({
     proposal.bid_id,
     'Signed'
   );
+
+  // Revoke reusable sign capability (view still works via same token)
+  await revokeProposalSignAccess(proposal.proposal_id);
 
   return {
     proposal: upd.rows[0],

@@ -6,6 +6,8 @@ import {
   listBids,
   getTenantSettings,
 } from '../services/bidService.js';
+import { calibrateBidPricing } from '../services/bidCalibrate.js';
+import { collectWalkthroughMedia } from '../services/visionExtract.js';
 import { requireAuth } from '../middleware/auth.js';
 import {
   proposalSecureUrl,
@@ -18,8 +20,15 @@ import { scanRateLimit } from '../middleware/security.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 12 * 1024 * 1024 },
+  // Multi-frame + short video walkthroughs
+  limits: { fileSize: 40 * 1024 * 1024, files: 14 },
 });
+
+const walkthroughUpload = upload.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'images', maxCount: 12 },
+  { name: 'video', maxCount: 1 },
+]);
 
 const router = Router();
 
@@ -150,31 +159,99 @@ router.post('/bids/:bidId/send-proposal', handleSendProposal);
 router.post('/bids/:bidId/send', handleSendProposal);
 
 /**
- * Working demo path: upload/walkthrough → bid ledger → checklist → proposal draft
+ * Human calibrate: adjust sq ft / fixtures, then commit Decimal pricing.
+ * POST /api/bids/:bidId/calibrate
  */
-router.post('/scan', scanRateLimit, upload.single('image'), async (req, res, next) => {
+router.post('/bids/:bidId/calibrate', async (req, res, next) => {
+  try {
+    const result = await calibrateBidPricing({
+      tenantId: req.tenantId,
+      bidId: Number(req.params.bidId),
+      userId: req.user.user_id,
+      totalCleanableSqFt: req.body.total_cleanable_sq_ft,
+      detectedFixtures: req.body.detected_fixtures,
+      substrateBreakdown: req.body.substrate_breakdown,
+    });
+    const meta = clientMeta(req);
+    await writeAuditLog({
+      tenantId: req.tenantId,
+      userId: req.user.user_id,
+      action: 'bid.calibrate',
+      resourceType: 'bid',
+      resourceId: req.params.bidId,
+      ...meta,
+      meta: {
+        total_cleanable_sq_ft: req.body.total_cleanable_sq_ft,
+        fixture_count: Array.isArray(req.body.detected_fixtures)
+          ? req.body.detected_fixtures.length
+          : undefined,
+      },
+    });
+
+    const secureUrl = result.proposal?.access_token
+      ? proposalSecureUrl(result.proposal.access_token)
+      : null;
+
+    res.json({
+      bid_id: result.bid.bid_id,
+      proposal_id: result.proposal?.proposal_id,
+      pricing_committed: true,
+      spatial_summary: result.spatial_summary,
+      financial_ledger: result.financial_ledger,
+      proposal_copy: result.proposal_copy,
+      meta: result.meta,
+      proposal: result.proposal
+        ? {
+            status: result.proposal.status,
+            proposal_secure_url: secureUrl,
+            access_token_expires_at: result.proposal.access_token_expires_at,
+          }
+        : null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Working demo path: multi-frame/video walkthrough → provisional bid → calibrate → commit
+ * Accepts `image` (legacy), `images` (multi), and optional `video`.
+ */
+router.post('/scan', scanRateLimit, walkthroughUpload, async (req, res, next) => {
   try {
     const clientName = (req.body.client_name || '').trim();
     if (!clientName) {
       return res.status(400).json({ error: 'client_name is required' });
     }
 
+    const media = collectWalkthroughMedia(req.files || {});
     const forceMock =
       req.body.mock === '1' || req.body.mock === 'true';
     const vision = resolveVisionMode({
       forceMock,
-      hasImage: Boolean(req.file?.buffer?.length),
+      hasImage: media.frames.length > 0,
     });
+
+    // Default: defer pricing commit so estimator can calibrate sq ft / fixtures first.
+    // Pass commit_pricing=1 to auto-commit (API/scripts / backwards compat).
+    const commitPricing =
+      req.body.commit_pricing === '1' ||
+      req.body.commit_pricing === 'true' ||
+      req.body.skip_calibrate === '1' ||
+      req.body.skip_calibrate === 'true';
 
     const result = await createBidFromWalkthrough({
       tenantId: req.tenantId,
       clientName,
       propertyAddress: req.body.property_address || '',
       frequency: req.body.frequency || '5x / week',
-      imageBuffer: req.file?.buffer,
-      mimeType: req.file?.mimetype || 'image/jpeg',
+      frames: media.frames,
+      videoMeta: media.video,
+      imageBuffer: media.frames[0]?.buffer,
+      mimeType: media.frames[0]?.mimeType || 'image/jpeg',
       hintSqFt: req.body.hint_sq_ft ? Number(req.body.hint_sq_ft) : undefined,
       useMock: vision.useMock,
+      commitPricing,
     });
 
     const secureUrl = result.proposal.access_token
@@ -199,6 +276,9 @@ router.post('/scan', scanRateLimit, upload.single('image'), async (req, res, nex
       meta: {
         vision_mode: vision.reason,
         extraction_source: result.payload.meta?.extraction_source,
+        frame_count: result.payload.meta?.frame_count,
+        video_received: result.payload.meta?.video_received,
+        pricing_committed: result.pricing_committed,
       },
     });
 
@@ -208,6 +288,7 @@ router.post('/scan', scanRateLimit, upload.single('image'), async (req, res, nex
       proposal_id: result.proposal.proposal_id,
       client_name: clientName,
       property_address: req.body.property_address || '',
+      pricing_committed: result.pricing_committed,
       spatial_summary: result.payload.spatial_summary,
       scale_and_legend: result.payload.scale_and_legend,
       financial_ledger: result.payload.financial_ledger,

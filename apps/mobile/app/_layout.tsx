@@ -18,6 +18,7 @@ export default function RootLayout() {
         >
           <Stack.Screen name="login" options={{ title: 'Sign in', headerShown: false }} />
           <Stack.Screen name="index" options={{ title: 'OmniClean Scanner' }} />
+          <Stack.Screen name="calibrate" options={{ title: 'Calibrate bid' }} />
           <Stack.Screen name="ledger" options={{ title: 'Bid Ledger' }} />
           <Stack.Screen name="checklist" options={{ title: 'Crew Checklist' }} />
           <Stack.Screen name="proposal" options={{ title: 'Proposal Draft' }} />

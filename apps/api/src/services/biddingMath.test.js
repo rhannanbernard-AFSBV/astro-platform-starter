@@ -81,4 +81,37 @@ describe('calculateBidLedger', () => {
       assert.equal(Number(s), L[key]);
     }
   });
+
+  it('uses fixture labor_intensity (not raw counts alone) for density', () => {
+    const lowOnly = calculateBidLedger({
+      ...base,
+      detectedFixtures: [
+        { fixture_type: 'HVAC', count: 40, labor_intensity: 'low' },
+      ],
+    });
+    const highMix = calculateBidLedger({
+      ...base,
+      detectedFixtures: [
+        { fixture_type: 'bio-hazard', count: 20, labor_intensity: 'high' },
+        { fixture_type: 'exam tables', count: 10, labor_intensity: 'high' },
+      ],
+    });
+    // high intensity → lower adjusted ISSA → more hours / higher price
+    assert.ok(
+      highMix.financial_ledger.recommended_shift_hours >
+        lowOnly.financial_ledger.recommended_shift_hours
+    );
+    assert.ok(
+      highMix.financial_ledger.fixture_intensity_weighted >
+        lowOnly.financial_ledger.fixture_intensity_weighted
+    );
+    assert.equal(
+      lowOnly.financial_ledger.calculation_steps[0].inputs.fixture_count,
+      40
+    );
+    // 40 × 0.5 = 20 weighted
+    assert.equal(lowOnly.financial_ledger.fixture_intensity_weighted, 20);
+    // 20×1.75 + 10×1.75 = 52.5 weighted
+    assert.equal(highMix.financial_ledger.fixture_intensity_weighted, 52.5);
+  });
 });

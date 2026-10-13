@@ -35,6 +35,35 @@ function formatMoney(amount, symbol, code) {
   return `${symbol}${n}`;
 }
 
+/** Map vision labor_intensity → density weight (low < medium < high). */
+export function fixtureIntensityWeight(intensity) {
+  const key = String(intensity || 'medium').toLowerCase().trim();
+  if (key === 'low' || key === 'l') return d('0.5');
+  if (key === 'high' || key === 'h') return d('1.75');
+  return d('1'); // medium / unknown
+}
+
+/**
+ * Weighted fixture units for ISSA density: Σ(count × intensity_weight).
+ * Raw counts alone under-price medical/high-touch mixes.
+ */
+export function summarizeFixtureIntensity(detectedFixtures = []) {
+  let rawCount = d(0);
+  let weighted = d(0);
+  const byIntensity = { low: d(0), medium: d(0), high: d(0) };
+  for (const f of detectedFixtures) {
+    const count = d(f.count || 0);
+    rawCount = rawCount.plus(count);
+    const w = fixtureIntensityWeight(f.labor_intensity);
+    weighted = weighted.plus(count.times(w));
+    const bucket = String(f.labor_intensity || 'medium').toLowerCase();
+    if (bucket === 'low') byIntensity.low = byIntensity.low.plus(count);
+    else if (bucket === 'high') byIntensity.high = byIntensity.high.plus(count);
+    else byIntensity.medium = byIntensity.medium.plus(count);
+  }
+  return { rawCount, weighted, byIntensity };
+}
+
 /**
  * @param {object} input
  * @param {number|string} input.totalCleanableSqFt
@@ -64,6 +93,7 @@ export function calculateBidLedger(input) {
   }
 
   // Substrate / fixture density adjustments (deterministic, not LLM)
+  // Fixture labor_intensity weights counts so medical/high-touch mixes price denser than lobby fixtures.
   let densityFactor = d(1);
   const carpetShare = substrateBreakdown
     .filter((s) => /carpet|high-pile/i.test(s.material || ''))
@@ -71,12 +101,11 @@ export function calculateBidLedger(input) {
   if (carpetShare.gte(40)) densityFactor = densityFactor.times('0.92');
   if (carpetShare.gte(70)) densityFactor = densityFactor.times('0.95');
 
-  const fixtureCount = detectedFixtures.reduce(
-    (acc, f) => acc.plus(d(f.count || 0)),
-    d(0)
-  );
-  if (fixtureCount.gte(40)) densityFactor = densityFactor.times('0.90');
-  else if (fixtureCount.gte(20)) densityFactor = densityFactor.times('0.95');
+  const fixtureIntensity = summarizeFixtureIntensity(detectedFixtures);
+  // Thresholds on intensity-weighted units (not raw headcount)
+  if (fixtureIntensity.weighted.gte(50)) densityFactor = densityFactor.times('0.88');
+  else if (fixtureIntensity.weighted.gte(30)) densityFactor = densityFactor.times('0.90');
+  else if (fixtureIntensity.weighted.gte(15)) densityFactor = densityFactor.times('0.95');
 
   const baseIssa = d(issaRate.sq_ft_per_hour);
   const adjustedIssa = money(baseIssa.times(densityFactor));
@@ -150,6 +179,13 @@ export function calculateBidLedger(input) {
         issa_sq_ft_per_hour: Number(baseIssa.toFixed(2)),
         density_factor: Number(densityFactor.toFixed(4)),
         adjusted_issa_sq_ft_per_hour: Number(adjustedIssa),
+        fixture_count: Number(fixtureIntensity.rawCount.toFixed(2)),
+        fixture_intensity_weighted: Number(fixtureIntensity.weighted.toFixed(2)),
+        fixture_intensity_breakdown: {
+          low: Number(fixtureIntensity.byIntensity.low.toFixed(2)),
+          medium: Number(fixtureIntensity.byIntensity.medium.toFixed(2)),
+          high: Number(fixtureIntensity.byIntensity.high.toFixed(2)),
+        },
       },
       result: Number(rawShiftHours),
     },
@@ -230,6 +266,9 @@ export function calculateBidLedger(input) {
       consumables_rate: Number(consumablesRate.toFixed(4)),
       labor_burden_multiplier: Number(burden.toFixed(4)),
       true_hourly_labor_cost: Number(trueHourly),
+      density_factor: Number(densityFactor.toFixed(4)),
+      fixture_count: Number(fixtureIntensity.rawCount.toFixed(2)),
+      fixture_intensity_weighted: Number(fixtureIntensity.weighted.toFixed(2)),
       formatted_monthly: formatMoney(monthly, primarySymbol, primaryCode),
       formatted_per_shift: formatMoney(finalPerShift, primarySymbol, primaryCode),
       dual_currency: secondaryLedger,
