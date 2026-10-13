@@ -9,9 +9,10 @@ import { processWalkthroughImage, mockSpatialExtraction } from './visionExtract.
 async function loadTenantContext(tenantId) {
   const tenantRes = await query(
     `SELECT t.tenant_id, t.name, t.jurisdiction_code, t.logo_url, t.company_email,
+            t.insurance_coi_url, t.insurance_notes, t.insurance_liability_limit,
             s.primary_currency_code, s.enable_dual_quoting, s.secondary_currency_code,
             s.custom_markup_percentage, s.base_hourly_wage, s.target_margin_percentage,
-            s.shifts_per_year, s.facility_density_code
+            s.shifts_per_year, s.facility_density_code, s.labor_burden_override
      FROM tenants t
      JOIN tenant_currency_settings s ON s.tenant_id = t.tenant_id
      WHERE t.tenant_id = $1`,
@@ -31,6 +32,13 @@ async function loadTenantContext(tenantId) {
       new Error(`Jurisdiction ${row.jurisdiction_code} not configured`),
       { status: 500 }
     );
+  }
+  // Tenant SZV burden override (admin) wins over jurisdiction default when set
+  if (row.labor_burden_override != null) {
+    juris.rows[0] = {
+      ...juris.rows[0],
+      labor_burden_multiplier: row.labor_burden_override,
+    };
   }
 
   const issa = await query(

@@ -42,7 +42,8 @@ export async function getProposalByToken(accessToken) {
     `SELECT p.*,
             b.bid_id, b.tenant_id, b.client_name, b.property_address, b.frequency,
             b.total_sq_ft, b.monthly_price, b.shift_hours, b.raw_ai_payload,
-            t.name AS tenant_name, t.logo_url, t.company_email
+            t.name AS tenant_name, t.logo_url, t.company_email,
+            t.insurance_coi_url, t.insurance_notes, t.insurance_liability_limit
      FROM proposals p
      JOIN bids b ON b.bid_id = p.bid_id
      JOIN tenants t ON t.tenant_id = b.tenant_id

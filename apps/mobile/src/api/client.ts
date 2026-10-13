@@ -68,6 +68,7 @@ export type ScanResponse = {
   };
   crew_checklist: {
     sequence?: number;
+    checklist_id?: number;
     room_zone: string;
     tasks: string[];
     is_high_risk?: boolean;
@@ -81,6 +82,7 @@ export type ScanResponse = {
     access_token?: string;
     proposal_secure_url?: string | null;
   };
+  pdf_url?: string;
 };
 
 export async function healthCheck() {
@@ -234,4 +236,92 @@ export async function fetchBid(bidId: number) {
   });
   if (!res.ok) throw new Error(`Bid fetch failed (${res.status})`);
   return res.json();
+}
+
+export async function uploadQaPhoto(
+  bidId: number,
+  checklistId: number,
+  imageUri: string,
+  notes?: string
+) {
+  const form = new FormData();
+  form.append('photo', {
+    uri: imageUri,
+    name: 'qa.jpg',
+    type: 'image/jpeg',
+  } as unknown as Blob);
+  if (notes) form.append('notes', notes);
+  const res = await fetch(
+    `${API_URL}/api/bids/${bidId}/checklist/${checklistId}/qa-photo`,
+    { method: 'POST', headers: authHeaders(), body: form }
+  );
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `QA upload failed (${res.status})`);
+  return body;
+}
+
+export async function fetchQaStatus(bidId: number) {
+  const res = await fetch(`${API_URL}/api/bids/${bidId}/qa`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`QA status failed (${res.status})`);
+  return res.json();
+}
+
+export async function setGeofence(
+  bidId: number,
+  input: { center_lat: number; center_lng: number; radius_m?: number; label?: string }
+) {
+  const res = await fetch(`${API_URL}/api/bids/${bidId}/geofence`, {
+    method: 'PUT',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(input),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Geofence failed (${res.status})`);
+  return body;
+}
+
+export async function logGps(
+  bidId: number,
+  input: {
+    event_type: string;
+    latitude: number;
+    longitude: number;
+    accuracy_m?: number;
+    checklist_id?: number;
+    notes?: string;
+  }
+) {
+  const res = await fetch(`${API_URL}/api/bids/${bidId}/gps`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(input),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `GPS log failed (${res.status})`);
+  return body;
+}
+
+export async function fetchAdminSettings() {
+  const res = await fetch(`${API_URL}/api/admin/settings`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Admin settings failed (${res.status})`);
+  return res.json();
+}
+
+export async function patchAdminSettings(body: Record<string, unknown>) {
+  const res = await fetch(`${API_URL}/api/admin/settings`, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Admin update failed (${res.status})`);
+  return data;
+}
+
+export function proposalPdfUrl(bidId: number) {
+  return `${API_URL}/api/bids/${bidId}/proposal.pdf`;
 }

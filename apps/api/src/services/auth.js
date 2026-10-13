@@ -2,13 +2,16 @@ import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { query } from '../db/client.js';
+import { resolveJwtSecret } from './jwtSecret.js';
 
-const JWT_SECRET =
-  process.env.JWT_SECRET || 'omniclean-dev-secret-change-me';
 const JWT_EXPIRES = process.env.JWT_EXPIRES || '7d';
+let _jwtSecret = null;
 
 export function getJwtSecret() {
-  return JWT_SECRET;
+  if (!_jwtSecret) {
+    _jwtSecret = resolveJwtSecret();
+  }
+  return _jwtSecret;
 }
 
 export async function registerUser({
@@ -148,14 +151,14 @@ export function signToken(user) {
       email: user.email,
       role: user.role,
     },
-    JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: JWT_EXPIRES }
   );
 }
 
 export function verifyToken(token) {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return jwt.verify(token, getJwtSecret());
   } catch {
     return null;
   }

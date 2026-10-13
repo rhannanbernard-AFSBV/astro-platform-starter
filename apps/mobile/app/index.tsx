@@ -98,9 +98,14 @@ export default function ScanScreen() {
         <Text style={styles.meta}>
           {tenantName || 'Tenant'} · {user?.email} · {apiNote}
         </Text>
-        <Pressable onPress={() => logout()} style={styles.logout}>
-          <Text style={styles.logoutText}>Sign out</Text>
-        </Pressable>
+        <View style={styles.heroActions}>
+          <Pressable onPress={() => router.push('/admin')}>
+            <Text style={styles.logoutText}>Tenant admin</Text>
+          </Pressable>
+          <Pressable onPress={() => logout()}>
+            <Text style={styles.logoutText}>Sign out</Text>
+          </Pressable>
+        </View>
       </View>
 
       <Text style={styles.label}>Client name</Text>
@@ -174,7 +179,11 @@ const styles = StyleSheet.create({
   },
   tagline: { marginTop: 8, color: '#99f6e4', fontSize: 15, lineHeight: 22 },
   meta: { marginTop: 12, color: '#5eead4', fontSize: 12 },
-  logout: { marginTop: 10, alignSelf: 'flex-start' },
+  heroActions: {
+    marginTop: 12,
+    flexDirection: 'row',
+    gap: 16,
+  },
   logoutText: { color: '#ccfbf1', fontWeight: '600', fontSize: 13 },
   label: { marginTop: 8, fontSize: 13, color: '#475569', fontWeight: '600' },
   input: {

@@ -162,13 +162,20 @@ router.post('/scan', upload.single('image'), async (req, res, next) => {
       ? proposalSecureUrl(result.proposal.access_token)
       : null;
 
+    const crew_checklist = (result.payload.crew_checklist || []).map(
+      (zone, i) => ({
+        ...zone,
+        checklist_id: result.checklists[i]?.checklist_id,
+      })
+    );
+
     res.status(201).json({
       bid_id: result.bid.bid_id,
       proposal_id: result.proposal.proposal_id,
       spatial_summary: result.payload.spatial_summary,
       financial_ledger: result.payload.financial_ledger,
       proposal_copy: result.payload.proposal_copy,
-      crew_checklist: result.payload.crew_checklist,
+      crew_checklist,
       meta: result.payload.meta,
       proposal: {
         status: result.proposal.status,
@@ -177,6 +184,7 @@ router.post('/scan', upload.single('image'), async (req, res, next) => {
         access_token: result.proposal.access_token,
         proposal_secure_url: secureUrl,
       },
+      pdf_url: `/api/bids/${result.bid.bid_id}/proposal.pdf`,
     });
   } catch (err) {
     next(err);

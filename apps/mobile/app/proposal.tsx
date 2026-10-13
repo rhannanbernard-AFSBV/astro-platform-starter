@@ -13,10 +13,12 @@ import {
   Linking,
 } from 'react-native';
 import { useBid } from '../src/state/BidContext';
-import { sendProposal } from '../src/api/client';
+import { API_URL, proposalPdfUrl, sendProposal } from '../src/api/client';
+import { useAuth } from '../src/state/AuthContext';
 
 export default function ProposalScreen() {
   const { scan, setScan } = useBid();
+  const { token } = useAuth();
   const router = useRouter();
   const [toEmail, setToEmail] = useState('client@example.com');
   const [busy, setBusy] = useState(false);
@@ -114,14 +116,45 @@ export default function ProposalScreen() {
         </Text>
       ) : null}
 
+      <Text style={styles.section}>PDF proposal</Text>
+      <Pressable
+        style={styles.outlineBtn}
+        onPress={async () => {
+          const url = proposalPdfUrl(scan.bid_id);
+          // Auth'd PDF — open via fetch blob on web; Linking with token query not supported
+          if (Platform.OS === 'web' && token) {
+            const res = await fetch(url, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            const blob = await res.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            window.open(objectUrl, '_blank');
+          } else {
+            Linking.openURL(
+              scan.proposal.proposal_secure_url
+                ? `${scan.proposal.proposal_secure_url}/pdf`
+                : `${API_URL}/p/${scan.proposal.access_token}/pdf`
+            );
+          }
+        }}
+      >
+        <Text style={styles.outlineBtnText}>Download / open branded PDF</Text>
+      </Pressable>
+
       {secureUrl ? (
         <>
-          <Text style={styles.section}>E-sign link</Text>
+          <Text style={styles.section}>Client portal &amp; e-sign</Text>
           <Text style={styles.link} numberOfLines={3}>
             {secureUrl}
           </Text>
-          <Pressable style={styles.outlineBtn} onPress={openSign}>
-            <Text style={styles.outlineBtnText}>Open e-sign (typed signature)</Text>
+          <Pressable
+            style={styles.outlineBtn}
+            onPress={() => Linking.openURL(secureUrl)}
+          >
+            <Text style={styles.outlineBtnText}>Open client portal (web)</Text>
+          </Pressable>
+          <Pressable style={[styles.outlineBtn, { marginTop: 8 }]} onPress={openSign}>
+            <Text style={styles.outlineBtnText}>In-app e-sign</Text>
           </Pressable>
         </>
       ) : null}

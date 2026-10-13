@@ -6,9 +6,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getDb, exec, query, migrationsDir } from './db/client.js';
 import { ensureDemoUser } from './services/auth.js';
+import { resolveJwtSecret } from './services/jwtSecret.js';
 import { emailTransportName } from './services/email.js';
 import authRouter from './routes/auth.js';
 import bidsRouter from './routes/bids.js';
+import opsRouter from './routes/ops.js';
 import publicProposalsRouter from './routes/publicProposals.js';
 
 dotenv.config();
@@ -17,20 +19,27 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
 
+// Resolve JWT before accepting traffic (throws in production if weak/missing)
+resolveJwtSecret();
+
 app.use(cors());
 app.use(express.json({ limit: '4mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 const signaturesDir = path.resolve(__dirname, '../data/signatures');
+const qaDir = path.resolve(__dirname, '../data/qa-photos');
 fs.mkdirSync(signaturesDir, { recursive: true });
+fs.mkdirSync(qaDir, { recursive: true });
 app.use('/signatures', express.static(signaturesDir));
+app.use('/qa-photos', express.static(qaDir));
 
 app.get('/', (_req, res) => {
   res.json({
     name: 'OmniClean AI Scanner API',
     auth: 'POST /api/auth/login | /api/auth/register',
     scan: 'POST /api/scan (Bearer JWT)',
-    e_sign: 'GET /p/:token',
+    portal: 'GET /p/:token',
+    pdf: 'GET /api/bids/:id/proposal.pdf | /p/:token/pdf',
     email_transport: emailTransportName(),
   });
 });
@@ -38,12 +47,14 @@ app.get('/', (_req, res) => {
 app.use('/api/auth', authRouter);
 app.use(publicProposalsRouter);
 app.use('/api', bidsRouter);
+app.use('/api', opsRouter);
 
 app.use((err, _req, res, _next) => {
   console.error(err);
   const status = err.status || 500;
   res.status(status).json({
     error: err.message || 'Internal server error',
+    ...(err.geofence_violation ? { geofence_violation: true } : {}),
   });
 });
 
@@ -79,8 +90,18 @@ async function ensureMigrated() {
   const t = await query('SELECT tenant_id FROM tenants WHERE tenant_id = 1');
   if (!t.rows.length) {
     await query(
-      `INSERT INTO tenants (tenant_id, name, jurisdiction_code, company_email)
-       VALUES (1, 'OmniClean Demo (SXM)', 'SXM', 'bids@omniclean.demo')`
+      `INSERT INTO tenants (tenant_id, name, jurisdiction_code, company_email,
+         insurance_liability_limit, insurance_notes)
+       VALUES (1, 'OmniClean Demo (SXM)', 'SXM', 'bids@omniclean.demo',
+         'USD 1,000,000 per occurrence',
+         'Demo COI placeholder — replace with real certificate URL in Tenant Admin.')`
+    );
+  } else {
+    await query(
+      `UPDATE tenants SET
+         insurance_liability_limit = COALESCE(insurance_liability_limit, 'USD 1,000,000 per occurrence'),
+         insurance_notes = COALESCE(insurance_notes, 'Demo COI placeholder — replace with real certificate URL in Tenant Admin.')
+       WHERE tenant_id = 1`
     );
   }
   const s = await query(

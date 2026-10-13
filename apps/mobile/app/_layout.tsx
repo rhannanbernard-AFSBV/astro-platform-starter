@@ -21,6 +21,7 @@ export default function RootLayout() {
           <Stack.Screen name="ledger" options={{ title: 'Bid Ledger' }} />
           <Stack.Screen name="checklist" options={{ title: 'Crew Checklist' }} />
           <Stack.Screen name="proposal" options={{ title: 'Proposal Draft' }} />
+          <Stack.Screen name="admin" options={{ title: 'Tenant Admin' }} />
           <Stack.Screen name="sign/[token]" options={{ title: 'E-sign proposal' }} />
         </Stack>
       </BidProvider>
