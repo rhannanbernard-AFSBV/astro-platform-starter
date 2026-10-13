@@ -4,6 +4,15 @@
 
 A modern starter based on Astro.js, Tailwind, and [Netlify Core Primitives](https://docs.netlify.com/core/overview/#develop) (Edge Functions, Image CDN, Blobs).
 
+## OmniClean AI Scanner (monorepo apps)
+
+Commercial cleaning MVP lives alongside this marketing site:
+
+- `apps/api` — Express API, Decimal bidding math, GPT-4o spatial extract, PGlite/Postgres
+- `apps/mobile` — Expo client (scan → ledger → checklist → proposal)
+
+See `apps/api/README.md` and `apps/mobile/README.md` to run locally.
+
 ## Astro Commands
 
 All commands are run from the root of the project, from a terminal:

@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: omniclean
+      POSTGRES_PASSWORD: omniclean
+      POSTGRES_DB: omniclean
+    ports:
+      - "5432:5432"
+    volumes:
+      - omniclean_pg:/var/lib/postgresql/data
+
+volumes:
+  omniclean_pg:
