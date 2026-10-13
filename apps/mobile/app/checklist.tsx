@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { FlowStepper } from '../src/components/FlowStepper';
 import { useBid } from '../src/state/BidContext';
 import { logGps, registerPushToken, setGeofence, uploadQaPhoto } from '../src/api/client';
 import {
@@ -75,10 +76,10 @@ export default function ChecklistScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.h1}>Predictive cleaning blueprint</Text>
+      <FlowStepper active="checklist" />
+      <Text style={styles.h1}>Crew checklist</Text>
       <Text style={styles.sub}>
-        High-risk zones require photo QA. Clock-in and room completion log GPS
-        (geofenced when configured).
+        Clock in → photo QA high-risk zones → complete rooms. Then send the portal.
       </Text>
 
       <View style={styles.opsRow}>
@@ -289,7 +290,7 @@ export default function ChecklistScreen() {
       })}
 
       <Pressable style={styles.btn} onPress={() => router.push('/proposal')}>
-        <Text style={styles.btnText}>Open proposal draft</Text>
+        <Text style={styles.btnText}>Next · Proposal & portal</Text>
       </Pressable>
     </ScrollView>
   );

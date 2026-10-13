@@ -54,7 +54,7 @@ export default function LoginScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.hero}>
         <Text style={styles.brand}>OmniClean</Text>
-        <Text style={styles.tagline}>Tenant-aware sign-in for estimators</Text>
+        <Text style={styles.tagline}>Sign in → scan → bid → checklist → portal</Text>
         <Text style={styles.meta}>{API_URL}</Text>
       </View>
 

@@ -6,6 +6,7 @@ import {
   signProposal,
 } from '../services/proposalActions.js';
 import { buildProposalPdfBuffer } from '../services/proposalPdf.js';
+import { clientMeta, writeAuditLog } from '../services/auditLog.js';
 
 const router = Router();
 
@@ -44,6 +45,25 @@ router.post('/api/public/proposals/:token/sign', async (req, res, next) => {
       signatureDataUrl: req.body.signature_data_url,
       typedSignature: req.body.typed_signature,
     });
+    const meta = clientMeta(req);
+    await writeAuditLog({
+      tenantId: result.proposal.bid_id ? undefined : undefined,
+      action: 'proposal.sign',
+      resourceType: 'proposal',
+      resourceId: result.proposal.proposal_id,
+      ...meta,
+      meta: { signer_name: result.proposal.signer_name },
+    });
+    // Enrich tenant from signed row if present
+    if (result.proposal) {
+      await writeAuditLog({
+        action: 'proposal.signed',
+        resourceType: 'proposal',
+        resourceId: result.proposal.proposal_id,
+        ...meta,
+        meta: { signer_name: result.proposal.signer_name },
+      });
+    }
     res.json({
       status: result.proposal.status,
       signed_at: result.proposal.signed_at,

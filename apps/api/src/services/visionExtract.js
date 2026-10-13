@@ -378,51 +378,67 @@ export async function processWalkthroughImage(
 ) {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
-    console.warn(
-      '[vision] OPENAI_API_KEY not set — using richer mock spatial extraction'
+    throw Object.assign(
+      new Error(
+        'OPENAI_API_KEY missing — cannot run live GPT-4o vision. Set the key or use mock=1 in non-production.'
+      ),
+      { status: 503, code: 'OPENAI_KEY_MISSING' }
     );
-    return mockSpatialExtraction(customPromptModifiers);
   }
 
   if (!imageBuffer?.length) {
     throw Object.assign(
       new Error('Image buffer required for GPT-4o walkthrough path'),
-      { status: 400 }
+      { status: 400, code: 'VISION_IMAGE_REQUIRED' }
     );
   }
 
-  const openai = new OpenAI({ apiKey });
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    response_format: {
-      type: 'json_schema',
-      json_schema: EXTRACTION_SCHEMA,
-    },
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: `Analyze this site walkthrough / floorplan upload. Contextual parameters: ${JSON.stringify(customPromptModifiers)}.
-Prioritize reading any scale bar or written legend. Isolate cleanable area from structural voids. Extract spatial data and room zones only — no financial math.`,
-          },
-          {
-            type: 'image_url',
-            image_url: {
-              url: `data:${mimeType};base64,${imageBuffer.toString('base64')}`,
-              detail: 'high',
-            },
-          },
-        ],
+  try {
+    const openai = new OpenAI({ apiKey });
+    const response = await openai.chat.completions.create({
+      model: process.env.OPENAI_VISION_MODEL?.trim() || 'gpt-4o',
+      response_format: {
+        type: 'json_schema',
+        json_schema: EXTRACTION_SCHEMA,
       },
-    ],
-  });
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `Analyze this site walkthrough / floorplan upload. Contextual parameters: ${JSON.stringify(customPromptModifiers)}.
+Prioritize reading any scale bar or written legend. Isolate cleanable area from structural voids. Extract spatial data and room zones only — no financial math.`,
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:${mimeType};base64,${imageBuffer.toString('base64')}`,
+                detail: 'high',
+              },
+            },
+          ],
+        },
+      ],
+    });
 
-  const content = response.choices[0]?.message?.content;
-  if (!content) throw new Error('Empty vision response');
-  const parsed = JSON.parse(content);
-  parsed._source = 'gpt-4o';
-  return applyScaleCalibration(parsed, customPromptModifiers);
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw Object.assign(new Error('Empty GPT-4o vision response'), {
+        status: 502,
+        code: 'OPENAI_EMPTY_RESPONSE',
+      });
+    }
+    const parsed = JSON.parse(content);
+    parsed._source = 'gpt-4o';
+    return applyScaleCalibration(parsed, customPromptModifiers);
+  } catch (err) {
+    if (err.code && err.status) throw err;
+    const msg = err?.error?.message || err.message || String(err);
+    throw Object.assign(
+      new Error(`GPT-4o vision failed: ${msg}. Check OPENAI_API_KEY and model access.`),
+      { status: 502, code: 'OPENAI_VISION_FAILED', cause: err }
+    );
+  }
 }

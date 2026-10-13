@@ -1,5 +1,6 @@
 import { Redirect, useRouter } from 'expo-router';
 import { View, Text, StyleSheet, ScrollView, Pressable, Platform } from 'react-native';
+import { FlowStepper } from '../src/components/FlowStepper';
 import { useBid } from '../src/state/BidContext';
 
 export default function LedgerScreen() {
@@ -12,10 +13,11 @@ export default function LedgerScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.h1}>Financial ledger</Text>
+      <FlowStepper active="bid" />
+      <Text style={styles.h1}>Bid ledger</Text>
       <Text style={styles.sub}>
-        Bid #{scan.bid_id} · {S.total_cleanable_sq_ft.toLocaleString()} sq ft ·{' '}
-        {scan.meta.jurisdiction_code} · source {scan.meta.extraction_source}
+        #{scan.bid_id} · {S.total_cleanable_sq_ft.toLocaleString()} sq ft ·{' '}
+        {scan.meta.jurisdiction_code} · {scan.meta.extraction_source}
       </Text>
 
       <View style={styles.kpiRow}>
@@ -54,7 +56,10 @@ export default function LedgerScreen() {
       ))}
 
       <Pressable style={styles.btn} onPress={() => router.push('/checklist')}>
-        <Text style={styles.btnText}>View crew checklist</Text>
+        <Text style={styles.btnText}>Next · Crew checklist</Text>
+      </Pressable>
+      <Pressable style={styles.skipBtn} onPress={() => router.push('/proposal')}>
+        <Text style={styles.skipText}>Skip to proposal / portal</Text>
       </Pressable>
     </ScrollView>
   );
@@ -123,4 +128,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   btnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
+  skipBtn: { marginTop: 12, alignItems: 'center', paddingVertical: 8 },
+  skipText: { color: '#0f766e', fontWeight: '600', fontSize: 14 },
 });

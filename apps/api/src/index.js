@@ -9,6 +9,13 @@ import { ensureDemoUser } from './services/auth.js';
 import { resolveJwtSecret } from './services/jwtSecret.js';
 import { emailTransportName } from './services/email.js';
 import { ensureDemoMasterGraph } from './services/masterTenant.js';
+import { providerStatus } from './services/providers.js';
+import {
+  apiRateLimit,
+  authRateLimit,
+  buildCorsOptions,
+  publicProposalRateLimit,
+} from './middleware/security.js';
 import authRouter from './routes/auth.js';
 import bidsRouter from './routes/bids.js';
 import opsRouter from './routes/ops.js';
@@ -23,9 +30,11 @@ const PORT = Number(process.env.PORT || 4000);
 // Resolve JWT before accepting traffic (throws in production if weak/missing)
 resolveJwtSecret();
 
-app.use(cors());
+app.set('trust proxy', 1);
+app.use(cors(buildCorsOptions()));
 app.use(express.json({ limit: '4mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use('/api/', apiRateLimit);
 
 const signaturesDir = path.resolve(__dirname, '../data/signatures');
 const qaDir = path.resolve(__dirname, '../data/qa-photos');
@@ -44,20 +53,21 @@ app.get('/', (_req, res) => {
     scan: 'POST /api/scan (Bearer JWT)',
     portal: 'GET /p/:token',
     pdf: 'GET /api/bids/:id/proposal.pdf | /p/:token/pdf',
-    email_transport: emailTransportName(),
+    ...providerStatus(),
   });
 });
 
-app.use('/api/auth', authRouter);
-app.use(publicProposalsRouter);
+app.use('/api/auth', authRateLimit, authRouter);
+app.use(publicProposalRateLimit, publicProposalsRouter);
 app.use('/api', bidsRouter);
 app.use('/api', opsRouter);
 
 app.use((err, _req, res, _next) => {
   console.error(err);
-  const status = err.status || 500;
+  const status = err.status || (err.message?.startsWith('CORS') ? 403 : 500);
   res.status(status).json({
     error: err.message || 'Internal server error',
+    ...(err.code ? { code: err.code } : {}),
     ...(err.geofence_violation ? { geofence_violation: true } : {}),
   });
 });
@@ -127,12 +137,15 @@ async function ensureMigrated() {
 
 async function main() {
   await ensureMigrated();
+  const providers = providerStatus();
   app.listen(PORT, () => {
     console.log(`OmniClean API listening on http://localhost:${PORT}`);
     console.log(
-      `OpenAI vision: ${process.env.OPENAI_API_KEY?.trim() ? 'enabled' : 'mock fallback'}`
+      `OpenAI vision: ${providers.openai_configured ? 'enabled' : 'not configured'} (mock allowed=${providers.vision_mock_allowed})`
     );
-    console.log(`Email transport: ${emailTransportName()}`);
+    console.log(
+      `Email transport: ${emailTransportName()} (dry_run allowed=${providers.email_dry_run_allowed})`
+    );
     console.log('Demo login: demo@omniclean.demo / demo1234');
   });
 }

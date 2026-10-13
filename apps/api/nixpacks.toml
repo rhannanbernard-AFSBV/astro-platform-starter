@@ -1,0 +1,9 @@
+# Alternate Railway builder if Dockerfile is not used
+[start]
+cmd = "node src/index.js"
+
+[phases.setup]
+nixPkgs = ["nodejs_22"]
+
+[phases.install]
+cmds = ["npm ci --omit=dev"]

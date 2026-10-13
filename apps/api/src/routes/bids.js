@@ -12,6 +12,9 @@ import {
   sendProposalEmail,
 } from '../services/proposalActions.js';
 import { emailTransportName } from '../services/email.js';
+import { providerStatus, resolveVisionMode } from '../services/providers.js';
+import { clientMeta, writeAuditLog } from '../services/auditLog.js';
+import { scanRateLimit } from '../middleware/security.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -24,9 +27,8 @@ router.get('/health', (_req, res) => {
   res.json({
     ok: true,
     service: 'omniclean-api',
-    openai_configured: Boolean(process.env.OPENAI_API_KEY?.trim()),
-    email_transport: emailTransportName(),
     auth_required: true,
+    ...providerStatus(),
   });
 });
 
@@ -125,6 +127,16 @@ router.post('/bids/:bidId/send-proposal', async (req, res, next) => {
       toEmail: req.body.to_email,
       recipientName: req.body.recipient_name,
     });
+    const meta = clientMeta(req);
+    await writeAuditLog({
+      tenantId: req.tenantId,
+      userId: req.user.user_id,
+      action: 'proposal.send',
+      resourceType: 'bid',
+      resourceId: req.params.bidId,
+      ...meta,
+      meta: { to: req.body.to_email, transport: result.transport },
+    });
     res.json(result);
   } catch (err) {
     next(err);
@@ -134,18 +146,19 @@ router.post('/bids/:bidId/send-proposal', async (req, res, next) => {
 /**
  * Working demo path: upload/walkthrough → bid ledger → checklist → proposal draft
  */
-router.post('/scan', upload.single('image'), async (req, res, next) => {
+router.post('/scan', scanRateLimit, upload.single('image'), async (req, res, next) => {
   try {
     const clientName = (req.body.client_name || '').trim();
     if (!clientName) {
       return res.status(400).json({ error: 'client_name is required' });
     }
 
-    const useMock =
-      req.body.mock === '1' ||
-      req.body.mock === 'true' ||
-      !req.file ||
-      !process.env.OPENAI_API_KEY?.trim();
+    const forceMock =
+      req.body.mock === '1' || req.body.mock === 'true';
+    const vision = resolveVisionMode({
+      forceMock,
+      hasImage: Boolean(req.file?.buffer?.length),
+    });
 
     const result = await createBidFromWalkthrough({
       tenantId: req.tenantId,
@@ -155,7 +168,7 @@ router.post('/scan', upload.single('image'), async (req, res, next) => {
       imageBuffer: req.file?.buffer,
       mimeType: req.file?.mimetype || 'image/jpeg',
       hintSqFt: req.body.hint_sq_ft ? Number(req.body.hint_sq_ft) : undefined,
-      useMock,
+      useMock: vision.useMock,
     });
 
     const secureUrl = result.proposal.access_token
@@ -169,20 +182,39 @@ router.post('/scan', upload.single('image'), async (req, res, next) => {
       })
     );
 
+    const meta = clientMeta(req);
+    await writeAuditLog({
+      tenantId: req.tenantId,
+      userId: req.user.user_id,
+      action: 'bid.scan',
+      resourceType: 'bid',
+      resourceId: result.bid.bid_id,
+      ...meta,
+      meta: {
+        vision_mode: vision.reason,
+        extraction_source: result.payload.meta?.extraction_source,
+      },
+    });
+
     res.status(201).json({
       bid_id: result.bid.bid_id,
       proposal_id: result.proposal.proposal_id,
       spatial_summary: result.payload.spatial_summary,
+      scale_and_legend: result.payload.scale_and_legend,
       financial_ledger: result.payload.financial_ledger,
       proposal_copy: result.payload.proposal_copy,
       crew_checklist,
-      meta: result.payload.meta,
+      meta: {
+        ...result.payload.meta,
+        vision_mode: vision.reason,
+      },
       proposal: {
         status: result.proposal.status,
         email_html: result.proposal.email_html,
         proposal_text: result.proposal.proposal_text,
         access_token: result.proposal.access_token,
         proposal_secure_url: secureUrl,
+        access_token_expires_at: result.proposal.access_token_expires_at,
       },
       pdf_url: `/api/bids/${result.bid.bid_id}/proposal.pdf`,
     });
