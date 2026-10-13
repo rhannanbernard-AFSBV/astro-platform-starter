@@ -252,23 +252,25 @@ export async function saveAIBidToDatabase({
     const ttlDays = Math.max(1, proposalTokenTtlDays());
     const propIns = await tx(
       `INSERT INTO proposals (
-         bid_id, status, proposal_text, email_html, access_token,
+         tenant_id, bid_id, status, proposal_text, email_html, access_token,
          access_token_created_at, access_token_expires_at
        ) VALUES (
-         $1, 'Draft', $2, $3, $4,
+         $1, $2, 'Draft', $3, $4, $5,
          CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '${ttlDays} days'
        )
        RETURNING *`,
-      [bid.bid_id, proposalText, emailHtml, accessToken]
+      [tenantId, bid.bid_id, proposalText, emailHtml, accessToken]
     );
 
     const checklists = [];
     for (const item of aiResponse.crew_checklist || []) {
       const c = await tx(
-        `INSERT INTO bid_checklists (bid_id, room_zone, tasks, is_high_risk, ai_audit_prompt)
-         VALUES ($1, $2, $3::text[], $4, $5)
+        `INSERT INTO bid_checklists (
+           tenant_id, bid_id, room_zone, tasks, is_high_risk, ai_audit_prompt
+         ) VALUES ($1, $2, $3, $4::text[], $5, $6)
          RETURNING *`,
         [
+          tenantId,
           bid.bid_id,
           item.room_zone,
           item.tasks,
@@ -307,12 +309,12 @@ export async function getBid(tenantId, bidId) {
   }
   const bid = rows[0];
   const checklists = await query(
-    `SELECT * FROM bid_checklists WHERE bid_id = $1 ORDER BY checklist_id`,
-    [bidId]
+    `SELECT * FROM bid_checklists WHERE tenant_id = $1 AND bid_id = $2 ORDER BY checklist_id`,
+    [tenantId, bidId]
   );
   const proposals = await query(
-    `SELECT * FROM proposals WHERE bid_id = $1 ORDER BY proposal_id`,
-    [bidId]
+    `SELECT * FROM proposals WHERE tenant_id = $1 AND bid_id = $2 ORDER BY proposal_id`,
+    [tenantId, bidId]
   );
   return {
     bid,

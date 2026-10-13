@@ -12,6 +12,7 @@ import {
 import { buildProposalPdfBuffer } from '../services/proposalPdf.js';
 import { clientMeta, writeAuditLog } from '../services/auditLog.js';
 import { signedAbsoluteUrl } from '../services/signedUrls.js';
+import { rlsBypass } from '../middleware/auth.js';
 
 function publicArtifactUrl(pathOrUrl) {
   if (!pathOrUrl) return null;
@@ -22,6 +23,8 @@ function publicArtifactUrl(pathOrUrl) {
 }
 
 const router = Router();
+// Portal token is the secret — lookup by access_token across tenants
+router.use(rlsBypass);
 
 /** JSON view for mobile / API clients */
 router.get('/api/public/proposals/:token', async (req, res, next) => {

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { loginUser, registerUser } from '../services/auth.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, rlsBypass } from '../middleware/auth.js';
 import { query } from '../db/client.js';
 import {
   listAccessibleTenants,
@@ -10,6 +10,9 @@ import { clientMeta, writeAuditLog } from '../services/auditLog.js';
 
 const router = Router();
 
+// Login/register look up users across tenants — bypass RLS for these routes
+router.use(rlsBypass);
+
 router.post('/register', async (req, res, next) => {
   try {
     const result = await registerUser({
@@ -18,6 +21,7 @@ router.post('/register', async (req, res, next) => {
       fullName: req.body.full_name,
       tenantId: req.body.tenant_id,
       createTenantName: req.body.company_name,
+      inviteCode: req.body.invite_code,
     });
     const meta = clientMeta(req);
     await writeAuditLog({
