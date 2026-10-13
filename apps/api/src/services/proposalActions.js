@@ -21,18 +21,37 @@ export function proposalSecureUrl(accessToken) {
   return `${publicBaseUrl()}/p/${accessToken}`;
 }
 
+export function proposalTokenTtlDays() {
+  return Number(process.env.PROPOSAL_TOKEN_TTL_DAYS || 30);
+}
+
+function tokenExpirySql() {
+  const days = Math.max(1, proposalTokenTtlDays());
+  return `CURRENT_TIMESTAMP + INTERVAL '${days} days'`;
+}
+
 export async function ensureProposalToken(proposalId) {
   const { rows } = await query(
-    'SELECT proposal_id, access_token FROM proposals WHERE proposal_id = $1',
+    `SELECT proposal_id, access_token, access_token_expires_at
+     FROM proposals WHERE proposal_id = $1`,
     [proposalId]
   );
   if (!rows.length) {
     throw Object.assign(new Error('Proposal not found'), { status: 404 });
   }
-  if (rows[0].access_token) return rows[0].access_token;
+  const row = rows[0];
+  const expired =
+    row.access_token_expires_at &&
+    new Date(row.access_token_expires_at).getTime() < Date.now();
+  if (row.access_token && !expired) return row.access_token;
+
   const token = newAccessToken();
   await query(
-    'UPDATE proposals SET access_token = $1 WHERE proposal_id = $2',
+    `UPDATE proposals SET
+       access_token = $1,
+       access_token_created_at = CURRENT_TIMESTAMP,
+       access_token_expires_at = ${tokenExpirySql()}
+     WHERE proposal_id = $2`,
     [token, proposalId]
   );
   return token;
@@ -55,9 +74,22 @@ export async function getProposalByToken(accessToken) {
   if (!rows.length) {
     throw Object.assign(new Error('Proposal link invalid or expired'), {
       status: 404,
+      code: 'PROPOSAL_TOKEN_INVALID',
     });
   }
-  return rows[0];
+  const row = rows[0];
+  if (
+    row.access_token_expires_at &&
+    new Date(row.access_token_expires_at).getTime() < Date.now()
+  ) {
+    throw Object.assign(
+      new Error(
+        'This proposal link has expired. Ask the contractor to resend the proposal.'
+      ),
+      { status: 410, code: 'PROPOSAL_TOKEN_EXPIRED' }
+    );
+  }
+  return row;
 }
 
 /**

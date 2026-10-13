@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
+import { FlowStepper } from '../src/components/FlowStepper';
 import { useBid } from '../src/state/BidContext';
 import { API_URL, proposalPdfUrl, sendProposal } from '../src/api/client';
 import { useAuth } from '../src/state/AuthContext';
@@ -69,7 +70,8 @@ export default function ProposalScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.h1}>Proposal draft</Text>
+      <FlowStepper active="portal" />
+      <Text style={styles.h1}>Proposal & portal</Text>
       <Text style={styles.status}>
         Status: {sendResult?.status || scan.proposal.status}
       </Text>
@@ -91,7 +93,7 @@ export default function ProposalScreen() {
       <Text style={styles.section}>Detailed scope of work</Text>
       <Text style={styles.body}>{scan.proposal_copy.detailed_scope_of_work}</Text>
 
-      <Text style={styles.section}>Send proposal email</Text>
+      <Text style={styles.section}>Email client portal link</Text>
       <TextInput
         style={styles.input}
         autoCapitalize="none"
@@ -104,7 +106,7 @@ export default function ProposalScreen() {
         {busy ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.btnText}>Send proposal</Text>
+          <Text style={styles.btnText}>Send portal email</Text>
         )}
       </Pressable>
       {sendResult ? (

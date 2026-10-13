@@ -1,20 +1,19 @@
 import nodemailer from 'nodemailer';
 import { query } from '../db/client.js';
+import {
+  assertEmailSendable,
+  emailTransportName,
+} from './providers.js';
+
+export { emailTransportName };
 
 /**
  * Pluggable outbound email:
  * - RESEND_API_KEY → Resend HTTP API
  * - SENDGRID_API_KEY → SendGrid HTTP API
  * - SMTP_HOST (+ SMTP_USER/SMTP_PASS) → nodemailer SMTP
- * - none → file/console dry-run (status=dry_run) so demo still works
+ * - dry_run only when allowed (dev / ALLOW_EMAIL_DRY_RUN)
  */
-
-export function emailTransportName() {
-  if (process.env.RESEND_API_KEY?.trim()) return 'resend';
-  if (process.env.SENDGRID_API_KEY?.trim()) return 'sendgrid';
-  if (process.env.SMTP_HOST?.trim()) return 'smtp';
-  return 'dry_run';
-}
 
 export async function sendEmail({
   tenantId,
@@ -24,7 +23,7 @@ export async function sendEmail({
   html,
   from,
 }) {
-  const transport = emailTransportName();
+  const transport = assertEmailSendable();
   const fromAddress =
     from ||
     process.env.EMAIL_FROM ||
@@ -64,7 +63,7 @@ export async function sendEmail({
       });
     } else {
       console.log(
-        `[email:dry_run] to=${to} subject="${subject}" (set RESEND_API_KEY, SENDGRID_API_KEY, or SMTP_HOST to deliver)`
+        `[email:dry_run] to=${to} subject="${subject}" — set RESEND_API_KEY, SENDGRID_API_KEY, or SMTP_HOST for real delivery`
       );
       providerMessageId = `dry_run_${emailId}`;
     }
@@ -81,13 +80,23 @@ export async function sendEmail({
       transport,
       status: transport === 'dry_run' ? 'dry_run' : 'sent',
       provider_message_id: providerMessageId,
+      ...(transport === 'dry_run'
+        ? {
+            warning:
+              'Email not delivered (dry_run). Configure RESEND_API_KEY, SENDGRID_API_KEY, or SMTP_*.',
+          }
+        : {}),
     };
   } catch (err) {
+    const message = String(err.message || err).slice(0, 1000);
     await query(
       `UPDATE email_outbox SET status = 'failed', error_message = $1 WHERE email_id = $2`,
-      [String(err.message || err).slice(0, 1000), emailId]
+      [message, emailId]
     );
-    throw err;
+    throw Object.assign(
+      new Error(`Email send failed via ${transport}: ${message}`),
+      { status: 502, code: 'EMAIL_SEND_FAILED', cause: err }
+    );
   }
 }
 
@@ -102,7 +111,7 @@ async function sendViaResend({ from, to, subject, html }) {
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(body.message || `Resend failed (${res.status})`);
+    throw new Error(body.message || `Resend HTTP ${res.status}`);
   }
   return body.id || null;
 }
@@ -123,7 +132,7 @@ async function sendViaSendGrid({ from, to, subject, html }) {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`SendGrid failed (${res.status}): ${text.slice(0, 200)}`);
+    throw new Error(`SendGrid HTTP ${res.status}: ${text.slice(0, 200)}`);
   }
   return res.headers.get('x-message-id') || null;
 }
@@ -133,13 +142,12 @@ async function sendViaSmtp({ from, to, subject, html }) {
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT || 587),
     secure: process.env.SMTP_SECURE === 'true',
-    auth:
-      process.env.SMTP_USER
-        ? {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS || '',
-          }
-        : undefined,
+    auth: process.env.SMTP_USER
+      ? {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS || '',
+        }
+      : undefined,
   });
   const info = await transporter.sendMail({ from, to, subject, html });
   return info.messageId || null;

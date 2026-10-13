@@ -11,6 +11,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
+import { FlowStepper } from '../../src/components/FlowStepper';
 import { API_URL, signPublicProposal } from '../../src/api/client';
 
 export default function SignScreen() {
@@ -50,9 +51,10 @@ export default function SignScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.h1}>Accept & sign</Text>
+      <FlowStepper active="portal" />
+      <Text style={styles.h1}>Client portal · e-sign</Text>
       <Text style={styles.sub}>
-        Tokenized proposal · web pad also at {API_URL}/p/{token}
+        Secure token link · also {API_URL}/p/{token}
       </Text>
 
       {done ? (

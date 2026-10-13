@@ -6,6 +6,7 @@ import {
   listAccessibleTenants,
   switchTenantContext,
 } from '../services/masterTenant.js';
+import { clientMeta, writeAuditLog } from '../services/auditLog.js';
 
 const router = Router();
 
@@ -17,6 +18,15 @@ router.post('/register', async (req, res, next) => {
       fullName: req.body.full_name,
       tenantId: req.body.tenant_id,
       createTenantName: req.body.company_name,
+    });
+    const meta = clientMeta(req);
+    await writeAuditLog({
+      tenantId: result.user.tenant_id,
+      userId: result.user.user_id,
+      action: 'auth.register',
+      resourceType: 'user',
+      resourceId: result.user.user_id,
+      ...meta,
     });
     res.status(201).json(result);
   } catch (err) {
@@ -30,6 +40,15 @@ router.post('/login', async (req, res, next) => {
       email: req.body.email,
       password: req.body.password,
       tenantId: req.body.tenant_id,
+    });
+    const meta = clientMeta(req);
+    await writeAuditLog({
+      tenantId: result.user.tenant_id,
+      userId: result.user.user_id,
+      action: 'auth.login',
+      resourceType: 'user',
+      resourceId: result.user.user_id,
+      ...meta,
     });
     res.json(result);
   } catch (err) {
@@ -89,6 +108,16 @@ router.post('/switch-tenant', requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'tenant_id is required' });
     }
     const result = await switchTenantContext(req.user.user_id, tenantId);
+    const meta = clientMeta(req);
+    await writeAuditLog({
+      tenantId,
+      userId: req.user.user_id,
+      action: 'auth.switch_tenant',
+      resourceType: 'tenant',
+      resourceId: tenantId,
+      ...meta,
+      meta: { from_tenant_id: req.user.tenant_id },
+    });
     res.json(result);
   } catch (err) {
     next(err);

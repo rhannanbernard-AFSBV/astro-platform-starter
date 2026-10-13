@@ -34,6 +34,11 @@
         }
       ]
     ],
+    "extra": {
+      "eas": {
+        "projectId": "REPLACE_AFTER_eas_init"
+      }
+    },
     "experiments": {
       "typedRoutes": true
     }

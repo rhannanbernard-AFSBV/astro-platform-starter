@@ -14,6 +14,7 @@ import {
 import { Redirect, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { API_URL, createScan, healthCheck } from '../src/api/client';
+import { FlowStepper } from '../src/components/FlowStepper';
 import { useBid } from '../src/state/BidContext';
 import { useAuth } from '../src/state/AuthContext';
 
@@ -92,12 +93,11 @@ export default function ScanScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.hero}>
         <Text style={styles.brand}>OmniClean</Text>
-        <Text style={styles.tagline}>
-          Site walkthrough → ISSA bid → crew checklist → proposal
-        </Text>
+        <Text style={styles.tagline}>Scan the site. Price the bid. Send the portal.</Text>
         <Text style={styles.meta}>
-          {tenantName || 'Tenant'} · {user?.email} · {apiNote}
+          {tenantName || 'Tenant'} · {user?.email}
         </Text>
+        <Text style={styles.meta}>{apiNote}</Text>
         <View style={styles.heroActions}>
           <Pressable onPress={() => router.push('/admin')}>
             <Text style={styles.logoutText}>Admin</Text>
@@ -113,6 +113,9 @@ export default function ScanScreen() {
           </Pressable>
         </View>
       </View>
+
+      <FlowStepper active="scan" />
+      <Text style={styles.stepHint}>1 · Capture walkthrough spatial data</Text>
 
       <Text style={styles.label}>Client name</Text>
       <TextInput style={styles.input} value={clientName} onChangeText={setClientName} />
@@ -142,29 +145,29 @@ export default function ScanScreen() {
 
       <Pressable
         style={[styles.primaryBtn, busy && styles.disabled]}
-        disabled={busy}
-        onPress={() => runDemo(true)}
+        disabled={busy || !imageUri}
+        onPress={() => runDemo(false)}
       >
         {busy ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.primaryBtnText}>Run demo scan (mock spatial)</Text>
+          <Text style={styles.primaryBtnText}>
+            {imageUri ? 'Scan with GPT-4o → Bid' : 'Attach photo to scan live'}
+          </Text>
         )}
       </Pressable>
 
       <Pressable
         style={[styles.outlineBtn, busy && styles.disabled]}
-        disabled={busy || !imageUri}
-        onPress={() => runDemo(false)}
+        disabled={busy}
+        onPress={() => runDemo(true)}
       >
-        <Text style={styles.outlineBtnText}>
-          Scan with GPT-4o vision (needs API key + photo)
-        </Text>
+        <Text style={styles.outlineBtnText}>Skip photo · demo scan (mock)</Text>
       </Pressable>
 
       <Text style={styles.footnote}>
-        Bidding math always runs in the API with Decimal arithmetic — never in the LLM.
-        Scans require a JWT; tenant_id is taken from the authenticated principal.
+        Live scan needs OPENAI_API_KEY on the API. Bid math always uses Decimal on the
+        server — never the LLM.
       </Text>
     </ScrollView>
   );
@@ -191,6 +194,13 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   logoutText: { color: '#ccfbf1', fontWeight: '600', fontSize: 13 },
+  stepHint: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#134e4a',
+    marginBottom: 4,
+    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' }),
+  },
   label: { marginTop: 8, fontSize: 13, color: '#475569', fontWeight: '600' },
   input: {
     backgroundColor: '#fff',

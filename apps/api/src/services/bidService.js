@@ -3,7 +3,10 @@ import { newAccessToken } from './auth.js';
 import { calculateBidLedger } from './biddingMath.js';
 import { buildCrewChecklist } from './checklist.js';
 import { buildProposalCopy, buildProposalEmailHtml } from './proposalCopy.js';
-import { proposalSecureUrl } from './proposalActions.js';
+import {
+  proposalSecureUrl,
+  proposalTokenTtlDays,
+} from './proposalActions.js';
 import { processWalkthroughImage, mockSpatialExtraction } from './visionExtract.js';
 import { notifyNewChecklist } from './pushNotify.js';
 
@@ -219,9 +222,15 @@ export async function saveAIBidToDatabase({
       detailedScope: aiResponse.proposal_copy.detailed_scope_of_work,
     });
 
+    const ttlDays = Math.max(1, proposalTokenTtlDays());
     const propIns = await tx(
-      `INSERT INTO proposals (bid_id, status, proposal_text, email_html, access_token)
-       VALUES ($1, 'Draft', $2, $3, $4)
+      `INSERT INTO proposals (
+         bid_id, status, proposal_text, email_html, access_token,
+         access_token_created_at, access_token_expires_at
+       ) VALUES (
+         $1, 'Draft', $2, $3, $4,
+         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '${ttlDays} days'
+       )
        RETURNING *`,
       [bid.bid_id, proposalText, emailHtml, accessToken]
     );

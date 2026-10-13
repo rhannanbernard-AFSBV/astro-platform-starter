@@ -1,0 +1,179 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+/**
+ * Marketing handoff into OmniClean login → scan flow.
+ * Override at build time with PUBLIC_OMNICLEAN_APP_URL (Expo web or deep link).
+ */
+const appUrl =
+    import.meta.env.PUBLIC_OMNICLEAN_APP_URL?.trim() ||
+    'http://localhost:8081/login';
+const apiDocsHint =
+    import.meta.env.PUBLIC_OMNICLEAN_API_URL?.trim() || 'http://localhost:4000';
+---
+
+<Layout
+    title="OmniClean AI Scanner"
+    chrome={false}
+    description="Walkthrough scan → ISSA bid → crew checklist → client portal."
+>
+    <main class="oc-page">
+        <div class="oc-plane" aria-hidden="true"></div>
+        <section class="oc-hero">
+            <p class="oc-brand">OmniClean</p>
+            <h1 class="oc-headline">Scan the site. Price the bid.</h1>
+            <p class="oc-support">
+                GPT-4o reads the walkthrough. Decimal math prices the contract. Clients
+                sign in the portal.
+            </p>
+            <div class="oc-cta">
+                <a class="oc-btn-primary" href={appUrl}>Open app · Sign in to scan</a>
+                <a class="oc-btn-ghost" href={`${appUrl.includes('login') ? appUrl : `${appUrl.replace(/\/$/, '')}/login`}`}>
+                    Estimator login
+                </a>
+            </div>
+            <p class="oc-meta">
+                Flow: Login → Scan → Bid → Checklist → Portal · API {apiDocsHint}
+            </p>
+        </section>
+    </main>
+</Layout>
+
+<style>
+    .oc-page {
+        --oc-ink: #042f2e;
+        --oc-teal: #0f766e;
+        --oc-mint: #99f6e4;
+        --oc-foam: #ecfdf5;
+        --oc-sand: #f0fdfa;
+        min-height: 100vh;
+        position: relative;
+        overflow: hidden;
+        color: var(--oc-ink);
+        font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+        background:
+            radial-gradient(120% 80% at 10% 0%, #5eead4 0%, transparent 45%),
+            radial-gradient(90% 70% at 100% 20%, #134e4a 0%, transparent 50%),
+            linear-gradient(165deg, #042f2e 0%, #0f766e 42%, #99f6e4 100%);
+    }
+
+    .oc-plane {
+        position: absolute;
+        inset: 0;
+        background-image:
+            linear-gradient(rgba(236, 253, 245, 0.06) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(236, 253, 245, 0.06) 1px, transparent 1px);
+        background-size: 48px 48px;
+        mask-image: linear-gradient(to bottom, black 40%, transparent 95%);
+        pointer-events: none;
+    }
+
+    .oc-hero {
+        position: relative;
+        z-index: 1;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: clamp(1.5rem, 5vw, 4rem);
+        max-width: 42rem;
+    }
+
+    .oc-brand {
+        margin: 0;
+        font-size: clamp(2.75rem, 8vw, 4.5rem);
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        color: var(--oc-foam);
+        line-height: 1;
+        animation: oc-rise 0.7s ease-out both;
+    }
+
+    .oc-headline {
+        margin: 1.25rem 0 0;
+        font-size: clamp(1.35rem, 3.5vw, 1.85rem);
+        font-weight: 600;
+        color: var(--oc-mint);
+        line-height: 1.25;
+        animation: oc-rise 0.7s ease-out 0.12s both;
+    }
+
+    .oc-support {
+        margin: 1rem 0 0;
+        max-width: 28rem;
+        font-size: 1.05rem;
+        line-height: 1.55;
+        color: rgba(236, 253, 245, 0.88);
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        animation: oc-rise 0.7s ease-out 0.22s both;
+    }
+
+    .oc-cta {
+        margin-top: 1.75rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        animation: oc-rise 0.7s ease-out 0.32s both;
+    }
+
+    .oc-btn-primary,
+    .oc-btn-ghost {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.9rem 1.35rem;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-size: 0.95rem;
+        font-weight: 650;
+        text-decoration: none;
+        border-radius: 2px;
+        transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease;
+    }
+
+    .oc-btn-primary {
+        background: var(--oc-foam);
+        color: var(--oc-ink);
+    }
+
+    .oc-btn-primary:hover {
+        transform: translateY(-2px);
+        background: #fff;
+    }
+
+    .oc-btn-ghost {
+        border: 1.5px solid rgba(236, 253, 245, 0.55);
+        color: var(--oc-foam);
+        background: transparent;
+    }
+
+    .oc-btn-ghost:hover {
+        background: rgba(236, 253, 245, 0.1);
+        transform: translateY(-2px);
+    }
+
+    .oc-meta {
+        margin-top: 1.5rem;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-size: 0.8rem;
+        color: rgba(204, 251, 241, 0.75);
+        animation: oc-rise 0.7s ease-out 0.42s both;
+    }
+
+    @keyframes oc-rise {
+        from {
+            opacity: 0;
+            transform: translateY(14px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @media (max-width: 640px) {
+        .oc-cta {
+            flex-direction: column;
+            align-items: stretch;
+        }
+    }
+</style>
