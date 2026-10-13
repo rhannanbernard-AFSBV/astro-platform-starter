@@ -5,6 +5,10 @@ import {
   publicBaseUrl,
   signProposal,
 } from '../services/proposalActions.js';
+import {
+  requestSignOtp,
+  verifySignOtp,
+} from '../services/proposalSignAuth.js';
 import { buildProposalPdfBuffer } from '../services/proposalPdf.js';
 import { clientMeta, writeAuditLog } from '../services/auditLog.js';
 import { signedAbsoluteUrl } from '../services/signedUrls.js';
@@ -44,7 +48,32 @@ router.get('/api/public/proposals/:token/pdf', async (req, res, next) => {
   }
 });
 
-/** Sign via JSON API */
+/** Request email OTP before e-sign */
+router.post('/api/public/proposals/:token/request-otp', async (req, res, next) => {
+  try {
+    const result = await requestSignOtp({
+      accessToken: req.params.token,
+      signerEmail: req.body.signer_email || req.body.email,
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/api/public/proposals/:token/verify-otp', async (req, res, next) => {
+  try {
+    const result = await verifySignOtp({
+      accessToken: req.params.token,
+      otp: req.body.otp || req.body.code,
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Sign via JSON API (requires otp or sign_token from verify-otp) */
 router.post('/api/public/proposals/:token/sign', async (req, res, next) => {
   try {
     const result = await signProposal({
@@ -53,6 +82,8 @@ router.post('/api/public/proposals/:token/sign', async (req, res, next) => {
       signerEmail: req.body.signer_email,
       signatureDataUrl: req.body.signature_data_url,
       typedSignature: req.body.typed_signature,
+      signToken: req.body.sign_token,
+      otp: req.body.otp,
     });
     const meta = clientMeta(req);
     await writeAuditLog({
@@ -113,6 +144,30 @@ router.get('/p/:token/pdf', async (req, res, next) => {
   }
 });
 
+router.post('/p/:token/request-otp', async (req, res, next) => {
+  try {
+    const result = await requestSignOtp({
+      accessToken: req.params.token,
+      signerEmail: req.body.signer_email || req.body.email,
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/p/:token/verify-otp', async (req, res, next) => {
+  try {
+    const result = await verifySignOtp({
+      accessToken: req.params.token,
+      otp: req.body.otp || req.body.code,
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post('/p/:token/sign', async (req, res, next) => {
   try {
     const result = await signProposal({
@@ -121,6 +176,8 @@ router.post('/p/:token/sign', async (req, res, next) => {
       signerEmail: req.body.signer_email,
       signatureDataUrl: req.body.signature_data_url,
       typedSignature: req.body.typed_signature || req.body.signer_name,
+      signToken: req.body.sign_token,
+      otp: req.body.otp,
     });
     if (req.is('application/json')) {
       return res.json({
@@ -170,6 +227,10 @@ function serializePublicProposal(row) {
     financial_ledger: payload.financial_ledger || null,
     proposal_copy: payload.proposal_copy || null,
     crew_checklist: payload.crew_checklist || null,
+    sign_auth_required:
+      (process.env.PROPOSAL_SIGN_REQUIRE_OTP || 'true').toLowerCase() !== 'false' &&
+      row.status !== 'Signed',
+    access_token_revoked: Boolean(row.access_token_revoked_at),
   };
 }
 
@@ -283,16 +344,24 @@ function renderClientPortal(row, token) {
         ${
           already
             ? `<div class="done"><strong>Already signed</strong> by ${escapeHtml(row.signer_name || '')} on ${escapeHtml(String(row.signed_at || ''))}.</div>${sigImg}`
-            : `<form id="signForm" method="post" action="/p/${escapeHtml(token)}/sign">
+            : `<p class="muted" style="font-family:system-ui,sans-serif;font-size:13px;">Signing requires an email one-time code so forwarded portal links cannot be signed by someone else forever.</p>
+          <form id="signForm">
           <label>Full name</label>
           <input name="signer_name" id="signer_name" required placeholder="Authorized signer" />
-          <label>Email</label>
-          <input name="signer_email" type="email" placeholder="you@company.com" />
+          <label>Email (for OTP)</label>
+          <input name="signer_email" id="signer_email" type="email" required placeholder="you@company.com" />
+          <div class="actions">
+            <button type="button" id="sendOtp" class="secondary">Send signing code</button>
+          </div>
+          <label>Signing code (from email)</label>
+          <input name="otp" id="otp" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" />
+          <p id="otpStatus" class="muted" style="font-family:system-ui,sans-serif;font-size:12px;"></p>
           <label>Type your signature</label>
           <input name="typed_signature" id="typed_signature" placeholder="Type name as signature" />
           <label>Or draw signature</label>
           <canvas id="pad" width="640" height="140"></canvas>
           <input type="hidden" name="signature_data_url" id="signature_data_url" />
+          <input type="hidden" name="sign_token" id="sign_token" />
           <div class="actions">
             <button type="submit">Accept &amp; sign</button>
             <button type="button" class="secondary" id="clearPad">Clear pad</button>
@@ -305,6 +374,7 @@ function renderClientPortal(row, token) {
   </div>
   <script>
     (function() {
+      var token = ${JSON.stringify(token)};
       var canvas = document.getElementById('pad');
       if (!canvas) return;
       var ctx = canvas.getContext('2d');
@@ -323,11 +393,51 @@ function renderClientPortal(row, token) {
       canvas.addEventListener('touchstart', start, {passive:false}); canvas.addEventListener('touchmove', move, {passive:false});
       canvas.addEventListener('touchend', end);
       document.getElementById('clearPad').onclick = function() { ctx.clearRect(0,0,canvas.width,canvas.height); };
-      document.getElementById('signForm').addEventListener('submit', function() {
+      var otpStatus = document.getElementById('otpStatus');
+      document.getElementById('sendOtp').onclick = async function() {
+        var email = document.getElementById('signer_email').value;
+        otpStatus.textContent = 'Sending code…';
+        try {
+          var r = await fetch('/p/' + token + '/request-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ signer_email: email })
+          });
+          var body = await r.json();
+          if (!r.ok) throw new Error(body.error || 'OTP failed');
+          otpStatus.textContent = body.dev_otp
+            ? ('Code sent (dev): ' + body.dev_otp)
+            : ('Code sent to ' + (body.sent_to || email));
+        } catch (err) {
+          otpStatus.textContent = err.message || 'OTP failed';
+        }
+      };
+      document.getElementById('signForm').addEventListener('submit', async function(ev) {
+        ev.preventDefault();
         var blank = !ctx.getImageData(0,0,canvas.width,canvas.height).data.some(function(c,i){ return i%4!==3 && c!==0; });
         if (!blank) document.getElementById('signature_data_url').value = canvas.toDataURL('image/png');
         var typed = document.getElementById('typed_signature');
         if (!typed.value) typed.value = document.getElementById('signer_name').value;
+        otpStatus.textContent = 'Signing…';
+        try {
+          var r = await fetch('/p/' + token + '/sign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              signer_name: document.getElementById('signer_name').value,
+              signer_email: document.getElementById('signer_email').value,
+              typed_signature: typed.value,
+              signature_data_url: document.getElementById('signature_data_url').value || undefined,
+              otp: document.getElementById('otp').value,
+              sign_token: document.getElementById('sign_token').value || undefined
+            })
+          });
+          var body = await r.json();
+          if (!r.ok) throw new Error(body.error || 'Sign failed');
+          window.location.reload();
+        } catch (err) {
+          otpStatus.textContent = err.message || 'Sign failed';
+        }
       });
     })();
   </script>

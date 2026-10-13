@@ -7,7 +7,10 @@ import {
   proposalSecureUrl,
   proposalTokenTtlDays,
 } from './proposalActions.js';
-import { processWalkthroughImage, mockSpatialExtraction } from './visionExtract.js';
+import {
+  processWalkthroughMedia,
+  mockSpatialExtraction,
+} from './visionExtract.js';
 import { notifyNewChecklist } from './pushNotify.js';
 
 async function loadTenantContext(tenantId) {
@@ -79,6 +82,9 @@ async function loadTenantContext(tenantId) {
 
 /**
  * Full demo path: spatial extract → Decimal bid math → persist bid/checklist/proposal.
+ * Multi-frame: pass `frames` (image buffers). Optional `videoMeta` for coverage notes.
+ * When commitPricing=false, provisional ledger is stored but pricing_committed stays false
+ * until POST /api/bids/:id/calibrate.
  */
 export async function createBidFromWalkthrough({
   tenantId,
@@ -87,10 +93,20 @@ export async function createBidFromWalkthrough({
   frequency = '5x / week',
   imageBuffer,
   mimeType,
+  frames,
+  videoMeta = null,
   hintSqFt,
   useMock = false,
+  commitPricing = true,
 }) {
   const ctx = await loadTenantContext(tenantId);
+  const frameList =
+    Array.isArray(frames) && frames.length
+      ? frames
+      : imageBuffer?.length
+        ? [{ buffer: imageBuffer, mimeType: mimeType || 'image/jpeg' }]
+        : [];
+
   const modifiers = {
     client_name: clientName,
     property_address: propertyAddress,
@@ -98,13 +114,15 @@ export async function createBidFromWalkthrough({
     jurisdiction: ctx.tenant.jurisdiction_code,
     hint_sq_ft: hintSqFt,
     facility_profile: ctx.tenant.facility_density_code,
+    frame_count: Math.max(1, frameList.length || 1),
+    video_received: Boolean(videoMeta),
   };
 
   let extraction;
-  if (useMock || !imageBuffer) {
+  if (useMock || !frameList.length) {
     extraction = mockSpatialExtraction(modifiers);
   } else {
-    extraction = await processWalkthroughImage(imageBuffer, mimeType, modifiers);
+    extraction = await processWalkthroughMedia(frameList, modifiers);
   }
 
   const mathPart = calculateBidLedger({
@@ -144,6 +162,10 @@ export async function createBidFromWalkthrough({
       property_notes: extraction.property_notes,
       jurisdiction_code: ctx.tenant.jurisdiction_code,
       scale_calibration: extraction._scale_calibration,
+      frame_count: extraction._frame_count || frameList.length || 1,
+      video_received: Boolean(videoMeta || extraction._video_received),
+      video: videoMeta || null,
+      pricing_committed: Boolean(commitPricing),
     },
   };
 
@@ -154,6 +176,7 @@ export async function createBidFromWalkthrough({
     frequency,
     aiResponse: payload,
     tenant: ctx.tenant,
+    pricingCommitted: Boolean(commitPricing),
   });
 
   try {
@@ -162,7 +185,7 @@ export async function createBidFromWalkthrough({
     console.warn('[push] checklist notify failed', err.message);
   }
 
-  return { ...saved, payload };
+  return { ...saved, payload, pricing_committed: Boolean(commitPricing) };
 }
 
 /**
@@ -175,6 +198,7 @@ export async function saveAIBidToDatabase({
   frequency,
   aiResponse,
   tenant,
+  pricingCommitted = true,
 }) {
   const ledger = aiResponse.financial_ledger;
   const spatial = aiResponse.spatial_summary;
@@ -183,8 +207,10 @@ export async function saveAIBidToDatabase({
     const bidIns = await tx(
       `INSERT INTO bids (
          tenant_id, client_name, property_address, frequency,
-         total_sq_ft, monthly_price, shift_hours, raw_ai_payload
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)
+         total_sq_ft, monthly_price, shift_hours, raw_ai_payload,
+         pricing_committed, calibrated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,
+         CASE WHEN $9 THEN CURRENT_TIMESTAMP ELSE NULL END)
        RETURNING *`,
       [
         tenantId,
@@ -195,6 +221,7 @@ export async function saveAIBidToDatabase({
         ledger.recommended_monthly_invoice_price,
         ledger.recommended_shift_hours,
         JSON.stringify(aiResponse),
+        Boolean(pricingCommitted),
       ]
     );
     const bid = bidIns.rows[0];

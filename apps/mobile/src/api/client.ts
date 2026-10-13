@@ -52,15 +52,22 @@ export type AuthUser = {
   home_tenant_id?: number;
 };
 
+export type FixtureRow = {
+  fixture_type: string;
+  count: number;
+  labor_intensity?: string;
+};
+
 export type ScanResponse = {
   bid_id: number;
   proposal_id: number;
   client_name?: string;
   property_address?: string;
+  pricing_committed?: boolean;
   spatial_summary: {
     total_cleanable_sq_ft: number;
     substrate_breakdown: { material: string; percentage: number }[];
-    detected_fixtures: { fixture_type: string; count: number }[];
+    detected_fixtures: FixtureRow[];
   };
   financial_ledger: {
     recommended_shift_hours: number;
@@ -72,6 +79,8 @@ export type ScanResponse = {
     tot_rate: number;
     consumables_rate: number;
     labor_burden_multiplier: number;
+    fixture_intensity_weighted?: number;
+    density_factor?: number;
     dual_currency?: {
       currency_code: string;
       formatted_monthly: string;
@@ -97,7 +106,13 @@ export type ScanResponse = {
     is_high_risk?: boolean;
     ai_audit_prompt?: string | null;
   }[];
-  meta: { extraction_source: string; jurisdiction_code: string };
+  meta: {
+    extraction_source: string;
+    jurisdiction_code: string;
+    frame_count?: number;
+    video_received?: boolean;
+    pricing_committed?: boolean;
+  };
   proposal: {
     status: string;
     email_html: string;
@@ -182,22 +197,45 @@ export async function createScan(input: {
   frequency: string;
   hintSqFt?: string;
   imageUri?: string | null;
+  imageUris?: string[];
+  videoUri?: string | null;
   imageName?: string;
   imageType?: string;
   mock?: boolean;
+  /** When true, skip calibrate gate (scripts). Mobile defaults to false. */
+  commitPricing?: boolean;
 }): Promise<ScanResponse> {
   const form = new FormData();
   form.append('client_name', input.clientName);
   form.append('property_address', input.propertyAddress);
   form.append('frequency', input.frequency);
   if (input.hintSqFt) form.append('hint_sq_ft', input.hintSqFt);
-  if (input.mock || !input.imageUri) form.append('mock', '1');
+  if (input.commitPricing) form.append('commit_pricing', '1');
 
-  if (input.imageUri && !input.mock) {
-    form.append('image', {
-      uri: input.imageUri,
-      name: input.imageName || 'walkthrough.jpg',
-      type: input.imageType || 'image/jpeg',
+  const uris =
+    input.imageUris?.length
+      ? input.imageUris
+      : input.imageUri
+        ? [input.imageUri]
+        : [];
+
+  if (input.mock || (!uris.length && !input.videoUri)) form.append('mock', '1');
+
+  if (!input.mock && uris.length) {
+    uris.forEach((uri, i) => {
+      const field = i === 0 && uris.length === 1 ? 'image' : 'images';
+      form.append(field, {
+        uri,
+        name: input.imageName || `walkthrough-${i + 1}.jpg`,
+        type: input.imageType || 'image/jpeg',
+      } as unknown as Blob);
+    });
+  }
+  if (!input.mock && input.videoUri) {
+    form.append('video', {
+      uri: input.videoUri,
+      name: 'walkthrough.mp4',
+      type: 'video/mp4',
     } as unknown as Blob);
   }
 
@@ -212,6 +250,57 @@ export async function createScan(input: {
     throw new Error(body.error || `Scan failed (${res.status})`);
   }
   return res.json();
+}
+
+export async function calibrateBid(
+  bidId: number,
+  input: {
+    total_cleanable_sq_ft: number;
+    detected_fixtures: FixtureRow[];
+    substrate_breakdown?: { material: string; percentage: number }[];
+  }
+): Promise<ScanResponse> {
+  const res = await fetch(`${API_URL}/api/bids/${bidId}/calibrate`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(input),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Calibrate failed (${res.status})`);
+  return {
+    ...body,
+    bid_id: body.bid_id ?? bidId,
+    pricing_committed: true,
+  } as ScanResponse;
+}
+
+export async function requestProposalSignOtp(token: string, signerEmail: string) {
+  const res = await fetch(`${API_URL}/api/public/proposals/${token}/request-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ signer_email: signerEmail }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `OTP request failed (${res.status})`);
+  return body as {
+    status: string;
+    sent_to?: string;
+    expires_at?: string;
+    transport?: string;
+    dev_otp?: string;
+    message?: string;
+  };
+}
+
+export async function verifyProposalSignOtp(token: string, otp: string) {
+  const res = await fetch(`${API_URL}/api/public/proposals/${token}/verify-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ otp }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `OTP verify failed (${res.status})`);
+  return body as { status: string; sign_token: string; expires_at: string };
 }
 
 export async function sendProposal(
@@ -245,6 +334,8 @@ export async function signPublicProposal(
     signerEmail?: string;
     typedSignature?: string;
     signatureDataUrl?: string;
+    otp?: string;
+    signToken?: string;
   }
 ) {
   const res = await fetch(`${API_URL}/api/public/proposals/${token}/sign`, {
@@ -255,6 +346,8 @@ export async function signPublicProposal(
       signer_email: input.signerEmail,
       typed_signature: input.typedSignature,
       signature_data_url: input.signatureDataUrl,
+      otp: input.otp,
+      sign_token: input.signToken,
     }),
   });
   const body = await res.json().catch(() => ({}));

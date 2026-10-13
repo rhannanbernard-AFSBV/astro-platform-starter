@@ -27,7 +27,8 @@ export default function ScanScreen() {
   const [frequency, setFrequency] = useState('5x / week');
   // Empty by default — do not lock mock-scale pricing at 12500
   const [hintSqFt, setHintSqFt] = useState('');
-  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [imageUris, setImageUris] = useState<string[]>([]);
+  const [videoUri, setVideoUri] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [apiNote, setApiNote] = useState(`API: ${API_URL}`);
 
@@ -40,7 +41,7 @@ export default function ScanScreen() {
     );
   }
 
-  async function pickFromLibrary() {
+  async function pickFromLibrary(multi = true) {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Alert.alert('Permission needed', 'Allow photo access for walkthrough uploads.');
@@ -49,9 +50,29 @@ export default function ScanScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.85,
+      allowsMultipleSelection: multi,
+      selectionLimit: 12,
+    });
+    if (!result.canceled && result.assets?.length) {
+      setImageUris((prev) =>
+        [...prev, ...result.assets.map((a) => a.uri)].slice(0, 12)
+      );
+    }
+  }
+
+  async function pickVideo() {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permission needed', 'Allow media access for walkthrough video.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      quality: 0.8,
+      videoMaxDuration: 120,
     });
     if (!result.canceled && result.assets[0]) {
-      setImageUri(result.assets[0].uri);
+      setVideoUri(result.assets[0].uri);
     }
   }
 
@@ -66,7 +87,7 @@ export default function ScanScreen() {
       allowsEditing: false,
     });
     if (!result.canceled && result.assets[0]) {
-      setImageUri(result.assets[0].uri);
+      setImageUris((prev) => [...prev, result.assets[0].uri].slice(0, 12));
     }
   }
 
@@ -86,16 +107,21 @@ export default function ScanScreen() {
         setApiNote(`Cannot reach API at ${API_URL}`);
       }
 
+      // Live GPT-4o needs image frames; video-only falls back to mock coverage path
+      const liveNeedsFrames = !mock && imageUris.length === 0 && Boolean(videoUri);
       const scan = await createScan({
         clientName: clientName.trim(),
         propertyAddress: address.trim(),
         frequency: frequency.trim(),
         hintSqFt: hintSqFt.trim() || undefined,
-        imageUri,
-        mock: mock || !imageUri,
+        imageUris: mock || liveNeedsFrames ? undefined : imageUris,
+        videoUri: mock ? undefined : videoUri,
+        mock: mock || liveNeedsFrames || (!imageUris.length && !videoUri),
+        // Defer pricing until calibrate screen
+        commitPricing: false,
       });
       setScan(scan);
-      router.push('/ledger');
+      router.push('/calibrate');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Scan failed';
       if (Platform.OS === 'web') window.alert(message);
@@ -131,7 +157,7 @@ export default function ScanScreen() {
       </View>
 
       <FlowStepper active="scan" />
-      <Text style={styles.stepHint}>1 · Capture walkthrough spatial data</Text>
+      <Text style={styles.stepHint}>1 · Multi-frame walkthrough (photos + optional video)</Text>
 
       <Text style={styles.label}>Client name</Text>
       <TextInput style={styles.input} value={clientName} onChangeText={setClientName} />
@@ -142,43 +168,68 @@ export default function ScanScreen() {
       <Text style={styles.label}>Frequency</Text>
       <TextInput style={styles.input} value={frequency} onChangeText={setFrequency} />
 
-      <Text style={styles.label}>Calibrated sq ft (optional)</Text>
+      <Text style={styles.label}>Calibrated sq ft hint (optional)</Text>
       <TextInput
         style={styles.input}
         value={hintSqFt}
         onChangeText={setHintSqFt}
         keyboardType="numeric"
-        placeholder="Leave blank — use legend / vision scale"
+        placeholder="Leave blank — calibrate after extract"
       />
       <Text style={styles.calibHint}>
-        Only set when you measured the floor yourself. Blank uses deterministic
-        pixels_per_foot (when available) or vision estimate — never a silent 12,500 default.
+        Prefer the calibrate step after scan. Hint only overrides vision when you already
+        measured the floor.
       </Text>
 
       <View style={styles.captureRow}>
         <Pressable style={styles.secondaryBtn} onPress={captureCamera}>
-          <Text style={styles.secondaryBtnText}>Camera capture</Text>
+          <Text style={styles.secondaryBtnText}>Add camera shot</Text>
         </Pressable>
-        <Pressable style={styles.secondaryBtn} onPress={pickFromLibrary}>
-          <Text style={styles.secondaryBtnText}>
-            {imageUri ? 'Change from library' : 'Photo library'}
-          </Text>
+        <Pressable style={styles.secondaryBtn} onPress={() => pickFromLibrary(true)}>
+          <Text style={styles.secondaryBtnText}>Add photos</Text>
         </Pressable>
       </View>
-      {imageUri ? (
-        <Image source={{ uri: imageUri }} style={styles.preview} />
+      <Pressable style={[styles.secondaryBtn, { marginTop: 8 }]} onPress={pickVideo}>
+        <Text style={styles.secondaryBtnText}>
+          {videoUri ? 'Change walkthrough video' : 'Add walkthrough video'}
+        </Text>
+      </Pressable>
+      {imageUris.length ? (
+        <ScrollView horizontal style={styles.previewRow}>
+          {imageUris.map((uri) => (
+            <Image key={uri} source={{ uri }} style={styles.previewThumb} />
+          ))}
+        </ScrollView>
       ) : null}
+      {imageUris.length || videoUri ? (
+        <Text style={styles.calibHint}>
+          {imageUris.length} photo(s)
+          {videoUri ? ' · video attached' : ''} · max 12 frames to API
+        </Text>
+      ) : null}
+      {(imageUris.length > 0 || videoUri) && (
+        <Pressable
+          onPress={() => {
+            setImageUris([]);
+            setVideoUri(null);
+          }}
+        >
+          <Text style={styles.clearMedia}>Clear media</Text>
+        </Pressable>
+      )}
 
       <Pressable
         style={[styles.primaryBtn, busy && styles.disabled]}
-        disabled={busy || !imageUri}
+        disabled={busy || (!imageUris.length && !videoUri)}
         onPress={() => runDemo(false)}
       >
         {busy ? (
           <ActivityIndicator color="#fff" />
         ) : (
           <Text style={styles.primaryBtnText}>
-            {imageUri ? 'Scan with GPT-4o → Bid' : 'Attach photo to scan live'}
+            {imageUris.length || videoUri
+              ? 'Scan walkthrough → Calibrate'
+              : 'Attach photos/video to scan live'}
           </Text>
         )}
       </Pressable>
@@ -188,12 +239,13 @@ export default function ScanScreen() {
         disabled={busy}
         onPress={() => runDemo(true)}
       >
-        <Text style={styles.outlineBtnText}>Skip photo · demo scan (mock)</Text>
+        <Text style={styles.outlineBtnText}>Skip media · demo scan (mock) → Calibrate</Text>
       </Pressable>
 
       <Text style={styles.footnote}>
-        Live scan needs OPENAI_API_KEY on the API. Bid math always uses Decimal on the
-        server — never the LLM.
+        Live scan needs OPENAI_API_KEY. Multi-frame images go to GPT-4o; video is coverage
+        metadata (add photo frames for live vision). Bid math always uses Decimal on the
+        server.
       </Text>
     </ScrollView>
   );
@@ -240,13 +292,15 @@ const styles = StyleSheet.create({
   },
   calibHint: { color: '#64748b', fontSize: 12, lineHeight: 17, marginTop: 4 },
   captureRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  preview: {
-    width: '100%',
-    height: 160,
+  previewRow: { marginTop: 8, maxHeight: 88 },
+  previewThumb: {
+    width: 80,
+    height: 80,
     borderRadius: 4,
-    marginTop: 4,
+    marginRight: 8,
     backgroundColor: '#e2e8f0',
   },
+  clearMedia: { color: '#b45309', fontWeight: '600', marginTop: 4 },
   primaryBtn: {
     marginTop: 16,
     backgroundColor: '#0f766e',
@@ -254,7 +308,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     alignItems: 'center',
   },
-  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center' },
   outlineBtn: {
     marginTop: 10,
     borderWidth: 1.5,

@@ -12,7 +12,12 @@ import {
   Platform,
 } from 'react-native';
 import { FlowStepper } from '../../src/components/FlowStepper';
-import { API_URL, signPublicProposal } from '../../src/api/client';
+import {
+  API_URL,
+  requestProposalSignOtp,
+  signPublicProposal,
+  verifyProposalSignOtp,
+} from '../../src/api/client';
 
 export default function SignScreen() {
   const { token } = useLocalSearchParams<{ token: string }>();
@@ -20,12 +25,57 @@ export default function SignScreen() {
   const [signerName, setSignerName] = useState('');
   const [signerEmail, setSignerEmail] = useState('');
   const [typed, setTyped] = useState('');
+  const [otp, setOtp] = useState('');
+  const [signToken, setSignToken] = useState<string | null>(null);
+  const [otpNote, setOtpNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{
     status: string;
     signed_at: string;
     signature_url: string;
   } | null>(null);
+
+  async function sendOtp() {
+    if (!signerEmail.trim() || !signerEmail.includes('@')) {
+      Alert.alert('Email required', 'Enter the signer email to receive a signing code.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await requestProposalSignOtp(String(token), signerEmail.trim());
+      setOtpNote(
+        result.dev_otp
+          ? `Dev OTP: ${result.dev_otp}`
+          : `Code sent to ${result.sent_to || signerEmail}`
+      );
+      if (result.dev_otp) setOtp(result.dev_otp);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'OTP failed';
+      if (Platform.OS === 'web') window.alert(message);
+      else Alert.alert('OTP failed', message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verifyOtp() {
+    if (!otp.trim()) {
+      Alert.alert('Code required', 'Enter the email signing code.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await verifyProposalSignOtp(String(token), otp.trim());
+      setSignToken(result.sign_token);
+      setOtpNote('OTP verified — one-time sign token ready');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Verify failed';
+      if (Platform.OS === 'web') window.alert(message);
+      else Alert.alert('Verify failed', message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function submit() {
     if (!signerName.trim()) {
@@ -38,6 +88,8 @@ export default function SignScreen() {
         signerName: signerName.trim(),
         signerEmail: signerEmail.trim() || undefined,
         typedSignature: typed.trim() || signerName.trim(),
+        otp: otp.trim() || undefined,
+        signToken: signToken || undefined,
       });
       setDone(result);
     } catch (err) {
@@ -54,7 +106,7 @@ export default function SignScreen() {
       <FlowStepper active="portal" />
       <Text style={styles.h1}>Client portal · e-sign</Text>
       <Text style={styles.sub}>
-        Secure token link · also {API_URL}/p/{token}
+        Email OTP required · {API_URL}/p/{token}
       </Text>
 
       {done ? (
@@ -62,6 +114,9 @@ export default function SignScreen() {
           <Text style={styles.doneTitle}>Signed</Text>
           <Text style={styles.body}>
             Status {done.status} · {String(done.signed_at)}
+          </Text>
+          <Text style={styles.body}>
+            Portal link can still be viewed but cannot be used to re-sign.
           </Text>
           <Pressable style={styles.btn} onPress={() => router.back()}>
             <Text style={styles.btnText}>Back</Text>
@@ -79,6 +134,21 @@ export default function SignScreen() {
             value={signerEmail}
             onChangeText={setSignerEmail}
           />
+          <Pressable style={styles.outlineBtn} disabled={busy} onPress={sendOtp}>
+            <Text style={styles.outlineText}>Send signing code</Text>
+          </Pressable>
+          <Text style={styles.label}>Signing code</Text>
+          <TextInput
+            style={styles.input}
+            value={otp}
+            onChangeText={setOtp}
+            keyboardType="number-pad"
+            placeholder="6-digit OTP"
+          />
+          {otpNote ? <Text style={styles.otpNote}>{otpNote}</Text> : null}
+          <Pressable style={styles.outlineBtn} disabled={busy} onPress={verifyOtp}>
+            <Text style={styles.outlineText}>Verify code → one-time token</Text>
+          </Pressable>
           <Text style={styles.label}>Typed signature</Text>
           <TextInput
             style={styles.input}
@@ -117,6 +187,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 16,
   },
+  otpNote: { marginTop: 6, color: '#0f766e', fontSize: 12, fontWeight: '600' },
   btn: {
     marginTop: 18,
     backgroundColor: '#0f766e',
@@ -125,6 +196,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   btnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
+  outlineBtn: {
+    marginTop: 10,
+    borderWidth: 1.5,
+    borderColor: '#0f766e',
+    paddingVertical: 12,
+    borderRadius: 4,
+    alignItems: 'center',
+  },
+  outlineText: { color: '#0f766e', fontWeight: '600' },
   done: {
     backgroundColor: '#ecfdf5',
     padding: 16,

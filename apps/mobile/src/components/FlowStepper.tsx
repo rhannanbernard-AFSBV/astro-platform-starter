@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, Platform } from 'react-native';
 
 const STEPS = [
   { key: 'scan', label: 'Scan' },
+  { key: 'calibrate', label: 'Calibrate' },
   { key: 'bid', label: 'Bid' },
   { key: 'checklist', label: 'Checklist' },
   { key: 'portal', label: 'Portal' },
@@ -64,7 +65,7 @@ const styles = StyleSheet.create({
   dotTextOn: { color: '#ecfdf5' },
   label: {
     marginTop: 6,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     color: '#94a3b8',
     fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' }),

@@ -259,7 +259,7 @@ router.post('/bids/:bidId/geofence/from-address', async (req, res, next) => {
       return res.status(400).json({ error: 'address required' });
     }
 
-    // Optional operator pin override
+    // Optional operator pin override (always works — no egress required)
     if (req.body.center_lat != null && req.body.center_lng != null) {
       const geofence = await upsertGeofence({
         tenantId: req.tenantId,
@@ -272,42 +272,31 @@ router.post('/bids/:bidId/geofence/from-address', async (req, res, next) => {
       return res.json({ geofence, source: 'manual_pin' });
     }
 
-    const url = new URL('https://nominatim.openstreetmap.org/search');
-    url.searchParams.set('q', address);
-    url.searchParams.set('format', 'json');
-    url.searchParams.set('limit', '1');
-    const geoRes = await fetch(url, {
-      headers: {
-        'User-Agent': 'OmniCleanAIScanner/0.1 (ops geofence)',
-        Accept: 'application/json',
-      },
-    });
-    if (!geoRes.ok) {
-      return res.status(502).json({
-        error: `Geocoder HTTP ${geoRes.status}`,
-        code: 'GEOCODER_FAILED',
-      });
-    }
-    const hits = await geoRes.json();
-    if (!Array.isArray(hits) || !hits.length) {
-      return res.status(404).json({
-        error: 'No geocode result for address — set center_lat/center_lng manually',
-        code: 'GEOCODE_NOT_FOUND',
+    const { geocodeAddress } = await import('../services/geocode.js');
+    let hit;
+    try {
+      hit = await geocodeAddress(address);
+    } catch (geoErr) {
+      return res.status(geoErr.status || 502).json({
+        error: geoErr.message,
+        code: geoErr.code || 'GEOCODER_FAILED',
         address,
+        hint:
+          'Allow HTTPS egress to nominatim.openstreetmap.org (or NOMINATIM_URL host), or POST center_lat/center_lng.',
       });
     }
     const geofence = await upsertGeofence({
       tenantId: req.tenantId,
       bidId,
-      centerLat: Number(hits[0].lat),
-      centerLng: Number(hits[0].lon),
+      centerLat: hit.lat,
+      centerLng: hit.lon,
       radiusM: req.body.radius_m || 200,
       label: req.body.label || address,
     });
     res.json({
       geofence,
-      source: 'nominatim',
-      display_name: hits[0].display_name,
+      source: hit.source,
+      display_name: hit.display_name,
     });
   } catch (err) {
     next(err);

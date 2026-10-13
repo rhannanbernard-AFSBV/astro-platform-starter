@@ -41,8 +41,15 @@ export default function LedgerScreen() {
       {(S.detected_fixtures || []).map((f) => (
         <Text key={f.fixture_type} style={styles.line}>
           {f.count}× {f.fixture_type}
+          {f.labor_intensity ? ` · ${f.labor_intensity} intensity` : ''}
         </Text>
       ))}
+      {L.fixture_intensity_weighted != null ? (
+        <Text style={styles.line}>
+          Intensity-weighted fixtures: {L.fixture_intensity_weighted}
+          {L.density_factor != null ? ` · density ×${L.density_factor}` : ''}
+        </Text>
+      ) : null}
 
       <Text style={styles.section}>Calculation steps (Decimal, not LLM)</Text>
       {(L.calculation_steps || []).map((step) => (
