@@ -14,7 +14,11 @@ import {
 } from 'react-native';
 import { FlowStepper } from '../src/components/FlowStepper';
 import { useBid } from '../src/state/BidContext';
-import { API_URL, proposalPdfUrl, sendProposal } from '../src/api/client';
+import {
+  proposalPdfUrl,
+  portalTokenFromSecureUrl,
+  sendProposal,
+} from '../src/api/client';
 import { useAuth } from '../src/state/AuthContext';
 
 export default function ProposalScreen() {
@@ -60,9 +64,9 @@ export default function ProposalScreen() {
 
   function openSign() {
     if (!secureUrl) return;
-    const token = scan!.proposal.access_token;
-    if (token) {
-      router.push(`/sign/${token}`);
+    const portalToken = portalTokenFromSecureUrl(secureUrl);
+    if (portalToken) {
+      router.push(`/sign/${portalToken}`);
       return;
     }
     Linking.openURL(secureUrl);
@@ -131,12 +135,8 @@ export default function ProposalScreen() {
             const blob = await res.blob();
             const objectUrl = URL.createObjectURL(blob);
             window.open(objectUrl, '_blank');
-          } else {
-            Linking.openURL(
-              scan.proposal.proposal_secure_url
-                ? `${scan.proposal.proposal_secure_url}/pdf`
-                : `${API_URL}/p/${scan.proposal.access_token}/pdf`
-            );
+          } else if (scan.proposal.proposal_secure_url) {
+            Linking.openURL(`${scan.proposal.proposal_secure_url}/pdf`);
           }
         }}
       >

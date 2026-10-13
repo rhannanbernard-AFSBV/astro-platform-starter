@@ -7,6 +7,15 @@ import {
 } from '../services/proposalActions.js';
 import { buildProposalPdfBuffer } from '../services/proposalPdf.js';
 import { clientMeta, writeAuditLog } from '../services/auditLog.js';
+import { signedAbsoluteUrl } from '../services/signedUrls.js';
+
+function publicArtifactUrl(pathOrUrl) {
+  if (!pathOrUrl) return null;
+  if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
+    return pathOrUrl;
+  }
+  return signedAbsoluteUrl(pathOrUrl, 7 * 86400);
+}
 
 const router = Router();
 
@@ -148,17 +157,11 @@ function serializePublicProposal(row) {
     proposal_text: row.proposal_text,
     email_html: row.email_html,
     signed_at: row.signed_at,
-    signature_url: row.signature_url
-      ? `${publicBaseUrl()}${row.signature_url}`
-      : null,
+    signature_url: publicArtifactUrl(row.signature_url),
     signer_name: row.signer_name,
     tenant_name: row.tenant_name,
     insurance: {
-      coi_url: row.insurance_coi_url
-        ? row.insurance_coi_url.startsWith('http')
-          ? row.insurance_coi_url
-          : `${publicBaseUrl()}${row.insurance_coi_url}`
-        : null,
+      coi_url: publicArtifactUrl(row.insurance_coi_url),
       notes: row.insurance_notes || null,
       liability_limit: row.insurance_liability_limit || null,
       filename: row.insurance_coi_filename || null,
@@ -184,9 +187,11 @@ function renderClientPortal(row, token) {
   const dual = ledger.dual_currency?.formatted_monthly
     ? `<p class="muted">Also quoted as <strong>${escapeHtml(ledger.dual_currency.formatted_monthly)}</strong> (${escapeHtml(ledger.dual_currency.currency_code)})</p>`
     : '';
-  const sigImg = row.signature_url
-    ? `<p><img src="${escapeHtml(row.signature_url)}" alt="Signature" style="max-width:320px;border:1px solid #e2e8f0;background:#fff;padding:8px;" /></p>`
+  const sigAbs = publicArtifactUrl(row.signature_url);
+  const sigImg = sigAbs
+    ? `<p><img src="${escapeHtml(sigAbs)}" alt="Signature" style="max-width:320px;border:1px solid #e2e8f0;background:#fff;padding:8px;" /></p>`
     : '';
+  const coiAbs = publicArtifactUrl(row.insurance_coi_url);
 
   const scopeTasks = checklist
     .map(
@@ -204,12 +209,8 @@ function renderClientPortal(row, token) {
       <ul>
         <li>General liability: ${escapeHtml(row.insurance_liability_limit || 'To be confirmed — request COI')}</li>
         <li>COI document: ${
-          row.insurance_coi_url
-            ? `<a href="${escapeHtml(
-                row.insurance_coi_url.startsWith('http')
-                  ? row.insurance_coi_url
-                  : row.insurance_coi_url
-              )}" target="_blank" rel="noopener">View certificate${
+          coiAbs
+            ? `<a href="${escapeHtml(coiAbs)}" target="_blank" rel="noopener">View certificate${
                 row.insurance_coi_filename
                   ? ` (${escapeHtml(row.insurance_coi_filename)})`
                   : ''

@@ -2,10 +2,29 @@ import Constants from 'expo-constants';
 
 const extra = Constants.expoConfig?.extra as { apiUrl?: string } | undefined;
 
-export const API_URL =
-  extra?.apiUrl ||
-  process.env.EXPO_PUBLIC_API_URL ||
-  'http://localhost:4000';
+function resolveApiUrl() {
+  const fromExtra = extra?.apiUrl;
+  // Ignore unresolved EAS template placeholders
+  if (
+    fromExtra &&
+    !fromExtra.includes('REPLACE') &&
+    !fromExtra.includes('YOUR_RAILWAY') &&
+    !fromExtra.includes('${')
+  ) {
+    return fromExtra.replace(/\/$/, '');
+  }
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL;
+  if (
+    fromEnv &&
+    !fromEnv.includes('REPLACE') &&
+    !fromEnv.includes('YOUR_RAILWAY')
+  ) {
+    return fromEnv.replace(/\/$/, '');
+  }
+  return 'http://localhost:4000';
+}
+
+export const API_URL = resolveApiUrl();
 
 let authToken: string | null = null;
 
@@ -36,6 +55,8 @@ export type AuthUser = {
 export type ScanResponse = {
   bid_id: number;
   proposal_id: number;
+  client_name?: string;
+  property_address?: string;
   spatial_summary: {
     total_cleanable_sq_ft: number;
     substrate_breakdown: { material: string; percentage: number }[];
@@ -81,11 +102,19 @@ export type ScanResponse = {
     status: string;
     email_html: string;
     proposal_text: string;
-    access_token?: string;
+    /** Raw token intentionally omitted from scan JSON — use proposal_secure_url */
     proposal_secure_url?: string | null;
+    access_token_expires_at?: string | null;
   };
   pdf_url?: string;
 };
+
+/** Extract portal token from /p/:token URL for in-app e-sign deep link */
+export function portalTokenFromSecureUrl(url?: string | null): string | null {
+  if (!url) return null;
+  const m = String(url).match(/\/p\/([a-f0-9]+)/i);
+  return m?.[1] || null;
+}
 
 export async function healthCheck() {
   const res = await fetch(`${API_URL}/api/health`);
@@ -190,7 +219,8 @@ export async function sendProposal(
   toEmail: string,
   recipientName?: string
 ) {
-  const res = await fetch(`${API_URL}/api/bids/${bidId}/send-proposal`, {
+  // Prefer /send alias (ops smoke scripts); fall back handled by same handler
+  const res = await fetch(`${API_URL}/api/bids/${bidId}/send`, {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
@@ -344,14 +374,42 @@ export async function fetchAnalytics() {
   return res.json();
 }
 
-export async function setBidOutcome(bidId: number, outcome: string) {
+export async function setBidOutcome(
+  bidId: number,
+  outcome: string,
+  extra?: {
+    loss_reason?: string;
+    loss_notes?: string;
+    competitor_price?: number;
+  }
+) {
   const res = await fetch(`${API_URL}/api/bids/${bidId}/outcome`, {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ outcome }),
+    body: JSON.stringify({ outcome, ...extra }),
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `Outcome failed (${res.status})`);
+  return body;
+}
+
+export async function setGeofenceFromAddress(
+  bidId: number,
+  input?: {
+    address?: string;
+    center_lat?: number;
+    center_lng?: number;
+    radius_m?: number;
+    label?: string;
+  }
+) {
+  const res = await fetch(`${API_URL}/api/bids/${bidId}/geofence/from-address`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(input || {}),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Geofence address failed (${res.status})`);
   return body;
 }
 

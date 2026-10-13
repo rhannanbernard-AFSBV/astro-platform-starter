@@ -76,7 +76,15 @@ export async function getAdminSettings(tenantId) {
   };
 }
 
-export async function updateAdminSettings(tenantId, body) {
+/**
+ * Tenant admins may update wages / margins / labor_burden_override / currency / COI.
+ * Jurisdiction tax table writes require platform admin (is_master).
+ */
+export async function updateAdminSettings(
+  tenantId,
+  body,
+  { isPlatformAdmin = false } = {}
+) {
   const current = await getAdminSettings(tenantId);
 
   if (body.tenant) {
@@ -166,8 +174,16 @@ export async function updateAdminSettings(tenantId, body) {
     );
   }
 
-  // Optional: update jurisdiction tax for this tenant's jurisdiction (demo)
+  // Global jurisdiction tax table — platform-admin only (prevents cross-tenant TOT mutation)
   if (body.jurisdiction && current.tenant.jurisdiction_code) {
+    if (!isPlatformAdmin) {
+      throw Object.assign(
+        new Error(
+          'Jurisdiction tax settings (TOT / default burden / consumables) require platform admin. Use labor_burden_override, wages, and margins on the tenant instead.'
+        ),
+        { status: 403, code: 'JURISDICTION_WRITE_FORBIDDEN' }
+      );
+    }
     const j = body.jurisdiction;
     await query(
       `UPDATE jurisdiction_tax_settings SET

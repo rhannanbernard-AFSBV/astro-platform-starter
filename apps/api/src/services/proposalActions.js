@@ -6,6 +6,7 @@ import { newAccessToken } from './auth.js';
 import { sendEmail, emailTransportName } from './email.js';
 import { buildProposalEmailHtml } from './proposalCopy.js';
 import { syncOutcomeFromProposal } from './analytics.js';
+import { signedAbsoluteUrl } from './signedUrls.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const signaturesDir = path.resolve(__dirname, '../../data/signatures');
@@ -169,7 +170,7 @@ export async function signProposal({
 
   return {
     proposal: upd.rows[0],
-    signature_url: `${publicBaseUrl()}${signatureUrl}`,
+    signature_url: signedAbsoluteUrl(signatureUrl, 7 * 86400),
   };
 }
 

@@ -16,6 +16,8 @@ import {
   buildCorsOptions,
   publicProposalRateLimit,
 } from './middleware/security.js';
+import { protectedStatic } from './middleware/protectedStatic.js';
+import { getMetricsSnapshot, log, requestLogMiddleware } from './services/logger.js';
 import authRouter from './routes/auth.js';
 import bidsRouter from './routes/bids.js';
 import opsRouter from './routes/ops.js';
@@ -34,6 +36,7 @@ app.set('trust proxy', 1);
 app.use(cors(buildCorsOptions()));
 app.use(express.json({ limit: '4mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use(requestLogMiddleware);
 app.use('/api/', apiRateLimit);
 
 const signaturesDir = path.resolve(__dirname, '../data/signatures');
@@ -42,9 +45,10 @@ const insuranceDir = path.resolve(__dirname, '../data/insurance');
 fs.mkdirSync(signaturesDir, { recursive: true });
 fs.mkdirSync(qaDir, { recursive: true });
 fs.mkdirSync(insuranceDir, { recursive: true });
-app.use('/signatures', express.static(signaturesDir));
-app.use('/qa-photos', express.static(qaDir));
-app.use('/insurance', express.static(insuranceDir));
+// Auth-gated artifacts: Bearer JWT or HMAC signed ?exp=&sig=
+app.use('/signatures', protectedStatic(signaturesDir));
+app.use('/qa-photos', protectedStatic(qaDir));
+app.use('/insurance', protectedStatic(insuranceDir));
 
 app.get('/', (_req, res) => {
   res.json({
@@ -53,8 +57,13 @@ app.get('/', (_req, res) => {
     scan: 'POST /api/scan (Bearer JWT)',
     portal: 'GET /p/:token',
     pdf: 'GET /api/bids/:id/proposal.pdf | /p/:token/pdf',
+    metrics: 'GET /api/metrics',
     ...providerStatus(),
   });
+});
+
+app.get('/api/metrics', (_req, res) => {
+  res.json(getMetricsSnapshot());
 });
 
 app.use('/api/auth', authRateLimit, authRouter);
@@ -63,12 +72,18 @@ app.use('/api', bidsRouter);
 app.use('/api', opsRouter);
 
 app.use((err, _req, res, _next) => {
-  console.error(err);
+  log.error('request_error', {
+    error: err.message,
+    code: err.code,
+    status: err.status,
+  });
   const status = err.status || (err.message?.startsWith('CORS') ? 403 : 500);
   res.status(status).json({
     error: err.message || 'Internal server error',
     ...(err.code ? { code: err.code } : {}),
     ...(err.geofence_violation ? { geofence_violation: true } : {}),
+    ...(err.qa_required ? { qa_required: true } : {}),
+    ...(err.audit ? { audit: err.audit } : {}),
   });
 });
 
@@ -139,18 +154,16 @@ async function main() {
   await ensureMigrated();
   const providers = providerStatus();
   app.listen(PORT, () => {
-    console.log(`OmniClean API listening on http://localhost:${PORT}`);
-    console.log(
-      `OpenAI vision: ${providers.openai_configured ? 'enabled' : 'not configured'} (mock allowed=${providers.vision_mock_allowed})`
-    );
-    console.log(
-      `Email transport: ${emailTransportName()} (dry_run allowed=${providers.email_dry_run_allowed})`
-    );
-    console.log('Demo login: demo@omniclean.demo / demo1234');
+    log.info('api_listening', {
+      port: PORT,
+      openai_configured: providers.openai_configured,
+      vision_mock_allowed: providers.vision_mock_allowed,
+      email_transport: emailTransportName(),
+    });
   });
 }
 
 main().catch((err) => {
-  console.error('Failed to start API', err);
+  log.error('boot_failed', { error: err.message });
   process.exit(1);
 });

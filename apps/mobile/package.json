@@ -7,9 +7,11 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@react-native-community/netinfo": "11.4.1",
     "expo": "~52.0.0",
     "expo-constants": "~17.0.0",
     "expo-image-picker": "~16.0.0",

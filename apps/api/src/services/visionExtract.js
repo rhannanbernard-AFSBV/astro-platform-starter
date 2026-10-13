@@ -129,8 +129,30 @@ CRITICAL:
 - Prefer scale_legend when a scale bar or written scale is visible; otherwise reference_feature; last resort contextual_estimate.
 - If the user provides hint_sq_ft, you may calibrate but still report how scale was handled.`;
 
+function rescaleSubstrates(out, newTotal, factor) {
+  out.spatial_summary.substrate_breakdown = (
+    out.spatial_summary.substrate_breakdown || []
+  ).map((s) => ({
+    ...s,
+    approx_sq_ft:
+      s.approx_sq_ft != null
+        ? Math.round(Number(s.approx_sq_ft) * factor * 100) / 100
+        : Math.round(((newTotal * Number(s.percentage)) / 100) * 100) / 100,
+  }));
+  if (Array.isArray(out.room_zones)) {
+    out.room_zones = out.room_zones.map((z) => ({
+      ...z,
+      approx_sq_ft:
+        z.approx_sq_ft != null
+          ? Math.round(Number(z.approx_sq_ft) * factor * 100) / 100
+          : z.approx_sq_ft,
+    }));
+  }
+}
+
 /**
- * Apply scale calibration when legend/reference is present; honor hint_sq_ft as override.
+ * Deterministic area from legend: sq_ft = total_pixel_area / (pixels_per_foot^2).
+ * Prefer explicit calibrated hint only when the estimator sets hint_sq_ft.
  */
 export function applyScaleCalibration(extraction, modifiers = {}) {
   const out = structuredClone
@@ -138,34 +160,56 @@ export function applyScaleCalibration(extraction, modifiers = {}) {
     : JSON.parse(JSON.stringify(extraction));
   const scale = out.scale_and_legend || {};
   const hint = Number(modifiers.hint_sq_ft);
+  const ppf = Number(scale.pixels_per_foot);
+  const pixelArea = Number(
+    modifiers.total_pixel_area ??
+      scale.total_pixel_area ??
+      out.spatial_summary?.total_pixel_area
+  );
 
+  // 1) Explicit user calibration hint (estimator UI) — highest priority when set
   if (Number.isFinite(hint) && hint > 0) {
     const current = Number(out.spatial_summary.total_cleanable_sq_ft) || hint;
     const factor = hint / current;
     out.spatial_summary.total_cleanable_sq_ft = Math.round(hint * 100) / 100;
-    out.spatial_summary.measurement_method =
-      out.spatial_summary.measurement_method || 'user_hint';
-    out.spatial_summary.substrate_breakdown = (
-      out.spatial_summary.substrate_breakdown || []
-    ).map((s) => ({
-      ...s,
-      approx_sq_ft:
-        s.approx_sq_ft != null
-          ? Math.round(Number(s.approx_sq_ft) * factor * 100) / 100
-          : Math.round(((hint * Number(s.percentage)) / 100) * 100) / 100,
-    }));
-    out.property_notes = `${out.property_notes || ''} | Calibrated to user hint_sq_ft=${hint}.`.trim();
+    out.spatial_summary.measurement_method = 'user_hint';
+    rescaleSubstrates(out, hint, factor);
+    out.property_notes =
+      `${out.property_notes || ''} | Calibrated to user hint_sq_ft=${hint}.`.trim();
     out._scale_calibration = 'user_hint';
+    return out;
+  }
+
+  // 2) Deterministic legend path: pixels_per_foot + pixel area → sq ft (no LLM math)
+  if (
+    scale.scale_detected &&
+    Number.isFinite(ppf) &&
+    ppf > 0 &&
+    Number.isFinite(pixelArea) &&
+    pixelArea > 0
+  ) {
+    const computed = Math.round((pixelArea / (ppf * ppf)) * 100) / 100;
+    const current = Number(out.spatial_summary.total_cleanable_sq_ft) || computed;
+    const factor = current > 0 ? computed / current : 1;
+    out.spatial_summary.total_cleanable_sq_ft = computed;
+    out.spatial_summary.measurement_method = 'scale_legend';
+    out.spatial_summary.total_pixel_area = pixelArea;
+    rescaleSubstrates(out, computed, factor);
+    out.property_notes =
+      `${out.property_notes || ''} | Deterministic area from pixels_per_foot=${ppf} × pixel_area=${pixelArea}.`.trim();
+    out._scale_calibration = 'pixels_per_foot';
     return out;
   }
 
   if (
     scale.scale_detected &&
-    Number(scale.pixels_per_foot) > 0 &&
+    Number.isFinite(ppf) &&
+    ppf > 0 &&
     Number(out.spatial_summary.total_cleanable_sq_ft) > 0
   ) {
+    // Legend present but no pixel polygon — keep vision sq ft, label path
     out.spatial_summary.measurement_method = 'scale_legend';
-    out._scale_calibration = 'scale_legend';
+    out._scale_calibration = 'scale_legend_advisory';
   } else if (
     scale.reference_feature &&
     Number(scale.reference_real_world_ft) > 0
@@ -179,7 +223,6 @@ export function applyScaleCalibration(extraction, modifiers = {}) {
     out._scale_calibration = 'contextual_estimate';
   }
 
-  // Ensure approx_sq_ft on substrates
   const total = Number(out.spatial_summary.total_cleanable_sq_ft) || 0;
   out.spatial_summary.substrate_breakdown = (
     out.spatial_summary.substrate_breakdown || []
@@ -199,14 +242,20 @@ export function applyScaleCalibration(extraction, modifiers = {}) {
  */
 export function mockSpatialExtraction(modifiers = {}) {
   const profile = String(modifiers.facility_profile || 'medical_office').toLowerCase();
-  const sqFt = Number(modifiers.hint_sq_ft) || (profile.includes('retail') ? 8200 : 12500);
+  // Deterministic mock facility size (not a user hint). Hint only applied via applyScaleCalibration.
+  const mockProfileSqFt = profile.includes('retail') ? 8200 : 10000;
+  const ppf = 12.5;
+  // Pixel area chosen so deterministic path yields mockProfileSqFt when no hint
+  const totalPixelArea = mockProfileSqFt * ppf * ppf;
+  const sqFt = Number(modifiers.hint_sq_ft) || mockProfileSqFt;
 
   const base = {
     scale_and_legend: {
       scale_detected: true,
       scale_text: "1/8\" = 1'-0\"",
       units: 'ft',
-      pixels_per_foot: 12.5,
+      pixels_per_foot: ppf,
+      total_pixel_area: totalPixelArea,
       reference_feature: 'standard door leaf',
       reference_real_world_ft: 3,
       confidence: 0.86,
@@ -214,6 +263,7 @@ export function mockSpatialExtraction(modifiers = {}) {
     },
     spatial_summary: {
       total_cleanable_sq_ft: sqFt,
+      total_pixel_area: totalPixelArea,
       excluded_structural_sq_ft: Math.round(sqFt * 0.08),
       measurement_method: 'scale_legend',
       substrate_breakdown: [

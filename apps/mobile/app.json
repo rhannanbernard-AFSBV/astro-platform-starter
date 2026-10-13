@@ -30,11 +30,13 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow OmniClean to access walkthrough photos for spatial bidding."
+          "photosPermission": "Allow OmniClean to access walkthrough and QA photos.",
+          "cameraPermission": "Allow OmniClean to capture walkthrough and high-risk QA photos on site."
         }
       ]
     ],
     "extra": {
+      "apiUrl": "${EXPO_PUBLIC_API_URL}",
       "eas": {
         "projectId": "REPLACE_AFTER_eas_init"
       }

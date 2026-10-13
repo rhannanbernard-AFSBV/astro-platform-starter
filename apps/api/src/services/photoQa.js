@@ -2,13 +2,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { query } from '../db/client.js';
-import { publicBaseUrl } from './proposalActions.js';
+import { signedAbsoluteUrl } from './signedUrls.js';
+import { evaluateQaPhoto } from './visionQa.js';
+import { log } from './logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const qaDir = path.resolve(__dirname, '../../data/qa-photos');
 
 /**
  * High-risk checklist zones require photo verification tied to AI audit prompts.
+ * Vision QA must pass before qa_verified_at is set.
  */
 export async function uploadQaPhoto({
   tenantId,
@@ -18,6 +21,7 @@ export async function uploadQaPhoto({
   imageBuffer,
   mimeType,
   notes,
+  forceMockVision,
 }) {
   const checklist = await query(
     `SELECT c.*, b.tenant_id
@@ -40,6 +44,33 @@ export async function uploadQaPhoto({
     throw Object.assign(new Error('photo file is required'), { status: 400 });
   }
 
+  const audit = await evaluateQaPhoto({
+    imageBuffer,
+    mimeType,
+    auditPrompt: item.ai_audit_prompt,
+    notes,
+    forceMock: forceMockVision,
+  });
+
+  if (!audit.passed) {
+    log.warn('vision_qa_rejected', {
+      bid_id: bidId,
+      checklist_id: checklistId,
+      findings: audit.findings,
+      source: audit.source,
+    });
+    throw Object.assign(
+      new Error(
+        `AI audit failed: ${(audit.findings || []).join('; ') || 'photo does not meet audit prompt'}`
+      ),
+      {
+        status: 422,
+        code: 'QA_AUDIT_FAILED',
+        audit,
+      }
+    );
+  }
+
   fs.mkdirSync(qaDir, { recursive: true });
   const ext = (mimeType || '').includes('png') ? 'png' : 'jpg';
   const filename = `bid-${bidId}-cl-${checklistId}-${Date.now()}.${ext}`;
@@ -57,7 +88,9 @@ export async function uploadQaPhoto({
       checklistId,
       photoUrl,
       item.ai_audit_prompt,
-      notes || null,
+      notes
+        ? `${notes} | vision:${audit.source} score=${audit.score}`
+        : `vision:${audit.source} score=${audit.score}`,
       userId || null,
     ]
   );
@@ -69,14 +102,17 @@ export async function uploadQaPhoto({
     [photoUrl, checklistId]
   );
 
+  log.metric('qa_verified', { bid_id: bidId, source: audit.source });
+
   return {
     qa_photo: {
       ...ins.rows[0],
-      photo_absolute_url: `${publicBaseUrl()}${photoUrl}`,
+      photo_absolute_url: signedAbsoluteUrl(photoUrl, 86400),
     },
     checklist_id: checklistId,
     ai_audit_prompt: item.ai_audit_prompt,
     verified: true,
+    audit,
   };
 }
 
@@ -92,7 +128,7 @@ export async function listQaPhotos(tenantId, bidId) {
   );
   return rows.map((r) => ({
     ...r,
-    photo_absolute_url: `${publicBaseUrl()}${r.photo_url}`,
+    photo_absolute_url: signedAbsoluteUrl(r.photo_url, 86400),
   }));
 }
 
@@ -113,7 +149,7 @@ export async function getHighRiskQaStatus(tenantId, bidId) {
     zones: rows.map((r) => ({
       ...r,
       photo_absolute_url: r.qa_photo_url
-        ? `${publicBaseUrl()}${r.qa_photo_url}`
+        ? signedAbsoluteUrl(r.qa_photo_url, 86400)
         : null,
     })),
   };

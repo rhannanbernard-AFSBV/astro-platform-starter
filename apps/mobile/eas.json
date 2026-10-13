@@ -14,7 +14,7 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://REPLACE_WITH_RAILWAY_API_URL"
+        "EXPO_PUBLIC_API_URL": "https://YOUR_RAILWAY_API_URL.up.railway.app"
       },
       "android": {
         "buildType": "apk"
@@ -23,7 +23,7 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://REPLACE_WITH_RAILWAY_API_URL"
+        "EXPO_PUBLIC_API_URL": "https://YOUR_RAILWAY_API_URL.up.railway.app"
       },
       "ios": {
         "resourceClass": "m-medium"
