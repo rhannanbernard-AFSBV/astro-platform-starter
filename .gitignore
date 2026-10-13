@@ -22,3 +22,11 @@ pnpm-debug.log*
 
 # Local Netlify folder
 .netlify
+
+# OmniClean
+apps/api/data/
+apps/api/.env
+apps/mobile/.env
+apps/mobile/.expo/
+*.pglite/
+.expo/
