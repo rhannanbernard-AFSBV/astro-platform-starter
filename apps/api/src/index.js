@@ -8,6 +8,7 @@ import { getDb, exec, query, migrationsDir } from './db/client.js';
 import { ensureDemoUser } from './services/auth.js';
 import { resolveJwtSecret } from './services/jwtSecret.js';
 import { emailTransportName } from './services/email.js';
+import { ensureDemoMasterGraph } from './services/masterTenant.js';
 import authRouter from './routes/auth.js';
 import bidsRouter from './routes/bids.js';
 import opsRouter from './routes/ops.js';
@@ -28,10 +29,13 @@ app.use(express.urlencoded({ extended: true }));
 
 const signaturesDir = path.resolve(__dirname, '../data/signatures');
 const qaDir = path.resolve(__dirname, '../data/qa-photos');
+const insuranceDir = path.resolve(__dirname, '../data/insurance');
 fs.mkdirSync(signaturesDir, { recursive: true });
 fs.mkdirSync(qaDir, { recursive: true });
+fs.mkdirSync(insuranceDir, { recursive: true });
 app.use('/signatures', express.static(signaturesDir));
 app.use('/qa-photos', express.static(qaDir));
+app.use('/insurance', express.static(insuranceDir));
 
 app.get('/', (_req, res) => {
   res.json({
@@ -118,6 +122,7 @@ async function ensureMigrated() {
   }
 
   await ensureDemoUser();
+  await ensureDemoMasterGraph();
 }
 
 async function main() {

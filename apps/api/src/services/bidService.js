@@ -5,6 +5,7 @@ import { buildCrewChecklist } from './checklist.js';
 import { buildProposalCopy, buildProposalEmailHtml } from './proposalCopy.js';
 import { proposalSecureUrl } from './proposalActions.js';
 import { processWalkthroughImage, mockSpatialExtraction } from './visionExtract.js';
+import { notifyNewChecklist } from './pushNotify.js';
 
 async function loadTenantContext(tenantId) {
   const tenantRes = await query(
@@ -93,6 +94,7 @@ export async function createBidFromWalkthrough({
     frequency,
     jurisdiction: ctx.tenant.jurisdiction_code,
     hint_sq_ft: hintSqFt,
+    facility_profile: ctx.tenant.facility_density_code,
   };
 
   let extraction;
@@ -124,7 +126,13 @@ export async function createBidFromWalkthrough({
   });
 
   const payload = {
-    spatial_summary: mathPart.spatial_summary,
+    spatial_summary: {
+      ...mathPart.spatial_summary,
+      excluded_structural_sq_ft:
+        extraction.spatial_summary.excluded_structural_sq_ft,
+      measurement_method: extraction.spatial_summary.measurement_method,
+    },
+    scale_and_legend: extraction.scale_and_legend || null,
     financial_ledger: mathPart.financial_ledger,
     proposal_copy,
     crew_checklist,
@@ -132,6 +140,7 @@ export async function createBidFromWalkthrough({
       extraction_source: extraction._source,
       property_notes: extraction.property_notes,
       jurisdiction_code: ctx.tenant.jurisdiction_code,
+      scale_calibration: extraction._scale_calibration,
     },
   };
 
@@ -143,6 +152,12 @@ export async function createBidFromWalkthrough({
     aiResponse: payload,
     tenant: ctx.tenant,
   });
+
+  try {
+    await notifyNewChecklist(tenantId, saved.bid.bid_id, crew_checklist.length);
+  } catch (err) {
+    console.warn('[push] checklist notify failed', err.message);
+  }
 
   return { ...saved, payload };
 }

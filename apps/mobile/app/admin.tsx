@@ -13,7 +13,12 @@ import {
 } from 'react-native';
 import { Redirect } from 'expo-router';
 import { useAuth } from '../src/state/AuthContext';
-import { fetchAdminSettings, patchAdminSettings } from '../src/api/client';
+import {
+  fetchAdminSettings,
+  patchAdminSettings,
+  uploadCoi,
+} from '../src/api/client';
+import * as ImagePicker from 'expo-image-picker';
 
 export default function AdminScreen() {
   const { ready, token } = useAuth();
@@ -28,6 +33,7 @@ export default function AdminScreen() {
   const [secondary, setSecondary] = useState('XCG');
   const [coi, setCoi] = useState('');
   const [liability, setLiability] = useState('');
+  const [uploadingCoi, setUploadingCoi] = useState(false);
   const [issaOptions, setIssaOptions] = useState<
     { density_code: string; label: string; sq_ft_per_hour: number }[]
   >([]);
@@ -154,6 +160,43 @@ export default function AdminScreen() {
       <TextInput style={styles.input} value={liability} onChangeText={setLiability} />
       <Text style={styles.label}>Insurance COI URL</Text>
       <TextInput style={styles.input} value={coi} onChangeText={setCoi} autoCapitalize="none" />
+      <Pressable
+        style={[styles.btn, { backgroundColor: '#334155', marginTop: 10 }]}
+        disabled={uploadingCoi}
+        onPress={async () => {
+          setUploadingCoi(true);
+          try {
+            const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (!perm.granted) throw new Error('Photo permission required');
+            const picked = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.All,
+              quality: 0.8,
+            });
+            if (picked.canceled || !picked.assets[0]) return;
+            const asset = picked.assets[0];
+            const result = await uploadCoi(
+              asset.uri,
+              asset.fileName || 'coi.jpg',
+              asset.mimeType || 'image/jpeg'
+            );
+            setCoi(result.insurance_coi_url);
+            if (Platform.OS === 'web') window.alert('COI uploaded');
+            else Alert.alert('COI', 'Certificate uploaded for client portal');
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'Upload failed';
+            if (Platform.OS === 'web') window.alert(message);
+            else Alert.alert('COI', message);
+          } finally {
+            setUploadingCoi(false);
+          }
+        }}
+      >
+        {uploadingCoi ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.btnText}>Upload COI file</Text>
+        )}
+      </Pressable>
 
       <Pressable style={styles.btn} disabled={saving} onPress={save}>
         {saving ? (

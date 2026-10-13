@@ -13,6 +13,7 @@ import {
   login as apiLogin,
   register as apiRegister,
   setAuthToken,
+  switchTenant as apiSwitchTenant,
 } from '../api/client';
 
 const STORAGE_KEY = 'omniclean_jwt';
@@ -30,6 +31,7 @@ type AuthContextValue = {
     tenantId?: string;
     companyName?: string;
   }) => Promise<void>;
+  switchTenantProfile: (tenantId: number) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -130,6 +132,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const switchTenantProfile = useCallback(async (tenantId: number) => {
+    const result = await apiSwitchTenant(tenantId);
+    setAuthToken(result.token);
+    setToken(result.token);
+    setUser(result.user);
+    setTenantName(result.tenant.name);
+    await storageSet(STORAGE_KEY, result.token);
+  }, []);
+
   const logout = useCallback(async () => {
     setAuthToken(null);
     setToken(null);
@@ -139,8 +150,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ ready, token, user, tenantName, login, register, logout }),
-    [ready, token, user, tenantName, login, register, logout]
+    () => ({
+      ready,
+      token,
+      user,
+      tenantName,
+      login,
+      register,
+      switchTenantProfile,
+      logout,
+    }),
+    [ready, token, user, tenantName, login, register, switchTenantProfile, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

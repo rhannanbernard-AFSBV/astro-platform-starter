@@ -29,6 +29,8 @@ export type AuthUser = {
   email: string;
   full_name: string;
   role: string;
+  is_master?: boolean;
+  home_tenant_id?: number;
 };
 
 export type ScanResponse = {
@@ -324,4 +326,96 @@ export async function patchAdminSettings(body: Record<string, unknown>) {
 
 export function proposalPdfUrl(bidId: number) {
   return `${API_URL}/api/bids/${bidId}/proposal.pdf`;
+}
+
+export async function fetchBidHistory() {
+  const res = await fetch(`${API_URL}/api/history/bids`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`History failed (${res.status})`);
+  return res.json();
+}
+
+export async function fetchAnalytics() {
+  const res = await fetch(`${API_URL}/api/analytics/summary`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Analytics failed (${res.status})`);
+  return res.json();
+}
+
+export async function setBidOutcome(bidId: number, outcome: string) {
+  const res = await fetch(`${API_URL}/api/bids/${bidId}/outcome`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ outcome }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Outcome failed (${res.status})`);
+  return body;
+}
+
+export async function listTenants() {
+  const res = await fetch(`${API_URL}/api/auth/tenants`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Tenants failed (${res.status})`);
+  return res.json();
+}
+
+export async function switchTenant(tenantId: number) {
+  const res = await fetch(`${API_URL}/api/auth/switch-tenant`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ tenant_id: tenantId }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Switch failed (${res.status})`);
+  return body as {
+    token: string;
+    user: AuthUser;
+    tenant: { tenant_id: number; name: string };
+  };
+}
+
+export async function registerPushToken(pushToken: string, platform = 'expo') {
+  const res = await fetch(`${API_URL}/api/push/register`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ push_token: pushToken, platform }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Push register failed (${res.status})`);
+  return body;
+}
+
+export async function offlineSync(
+  bidId: number,
+  events: Record<string, unknown>[],
+  clientBatchId?: string
+) {
+  const res = await fetch(`${API_URL}/api/bids/${bidId}/offline-sync`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
+      client_batch_id: clientBatchId,
+      events,
+    }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Offline sync failed (${res.status})`);
+  return body;
+}
+
+export async function uploadCoi(uri: string, name = 'coi.pdf', type = 'application/pdf') {
+  const form = new FormData();
+  form.append('coi', { uri, name, type } as unknown as Blob);
+  const res = await fetch(`${API_URL}/api/admin/insurance/coi`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: form,
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `COI upload failed (${res.status})`);
+  return body;
 }

@@ -12,7 +12,12 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useBid } from '../src/state/BidContext';
-import { logGps, setGeofence, uploadQaPhoto } from '../src/api/client';
+import { logGps, registerPushToken, setGeofence, uploadQaPhoto } from '../src/api/client';
+import {
+  enqueueOfflineEvent,
+  flushOfflineQueue,
+  pendingCount,
+} from '../src/offline/queue';
 
 async function getPosition(): Promise<{
   latitude: number;
@@ -44,8 +49,13 @@ export default function ChecklistScreen() {
   const [qaDone, setQaDone] = useState<Record<number, boolean>>({});
   const [completed, setCompleted] = useState<Record<number, boolean>>({});
   const [clockedIn, setClockedIn] = useState(false);
+  const [offlinePending, setOfflinePending] = useState(0);
 
   if (!scan) return <Redirect href="/" />;
+
+  async function refreshPending() {
+    setOfflinePending(await pendingCount());
+  }
 
   const run = useCallback(
     async (key: string, fn: () => Promise<void>) => {
@@ -93,6 +103,14 @@ export default function ChecklistScreen() {
                   longitude: pos.longitude,
                   accuracy_m: pos.accuracy,
                 });
+                try {
+                  await registerPushToken(
+                    `stub-expo-${scan.bid_id}-${Date.now()}`,
+                    'expo'
+                  );
+                } catch {
+                  /* push stub optional */
+                }
                 setClockedIn(true);
               } else {
                 await logGps(scan.bid_id, {
@@ -111,6 +129,34 @@ export default function ChecklistScreen() {
           ) : (
             <Text style={styles.opsBtnText}>
               {clockedIn ? 'GPS clock-out' : 'GPS clock-in + set geofence'}
+            </Text>
+          )}
+        </Pressable>
+        <Pressable
+          style={[styles.opsBtn, { backgroundColor: '#334155', marginTop: 8 }]}
+          disabled={!!busyId}
+          onPress={() =>
+            run('sync', async () => {
+              const result = await flushOfflineQueue();
+              await refreshPending();
+              if (Platform.OS === 'web') {
+                window.alert(
+                  `Synced ${result.synced}, remaining ${result.remaining}`
+                );
+              } else {
+                Alert.alert(
+                  'Offline sync',
+                  `Synced ${result.synced}, remaining ${result.remaining}`
+                );
+              }
+            })
+          }
+        >
+          {busyId === 'sync' ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.opsBtnText}>
+              Sync offline queue ({offlinePending})
             </Text>
           )}
         </Pressable>
@@ -185,34 +231,57 @@ export default function ChecklistScreen() {
                 </Pressable>
               ) : null}
               {cid ? (
-                <Pressable
-                  style={[styles.smallBtn, styles.smallBtnAlt]}
-                  disabled={!!busyId}
-                  onPress={() =>
-                    run(`done-${cid}`, async () => {
-                      if (zone.is_high_risk && !qaDone[cid]) {
-                        throw new Error(
-                          'Upload AI photo QA before completing this high-risk zone'
-                        );
-                      }
-                      const pos = await getPosition();
-                      await logGps(scan.bid_id, {
-                        event_type: 'room_complete',
-                        checklist_id: cid,
-                        latitude: pos.latitude,
-                        longitude: pos.longitude,
-                        accuracy_m: pos.accuracy,
-                      });
-                      setCompleted((s) => ({ ...s, [cid]: true }));
-                    })
-                  }
-                >
-                  {busyId === `done-${cid}` ? (
-                    <ActivityIndicator color="#0f766e" size="small" />
-                  ) : (
-                    <Text style={styles.smallBtnAltText}>Complete + GPS</Text>
-                  )}
-                </Pressable>
+                <>
+                  <Pressable
+                    style={[styles.smallBtn, styles.smallBtnAlt]}
+                    disabled={!!busyId}
+                    onPress={() =>
+                      run(`done-${cid}`, async () => {
+                        if (zone.is_high_risk && !qaDone[cid]) {
+                          throw new Error(
+                            'Upload AI photo QA before completing this high-risk zone'
+                          );
+                        }
+                        const pos = await getPosition();
+                        await logGps(scan.bid_id, {
+                          event_type: 'room_complete',
+                          checklist_id: cid,
+                          latitude: pos.latitude,
+                          longitude: pos.longitude,
+                          accuracy_m: pos.accuracy,
+                        });
+                        setCompleted((s) => ({ ...s, [cid]: true }));
+                      })
+                    }
+                  >
+                    {busyId === `done-${cid}` ? (
+                      <ActivityIndicator color="#0f766e" size="small" />
+                    ) : (
+                      <Text style={styles.smallBtnAltText}>Complete + GPS</Text>
+                    )}
+                  </Pressable>
+                  <Pressable
+                    style={[styles.smallBtn, styles.smallBtnAlt]}
+                    disabled={!!busyId}
+                    onPress={() =>
+                      run(`off-${cid}`, async () => {
+                        const pos = await getPosition();
+                        await enqueueOfflineEvent(scan.bid_id, {
+                          event_type: 'room_complete',
+                          checklist_id: cid,
+                          latitude: pos.latitude,
+                          longitude: pos.longitude,
+                          accuracy_m: pos.accuracy,
+                          notes: 'queued offline',
+                        });
+                        await refreshPending();
+                        setCompleted((s) => ({ ...s, [cid]: true }));
+                      })
+                    }
+                  >
+                    <Text style={styles.smallBtnAltText}>Complete offline</Text>
+                  </Pressable>
+                </>
               ) : null}
             </View>
           </View>

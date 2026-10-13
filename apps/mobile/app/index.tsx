@@ -100,7 +100,13 @@ export default function ScanScreen() {
         </Text>
         <View style={styles.heroActions}>
           <Pressable onPress={() => router.push('/admin')}>
-            <Text style={styles.logoutText}>Tenant admin</Text>
+            <Text style={styles.logoutText}>Admin</Text>
+          </Pressable>
+          <Pressable onPress={() => router.push('/history')}>
+            <Text style={styles.logoutText}>History</Text>
+          </Pressable>
+          <Pressable onPress={() => router.push('/tenants')}>
+            <Text style={styles.logoutText}>Switch</Text>
           </Pressable>
           <Pressable onPress={() => logout()}>
             <Text style={styles.logoutText}>Sign out</Text>

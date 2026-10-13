@@ -2,6 +2,10 @@ import { Router } from 'express';
 import { loginUser, registerUser } from '../services/auth.js';
 import { requireAuth } from '../middleware/auth.js';
 import { query } from '../db/client.js';
+import {
+  listAccessibleTenants,
+  switchTenantContext,
+} from '../services/masterTenant.js';
 
 const router = Router();
 
@@ -36,31 +40,56 @@ router.post('/login', async (req, res, next) => {
 router.get('/me', requireAuth, async (req, res, next) => {
   try {
     const { rows } = await query(
-      `SELECT u.user_id, u.tenant_id, u.email, u.full_name, u.role,
-              t.name AS tenant_name, t.jurisdiction_code
-       FROM users u
-       JOIN tenants t ON t.tenant_id = u.tenant_id
-       WHERE u.user_id = $1 AND u.tenant_id = $2`,
-      [req.user.user_id, req.user.tenant_id]
+      `SELECT u.user_id, u.email, u.full_name, u.role, u.is_master, u.tenant_id AS home_tenant_id
+       FROM users u WHERE u.user_id = $1`,
+      [req.user.user_id]
     );
     if (!rows.length) {
       return res.status(404).json({ error: 'User not found' });
     }
     const u = rows[0];
+    const tenant = await query(
+      `SELECT tenant_id, name, jurisdiction_code, is_master, master_tenant_id
+       FROM tenants WHERE tenant_id = $1`,
+      [req.tenantId]
+    );
+    if (!tenant.rows.length) {
+      return res.status(404).json({ error: 'Active tenant not found' });
+    }
     res.json({
       user: {
         user_id: u.user_id,
-        tenant_id: u.tenant_id,
+        tenant_id: req.tenantId,
         email: u.email,
         full_name: u.full_name,
         role: u.role,
+        is_master: Boolean(u.is_master),
+        home_tenant_id: u.home_tenant_id,
       },
-      tenant: {
-        tenant_id: u.tenant_id,
-        name: u.tenant_name,
-        jurisdiction_code: u.jurisdiction_code,
-      },
+      tenant: tenant.rows[0],
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/tenants', requireAuth, async (req, res, next) => {
+  try {
+    const result = await listAccessibleTenants(req.user.user_id);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/switch-tenant', requireAuth, async (req, res, next) => {
+  try {
+    const tenantId = Number(req.body.tenant_id);
+    if (!tenantId) {
+      return res.status(400).json({ error: 'tenant_id is required' });
+    }
+    const result = await switchTenantContext(req.user.user_id, tenantId);
+    res.json(result);
   } catch (err) {
     next(err);
   }

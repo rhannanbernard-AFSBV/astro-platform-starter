@@ -136,9 +136,14 @@ export async function loginUser({ email, password, tenantId }) {
     throw Object.assign(new Error('Invalid credentials'), { status: 401 });
   }
 
+  const tokenUser = {
+    ...user,
+    home_tenant_id: user.tenant_id,
+  };
+
   return {
-    user: publicUser(user),
-    token: signToken(user),
+    user: publicUser(tokenUser),
+    token: signToken(tokenUser),
     tenant: { tenant_id: user.tenant_id, name: user.tenant_name },
   };
 }
@@ -150,6 +155,8 @@ export function signToken(user) {
       tenant_id: user.tenant_id,
       email: user.email,
       role: user.role,
+      is_master: Boolean(user.is_master),
+      home_tenant_id: user.home_tenant_id ?? user.tenant_id,
     },
     getJwtSecret(),
     { expiresIn: JWT_EXPIRES }
@@ -171,6 +178,8 @@ function publicUser(user) {
     email: user.email,
     full_name: user.full_name,
     role: user.role,
+    is_master: Boolean(user.is_master),
+    home_tenant_id: user.home_tenant_id ?? user.tenant_id,
   };
 }
 
@@ -181,14 +190,20 @@ export async function ensureDemoUser() {
     'SELECT user_id FROM users WHERE tenant_id = 1 AND email = $1',
     [email]
   );
-  if (existing.rows.length) return;
-  const hash = await bcrypt.hash('demo1234', 10);
-  await query(
-    `INSERT INTO users (tenant_id, email, password_hash, full_name, role)
-     VALUES (1, $1, $2, 'Demo Estimator', 'admin')`,
-    [email, hash]
-  );
-  console.log('[seed] demo user demo@omniclean.demo / demo1234 (tenant 1)');
+  if (!existing.rows.length) {
+    const hash = await bcrypt.hash('demo1234', 10);
+    await query(
+      `INSERT INTO users (tenant_id, email, password_hash, full_name, role, is_master)
+       VALUES (1, $1, $2, 'Demo Estimator', 'admin', TRUE)`,
+      [email, hash]
+    );
+    console.log('[seed] demo user demo@omniclean.demo / demo1234 (tenant 1)');
+  } else {
+    await query(
+      `UPDATE users SET is_master = TRUE WHERE user_id = $1`,
+      [existing.rows[0].user_id]
+    );
+  }
 }
 
 export function newAccessToken() {

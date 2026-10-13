@@ -5,6 +5,7 @@ import { query } from '../db/client.js';
 import { newAccessToken } from './auth.js';
 import { sendEmail, emailTransportName } from './email.js';
 import { buildProposalEmailHtml } from './proposalCopy.js';
+import { syncOutcomeFromProposal } from './analytics.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const signaturesDir = path.resolve(__dirname, '../../data/signatures');
@@ -43,7 +44,8 @@ export async function getProposalByToken(accessToken) {
             b.bid_id, b.tenant_id, b.client_name, b.property_address, b.frequency,
             b.total_sq_ft, b.monthly_price, b.shift_hours, b.raw_ai_payload,
             t.name AS tenant_name, t.logo_url, t.company_email,
-            t.insurance_coi_url, t.insurance_notes, t.insurance_liability_limit
+            t.insurance_coi_url, t.insurance_notes, t.insurance_liability_limit,
+            t.insurance_coi_filename
      FROM proposals p
      JOIN bids b ON b.bid_id = p.bid_id
      JOIN tenants t ON t.tenant_id = b.tenant_id
@@ -125,6 +127,12 @@ export async function signProposal({
       signerEmail?.trim() || null,
       proposal.proposal_id,
     ]
+  );
+
+  await syncOutcomeFromProposal(
+    proposal.tenant_id,
+    proposal.bid_id,
+    'Signed'
   );
 
   return {
@@ -216,6 +224,8 @@ export async function sendProposalEmail({
      WHERE proposal_id = $5`,
     [emailHtml, newStatus, toEmail.trim(), token, row.proposal_id]
   );
+
+  await syncOutcomeFromProposal(tenantId, bidId, newStatus);
 
   return {
     ...result,

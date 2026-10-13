@@ -134,9 +134,14 @@ function serializePublicProposal(row) {
     signer_name: row.signer_name,
     tenant_name: row.tenant_name,
     insurance: {
-      coi_url: row.insurance_coi_url || null,
+      coi_url: row.insurance_coi_url
+        ? row.insurance_coi_url.startsWith('http')
+          ? row.insurance_coi_url
+          : `${publicBaseUrl()}${row.insurance_coi_url}`
+        : null,
       notes: row.insurance_notes || null,
       liability_limit: row.insurance_liability_limit || null,
+      filename: row.insurance_coi_filename || null,
     },
     pdf_url: `${publicBaseUrl()}/p/${row.access_token}/pdf`,
     financial_ledger: payload.financial_ledger || null,
@@ -180,7 +185,15 @@ function renderClientPortal(row, token) {
         <li>General liability: ${escapeHtml(row.insurance_liability_limit || 'To be confirmed — request COI')}</li>
         <li>COI document: ${
           row.insurance_coi_url
-            ? `<a href="${escapeHtml(row.insurance_coi_url)}" target="_blank" rel="noopener">View certificate</a>`
+            ? `<a href="${escapeHtml(
+                row.insurance_coi_url.startsWith('http')
+                  ? row.insurance_coi_url
+                  : row.insurance_coi_url
+              )}" target="_blank" rel="noopener">View certificate${
+                row.insurance_coi_filename
+                  ? ` (${escapeHtml(row.insurance_coi_filename)})`
+                  : ''
+              }</a>`
             : '<em>Link not yet uploaded by contractor</em>'
         }</li>
         <li>Workers’ compensation: SZV-compliant (SXM) — attestation on file with contractor</li>

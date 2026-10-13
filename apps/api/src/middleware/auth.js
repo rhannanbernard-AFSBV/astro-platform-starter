@@ -19,6 +19,8 @@ export function requireAuth(req, res, next) {
     tenant_id: Number(payload.tenant_id),
     email: payload.email,
     role: payload.role,
+    is_master: Boolean(payload.is_master),
+    home_tenant_id: Number(payload.home_tenant_id || payload.tenant_id),
   };
   req.tenantId = Number(payload.tenant_id);
   next();
@@ -36,6 +38,8 @@ export function optionalAuth(req, _res, next) {
         tenant_id: Number(payload.tenant_id),
         email: payload.email,
         role: payload.role,
+        is_master: Boolean(payload.is_master),
+        home_tenant_id: Number(payload.home_tenant_id || payload.tenant_id),
       };
       req.tenantId = Number(payload.tenant_id);
     }
