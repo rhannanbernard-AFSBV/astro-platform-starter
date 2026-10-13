@@ -92,9 +92,11 @@ export async function logGpsEvent({
     );
   }
 
+  let checklistRow = null;
   if (checklistId) {
     const c = await query(
-      `SELECT c.checklist_id FROM bid_checklists c
+      `SELECT c.checklist_id, c.is_high_risk, c.qa_verified_at, c.room_zone
+       FROM bid_checklists c
        JOIN bids b ON b.bid_id = c.bid_id
        WHERE c.checklist_id = $1 AND c.bid_id = $2 AND b.tenant_id = $3`,
       [checklistId, bidId, tenantId]
@@ -102,6 +104,21 @@ export async function logGpsEvent({
     if (!c.rows.length) {
       throw Object.assign(new Error('Checklist item not found'), { status: 404 });
     }
+    checklistRow = c.rows[0];
+  }
+
+  // Server-enforce photo QA before high-risk room_complete (also blocks offline sync bypass)
+  if (
+    eventType === 'room_complete' &&
+    checklistRow?.is_high_risk &&
+    !checklistRow.qa_verified_at
+  ) {
+    throw Object.assign(
+      new Error(
+        `QA required before completing high-risk zone "${checklistRow.room_zone}" — upload AI audit photo first`
+      ),
+      { status: 403, code: 'QA_REQUIRED', qa_required: true }
+    );
   }
 
   const geofence = await getGeofence(tenantId, bidId);

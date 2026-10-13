@@ -117,14 +117,14 @@ router.get('/bids/:bidId/proposal', async (req, res, next) => {
 
 /**
  * Send proposal email (localized HTML template) to client.
- * POST /api/bids/:bidId/send-proposal  { to_email, recipient_name? }
+ * POST /api/bids/:bidId/send-proposal | /api/bids/:bidId/send
  */
-router.post('/bids/:bidId/send-proposal', async (req, res, next) => {
+async function handleSendProposal(req, res, next) {
   try {
     const result = await sendProposalEmail({
       tenantId: req.tenantId,
       bidId: Number(req.params.bidId),
-      toEmail: req.body.to_email,
+      toEmail: req.body.to_email || req.body.to,
       recipientName: req.body.recipient_name,
     });
     const meta = clientMeta(req);
@@ -135,13 +135,19 @@ router.post('/bids/:bidId/send-proposal', async (req, res, next) => {
       resourceType: 'bid',
       resourceId: req.params.bidId,
       ...meta,
-      meta: { to: req.body.to_email, transport: result.transport },
+      meta: {
+        to: req.body.to_email || req.body.to,
+        transport: result.transport,
+      },
     });
     res.json(result);
   } catch (err) {
     next(err);
   }
-});
+}
+
+router.post('/bids/:bidId/send-proposal', handleSendProposal);
+router.post('/bids/:bidId/send', handleSendProposal);
 
 /**
  * Working demo path: upload/walkthrough → bid ledger → checklist → proposal draft
@@ -196,9 +202,12 @@ router.post('/scan', scanRateLimit, upload.single('image'), async (req, res, nex
       },
     });
 
+    // Hide raw portal token from scan JSON — return URL only (reduces log/screenshot leaks)
     res.status(201).json({
       bid_id: result.bid.bid_id,
       proposal_id: result.proposal.proposal_id,
+      client_name: clientName,
+      property_address: req.body.property_address || '',
       spatial_summary: result.payload.spatial_summary,
       scale_and_legend: result.payload.scale_and_legend,
       financial_ledger: result.payload.financial_ledger,
@@ -212,7 +221,6 @@ router.post('/scan', scanRateLimit, upload.single('image'), async (req, res, nex
         status: result.proposal.status,
         email_html: result.proposal.email_html,
         proposal_text: result.proposal.proposal_text,
-        access_token: result.proposal.access_token,
         proposal_secure_url: secureUrl,
         access_token_expires_at: result.proposal.access_token_expires_at,
       },

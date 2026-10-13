@@ -25,7 +25,7 @@ import { query } from '../db/client.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { publicBaseUrl } from '../services/proposalActions.js';
+import { signedAbsoluteUrl } from '../services/signedUrls.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -159,7 +159,9 @@ router.get('/admin/settings', async (req, res, next) => {
 
 router.patch('/admin/settings', async (req, res, next) => {
   try {
-    const settings = await updateAdminSettings(req.tenantId, req.body);
+    const settings = await updateAdminSettings(req.tenantId, req.body, {
+      isPlatformAdmin: Boolean(req.user?.is_master),
+    });
     res.json(settings);
   } catch (err) {
     next(err);
@@ -190,7 +192,8 @@ router.post(
         [url, req.file.originalname || filename, req.tenantId]
       );
       res.status(201).json({
-        insurance_coi_url: `${publicBaseUrl()}${url}`,
+        insurance_coi_url: signedAbsoluteUrl(url, 7 * 86400),
+        insurance_coi_path: url,
         filename: req.file.originalname || filename,
       });
     } catch (err) {
@@ -226,9 +229,86 @@ router.post('/bids/:bidId/outcome', async (req, res, next) => {
     const bid = await setBidOutcome(
       req.tenantId,
       Number(req.params.bidId),
-      req.body.outcome
+      req.body.outcome,
+      {
+        lossReason: req.body.loss_reason,
+        lossNotes: req.body.loss_notes,
+        competitorPrice: req.body.competitor_price,
+      }
     );
     res.json({ bid });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Geocode property address → lat/lng for site geofence (Nominatim / operator override) */
+router.post('/bids/:bidId/geofence/from-address', async (req, res, next) => {
+  try {
+    const bidId = Number(req.params.bidId);
+    const bid = await query(
+      'SELECT bid_id, property_address FROM bids WHERE bid_id = $1 AND tenant_id = $2',
+      [bidId, req.tenantId]
+    );
+    if (!bid.rows.length) {
+      return res.status(404).json({ error: 'Bid not found' });
+    }
+    const address =
+      (req.body.address || bid.rows[0].property_address || '').trim();
+    if (!address) {
+      return res.status(400).json({ error: 'address required' });
+    }
+
+    // Optional operator pin override
+    if (req.body.center_lat != null && req.body.center_lng != null) {
+      const geofence = await upsertGeofence({
+        tenantId: req.tenantId,
+        bidId,
+        centerLat: req.body.center_lat,
+        centerLng: req.body.center_lng,
+        radiusM: req.body.radius_m || 200,
+        label: req.body.label || address,
+      });
+      return res.json({ geofence, source: 'manual_pin' });
+    }
+
+    const url = new URL('https://nominatim.openstreetmap.org/search');
+    url.searchParams.set('q', address);
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('limit', '1');
+    const geoRes = await fetch(url, {
+      headers: {
+        'User-Agent': 'OmniCleanAIScanner/0.1 (ops geofence)',
+        Accept: 'application/json',
+      },
+    });
+    if (!geoRes.ok) {
+      return res.status(502).json({
+        error: `Geocoder HTTP ${geoRes.status}`,
+        code: 'GEOCODER_FAILED',
+      });
+    }
+    const hits = await geoRes.json();
+    if (!Array.isArray(hits) || !hits.length) {
+      return res.status(404).json({
+        error: 'No geocode result for address — set center_lat/center_lng manually',
+        code: 'GEOCODE_NOT_FOUND',
+        address,
+      });
+    }
+    const geofence = await upsertGeofence({
+      tenantId: req.tenantId,
+      bidId,
+      centerLat: Number(hits[0].lat),
+      centerLng: Number(hits[0].lon),
+      radiusM: req.body.radius_m || 200,
+      label: req.body.label || address,
+    });
+    res.json({
+      geofence,
+      source: 'nominatim',
+      display_name: hits[0].display_name,
+    });
   } catch (err) {
     next(err);
   }

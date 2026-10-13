@@ -25,7 +25,8 @@ export default function ScanScreen() {
   const [clientName, setClientName] = useState('Philipsburg Medical Plaza');
   const [address, setAddress] = useState('1 Front Street, Philipsburg, SXM');
   const [frequency, setFrequency] = useState('5x / week');
-  const [hintSqFt, setHintSqFt] = useState('12500');
+  // Empty by default — do not lock mock-scale pricing at 12500
+  const [hintSqFt, setHintSqFt] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [apiNote, setApiNote] = useState(`API: ${API_URL}`);
@@ -39,7 +40,7 @@ export default function ScanScreen() {
     );
   }
 
-  async function pickImage() {
+  async function pickFromLibrary() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Alert.alert('Permission needed', 'Allow photo access for walkthrough uploads.');
@@ -48,6 +49,21 @@ export default function ScanScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.85,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setImageUri(result.assets[0].uri);
+    }
+  }
+
+  async function captureCamera() {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Camera needed', 'Allow camera access to capture walkthrough photos.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      quality: 0.85,
+      allowsEditing: false,
     });
     if (!result.canceled && result.assets[0]) {
       setImageUri(result.assets[0].uri);
@@ -126,19 +142,29 @@ export default function ScanScreen() {
       <Text style={styles.label}>Frequency</Text>
       <TextInput style={styles.input} value={frequency} onChangeText={setFrequency} />
 
-      <Text style={styles.label}>Hint sq ft (optional / mock)</Text>
+      <Text style={styles.label}>Calibrated sq ft (optional)</Text>
       <TextInput
         style={styles.input}
         value={hintSqFt}
         onChangeText={setHintSqFt}
         keyboardType="numeric"
+        placeholder="Leave blank — use legend / vision scale"
       />
+      <Text style={styles.calibHint}>
+        Only set when you measured the floor yourself. Blank uses deterministic
+        pixels_per_foot (when available) or vision estimate — never a silent 12,500 default.
+      </Text>
 
-      <Pressable style={styles.secondaryBtn} onPress={pickImage}>
-        <Text style={styles.secondaryBtnText}>
-          {imageUri ? 'Change walkthrough photo' : 'Attach floorplan / walkthrough photo'}
-        </Text>
-      </Pressable>
+      <View style={styles.captureRow}>
+        <Pressable style={styles.secondaryBtn} onPress={captureCamera}>
+          <Text style={styles.secondaryBtnText}>Camera capture</Text>
+        </Pressable>
+        <Pressable style={styles.secondaryBtn} onPress={pickFromLibrary}>
+          <Text style={styles.secondaryBtnText}>
+            {imageUri ? 'Change from library' : 'Photo library'}
+          </Text>
+        </Pressable>
+      </View>
       {imageUri ? (
         <Image source={{ uri: imageUri }} style={styles.preview} />
       ) : null}
@@ -212,6 +238,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#0f172a',
   },
+  calibHint: { color: '#64748b', fontSize: 12, lineHeight: 17, marginTop: 4 },
+  captureRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
   preview: {
     width: '100%',
     height: 160,
@@ -237,13 +265,13 @@ const styles = StyleSheet.create({
   },
   outlineBtnText: { color: '#0f766e', fontSize: 14, fontWeight: '600', textAlign: 'center' },
   secondaryBtn: {
-    marginTop: 12,
+    flex: 1,
     backgroundColor: '#e2e8f0',
     paddingVertical: 12,
     borderRadius: 4,
     alignItems: 'center',
   },
-  secondaryBtnText: { color: '#334155', fontWeight: '600' },
+  secondaryBtnText: { color: '#334155', fontWeight: '600', fontSize: 13 },
   disabled: { opacity: 0.6 },
   footnote: { marginTop: 16, color: '#64748b', fontSize: 12, lineHeight: 18 },
 });

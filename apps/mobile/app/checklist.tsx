@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Redirect, useRouter } from 'expo-router';
 import {
   View,
@@ -11,37 +11,21 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import NetInfo from '@react-native-community/netinfo';
 import { FlowStepper } from '../src/components/FlowStepper';
 import { useBid } from '../src/state/BidContext';
-import { logGps, registerPushToken, setGeofence, uploadQaPhoto } from '../src/api/client';
+import {
+  logGps,
+  registerPushToken,
+  setGeofenceFromAddress,
+  uploadQaPhoto,
+} from '../src/api/client';
+import { getCrewPosition, geocodeAddress } from '../src/location';
 import {
   enqueueOfflineEvent,
   flushOfflineQueue,
   pendingCount,
 } from '../src/offline/queue';
-
-async function getPosition(): Promise<{
-  latitude: number;
-  longitude: number;
-  accuracy?: number;
-}> {
-  try {
-    const Location = await import('expo-location');
-    const perm = await Location.requestForegroundPermissionsAsync();
-    if (!perm.granted) throw new Error('Location permission denied');
-    const pos = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
-    return {
-      latitude: pos.coords.latitude,
-      longitude: pos.coords.longitude,
-      accuracy: pos.coords.accuracy ?? undefined,
-    };
-  } catch {
-    // Deterministic demo coords (Philipsburg) when location unavailable (e.g. web)
-    return { latitude: 18.029, longitude: -63.047, accuracy: 25 };
-  }
-}
 
 export default function ChecklistScreen() {
   const { scan } = useBid();
@@ -51,12 +35,26 @@ export default function ChecklistScreen() {
   const [completed, setCompleted] = useState<Record<number, boolean>>({});
   const [clockedIn, setClockedIn] = useState(false);
   const [offlinePending, setOfflinePending] = useState(0);
+  const [netHint, setNetHint] = useState('');
 
-  if (!scan) return <Redirect href="/" />;
-
-  async function refreshPending() {
+  const refreshPending = useCallback(async () => {
     setOfflinePending(await pendingCount());
-  }
+  }, []);
+
+  useEffect(() => {
+    if (!scan) return;
+    refreshPending();
+    const unsub = NetInfo.addEventListener((state) => {
+      const online = Boolean(state.isConnected && state.isInternetReachable !== false);
+      setNetHint(online ? '' : 'Offline — queue will auto-flush on reconnect');
+      if (online) {
+        flushOfflineQueue()
+          .then(() => refreshPending())
+          .catch(() => undefined);
+      }
+    });
+    return () => unsub();
+  }, [scan, refreshPending]);
 
   const run = useCallback(
     async (key: string, fn: () => Promise<void>) => {
@@ -74,13 +72,34 @@ export default function ChecklistScreen() {
     []
   );
 
+  if (!scan) return <Redirect href="/" />;
+
+  async function pickQaPhoto(): Promise<string | null> {
+    const cam = await ImagePicker.requestCameraPermissionsAsync();
+    if (cam.granted) {
+      const shot = await ImagePicker.launchCameraAsync({ quality: 0.7 });
+      if (!shot.canceled && shot.assets[0]) return shot.assets[0].uri;
+    }
+    const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!lib.granted) {
+      throw new Error('Camera or photo library permission required for QA');
+    }
+    const picked = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.7,
+    });
+    if (picked.canceled || !picked.assets[0]) return null;
+    return picked.assets[0].uri;
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <FlowStepper active="checklist" />
       <Text style={styles.h1}>Crew checklist</Text>
       <Text style={styles.sub}>
-        Clock in → photo QA high-risk zones → complete rooms. Then send the portal.
+        Clock in (site geofence from address) → camera QA high-risk → complete rooms.
       </Text>
+      {netHint ? <Text style={styles.net}>{netHint}</Text> : null}
 
       <View style={styles.opsRow}>
         <Pressable
@@ -88,16 +107,38 @@ export default function ChecklistScreen() {
           disabled={!!busyId}
           onPress={() =>
             run('clock', async () => {
-              const pos = await getPosition();
+              const pos = await getCrewPosition();
               if (!clockedIn) {
-                await setGeofence(scan.bid_id, {
-                  center_lat: pos.latitude,
-                  center_lng: pos.longitude,
-                  radius_m: 200,
-                  label: scan.proposal_copy?.executive_summary
-                    ? 'Site'
-                    : 'Walkthrough site',
-                });
+                // Prefer property address / map geocode — not "current GPS as site"
+                const address = (scan.property_address || '').trim();
+                if (!address) {
+                  throw new Error(
+                    'Property address missing on bid — re-scan with an address to set site geofence'
+                  );
+                }
+                let set = false;
+                try {
+                  const local = await geocodeAddress(address);
+                  if (local) {
+                    await setGeofenceFromAddress(scan.bid_id, {
+                      address,
+                      center_lat: local.latitude,
+                      center_lng: local.longitude,
+                      radius_m: 200,
+                      label: address,
+                    });
+                    set = true;
+                  }
+                } catch {
+                  /* fall through to API geocoder */
+                }
+                if (!set) {
+                  await setGeofenceFromAddress(scan.bid_id, {
+                    address,
+                    radius_m: 200,
+                    label: address,
+                  });
+                }
                 await logGps(scan.bid_id, {
                   event_type: 'clock_in',
                   latitude: pos.latitude,
@@ -129,7 +170,7 @@ export default function ChecklistScreen() {
             <ActivityIndicator color="#fff" />
           ) : (
             <Text style={styles.opsBtnText}>
-              {clockedIn ? 'GPS clock-out' : 'GPS clock-in + set geofence'}
+              {clockedIn ? 'GPS clock-out' : 'GPS clock-in + site geofence'}
             </Text>
           )}
         </Pressable>
@@ -204,20 +245,12 @@ export default function ChecklistScreen() {
                   disabled={!!busyId}
                   onPress={() =>
                     run(`qa-${cid}`, async () => {
-                      const perm =
-                        await ImagePicker.requestMediaLibraryPermissionsAsync();
-                      if (!perm.granted) {
-                        throw new Error('Photo permission required for QA');
-                      }
-                      const picked = await ImagePicker.launchImageLibraryAsync({
-                        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                        quality: 0.7,
-                      });
-                      if (picked.canceled || !picked.assets[0]) return;
+                      const uri = await pickQaPhoto();
+                      if (!uri) return;
                       await uploadQaPhoto(
                         scan.bid_id,
                         cid,
-                        picked.assets[0].uri,
+                        uri,
                         zone.ai_audit_prompt || undefined
                       );
                       setQaDone((s) => ({ ...s, [cid]: true }));
@@ -227,7 +260,7 @@ export default function ChecklistScreen() {
                   {busyId === `qa-${cid}` ? (
                     <ActivityIndicator color="#fff" size="small" />
                   ) : (
-                    <Text style={styles.smallBtnText}>Upload QA photo</Text>
+                    <Text style={styles.smallBtnText}>Camera QA photo</Text>
                   )}
                 </Pressable>
               ) : null}
@@ -243,7 +276,7 @@ export default function ChecklistScreen() {
                             'Upload AI photo QA before completing this high-risk zone'
                           );
                         }
-                        const pos = await getPosition();
+                        const pos = await getCrewPosition();
                         await logGps(scan.bid_id, {
                           event_type: 'room_complete',
                           checklist_id: cid,
@@ -266,7 +299,12 @@ export default function ChecklistScreen() {
                     disabled={!!busyId}
                     onPress={() =>
                       run(`off-${cid}`, async () => {
-                        const pos = await getPosition();
+                        if (zone.is_high_risk && !qaDone[cid]) {
+                          throw new Error(
+                            'Upload AI photo QA before queuing offline complete for high-risk zones'
+                          );
+                        }
+                        const pos = await getCrewPosition();
                         await enqueueOfflineEvent(scan.bid_id, {
                           event_type: 'room_complete',
                           checklist_id: cid,
@@ -303,7 +341,13 @@ const styles = StyleSheet.create({
     fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' }),
     color: '#0f172a',
   },
-  sub: { marginTop: 6, marginBottom: 16, color: '#64748b', lineHeight: 20 },
+  sub: { marginTop: 6, marginBottom: 8, color: '#64748b', lineHeight: 20 },
+  net: {
+    marginBottom: 12,
+    color: '#b45309',
+    fontWeight: '600',
+    fontSize: 13,
+  },
   opsRow: { marginBottom: 12 },
   opsBtn: {
     backgroundColor: '#134e4a',
