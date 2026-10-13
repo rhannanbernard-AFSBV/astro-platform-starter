@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
+import { clientMeta, writeAuditLog } from '../services/auditLog.js';
 import {
   getHighRiskQaStatus,
   listQaPhotos,
@@ -147,8 +148,8 @@ router.get('/bids/:bidId/proposal.pdf', async (req, res, next) => {
   }
 });
 
-// —— Tenant admin ——
-router.get('/admin/settings', async (req, res, next) => {
+// —— Tenant admin (admin role or is_master) ——
+router.get('/admin/settings', requireRole('admin'), async (req, res, next) => {
   try {
     const settings = await getAdminSettings(req.tenantId);
     res.json(settings);
@@ -157,12 +158,58 @@ router.get('/admin/settings', async (req, res, next) => {
   }
 });
 
-router.patch('/admin/settings', async (req, res, next) => {
+router.patch('/admin/settings', requireRole('admin'), async (req, res, next) => {
   try {
     const settings = await updateAdminSettings(req.tenantId, req.body, {
       isPlatformAdmin: Boolean(req.user?.is_master),
     });
+    const meta = clientMeta(req);
+    await writeAuditLog({
+      tenantId: req.tenantId,
+      userId: req.user.user_id,
+      action: 'admin.settings_patch',
+      resourceType: 'tenant',
+      resourceId: req.tenantId,
+      ...meta,
+      meta: {
+        keys: Object.keys(req.body || {}),
+        jurisdiction: Boolean(req.body?.jurisdiction),
+      },
+    });
     res.json(settings);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Create an invite code so new users can join this tenant (register with invite_code) */
+router.post('/admin/invites', requireRole('admin'), async (req, res, next) => {
+  try {
+    const crypto = await import('node:crypto');
+    const code =
+      (req.body.code || '').trim() ||
+      crypto.randomBytes(12).toString('hex');
+    const role = req.body.role === 'admin' ? 'admin' : 'member';
+    const maxUses =
+      req.body.max_uses != null ? Number(req.body.max_uses) : null;
+    const expiresAt = req.body.expires_at || null;
+    const { rows } = await query(
+      `INSERT INTO tenant_invites (tenant_id, code, role, max_uses, expires_at)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING invite_id, tenant_id, code, role, max_uses, use_count, expires_at, active`,
+      [req.tenantId, code, role, maxUses, expiresAt]
+    );
+    const meta = clientMeta(req);
+    await writeAuditLog({
+      tenantId: req.tenantId,
+      userId: req.user.user_id,
+      action: 'admin.invite_create',
+      resourceType: 'tenant_invite',
+      resourceId: rows[0].invite_id,
+      ...meta,
+      meta: { code: rows[0].code, role },
+    });
+    res.status(201).json({ invite: rows[0] });
   } catch (err) {
     next(err);
   }
@@ -171,6 +218,7 @@ router.patch('/admin/settings', async (req, res, next) => {
 /** Upload COI (PDF/image) for tenant — shown on client portal */
 router.post(
   '/admin/insurance/coi',
+  requireRole('admin'),
   upload.single('coi'),
   async (req, res, next) => {
     try {
@@ -191,6 +239,16 @@ router.post(
          WHERE tenant_id = $3`,
         [url, req.file.originalname || filename, req.tenantId]
       );
+      const meta = clientMeta(req);
+      await writeAuditLog({
+        tenantId: req.tenantId,
+        userId: req.user.user_id,
+        action: 'admin.coi_upload',
+        resourceType: 'tenant',
+        resourceId: req.tenantId,
+        ...meta,
+        meta: { filename: req.file.originalname || filename },
+      });
       res.status(201).json({
         insurance_coi_url: signedAbsoluteUrl(url, 7 * 86400),
         insurance_coi_path: url,
@@ -224,23 +282,37 @@ router.get('/analytics/summary', async (req, res, next) => {
   }
 });
 
-router.post('/bids/:bidId/outcome', async (req, res, next) => {
-  try {
-    const bid = await setBidOutcome(
-      req.tenantId,
-      Number(req.params.bidId),
-      req.body.outcome,
-      {
-        lossReason: req.body.loss_reason,
-        lossNotes: req.body.loss_notes,
-        competitorPrice: req.body.competitor_price,
-      }
-    );
-    res.json({ bid });
-  } catch (err) {
-    next(err);
+router.post(
+  '/bids/:bidId/outcome',
+  requireRole('admin'),
+  async (req, res, next) => {
+    try {
+      const bid = await setBidOutcome(
+        req.tenantId,
+        Number(req.params.bidId),
+        req.body.outcome,
+        {
+          lossReason: req.body.loss_reason,
+          lossNotes: req.body.loss_notes,
+          competitorPrice: req.body.competitor_price,
+        }
+      );
+      const meta = clientMeta(req);
+      await writeAuditLog({
+        tenantId: req.tenantId,
+        userId: req.user.user_id,
+        action: 'bid.outcome',
+        resourceType: 'bid',
+        resourceId: req.params.bidId,
+        ...meta,
+        meta: { outcome: req.body.outcome },
+      });
+      res.json({ bid });
+    } catch (err) {
+      next(err);
+    }
   }
-});
+);
 
 /** Geocode property address → lat/lng for site geofence (Nominatim / operator override) */
 router.post('/bids/:bidId/geofence/from-address', async (req, res, next) => {

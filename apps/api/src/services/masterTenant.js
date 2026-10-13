@@ -1,4 +1,5 @@
 import { query } from '../db/client.js';
+import { allowDemoSeed, withRlsBypass } from '../db/tenantContext.js';
 import { signToken } from './auth.js';
 
 /**
@@ -7,39 +8,48 @@ import { signToken } from './auth.js';
  */
 
 export async function ensureDemoMasterGraph() {
-  // Link demo user as master with access to tenants 1 and 2
-  const demo = await query(
-    `SELECT user_id FROM users WHERE email = 'demo@omniclean.demo' LIMIT 1`
-  );
-  if (!demo.rows.length) return;
-  const userId = demo.rows[0].user_id;
-  await query(`UPDATE users SET is_master = TRUE WHERE user_id = $1`, [userId]);
-
-  for (const tid of [1, 2, 100]) {
-    const t = await query('SELECT tenant_id FROM tenants WHERE tenant_id = $1', [
-      tid,
-    ]);
-    if (!t.rows.length) continue;
-    await query(
-      `INSERT INTO master_tenant_access (user_id, tenant_id)
-       VALUES ($1, $2) ON CONFLICT (user_id, tenant_id) DO NOTHING`,
-      [userId, tid]
+  if (!allowDemoSeed()) {
+    console.log(
+      '[seed] skipping demo master graph (production — set ALLOW_DEMO_SEED=true to override)'
     );
+    return;
   }
 
-  // Ensure tenant 2 currency settings exist
-  const s2 = await query(
-    'SELECT 1 FROM tenant_currency_settings WHERE tenant_id = 2'
-  );
-  if (!s2.rows.length) {
-    await query(
-      `INSERT INTO tenant_currency_settings (
-        tenant_id, primary_currency_code, enable_dual_quoting, secondary_currency_code,
-        custom_markup_percentage, base_hourly_wage, target_margin_percentage,
-        shifts_per_year, facility_density_code
-      ) VALUES (2, 'USD', TRUE, 'XCG', 0.00, 17.00, 28.00, 260, 'retail')`
+  return withRlsBypass(async () => {
+    // Link demo user as master with access to tenants 1 and 2
+    const demo = await query(
+      `SELECT user_id FROM users WHERE email = 'demo@omniclean.demo' LIMIT 1`
     );
-  }
+    if (!demo.rows.length) return;
+    const userId = demo.rows[0].user_id;
+    await query(`UPDATE users SET is_master = TRUE WHERE user_id = $1`, [userId]);
+
+    for (const tid of [1, 2, 100]) {
+      const t = await query('SELECT tenant_id FROM tenants WHERE tenant_id = $1', [
+        tid,
+      ]);
+      if (!t.rows.length) continue;
+      await query(
+        `INSERT INTO master_tenant_access (user_id, tenant_id)
+         VALUES ($1, $2) ON CONFLICT (user_id, tenant_id) DO NOTHING`,
+        [userId, tid]
+      );
+    }
+
+    // Ensure tenant 2 currency settings exist
+    const s2 = await query(
+      'SELECT 1 FROM tenant_currency_settings WHERE tenant_id = 2'
+    );
+    if (!s2.rows.length) {
+      await query(
+        `INSERT INTO tenant_currency_settings (
+          tenant_id, primary_currency_code, enable_dual_quoting, secondary_currency_code,
+          custom_markup_percentage, base_hourly_wage, target_margin_percentage,
+          shifts_per_year, facility_density_code
+        ) VALUES (2, 'USD', TRUE, 'XCG', 0.00, 17.00, 28.00, 260, 'retail')`
+      );
+    }
+  });
 }
 
 export async function listAccessibleTenants(userId) {
