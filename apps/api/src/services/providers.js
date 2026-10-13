@@ -62,7 +62,7 @@ export function resolveVisionMode({ forceMock, hasImage }) {
   if (!hasImage) {
     throw Object.assign(
       new Error(
-        'Live vision requires an image upload (floorplan / walkthrough photo). Attach field "image", or pass mock=1 for demo spatial data.'
+        'Live camera vision requires at least one photo frame. Capture doorway / floor / rooms, or enable the advanced mock toggle (non-prod only).'
       ),
       { status: 400, code: 'VISION_IMAGE_REQUIRED' }
     );
