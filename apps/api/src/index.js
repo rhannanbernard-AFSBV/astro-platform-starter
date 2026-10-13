@@ -36,6 +36,8 @@ dotenv.config();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
+const HOST = process.env.HOST || '0.0.0.0';
+const publicDir = path.resolve(__dirname, '../public');
 
 // Resolve JWT before accepting traffic (throws in production if weak/missing)
 resolveJwtSecret();
@@ -65,6 +67,7 @@ app.use('/insurance', protectedStatic(insuranceDir));
 app.get('/', (_req, res) => {
   res.json({
     name: 'OmniClean AI Scanner API',
+    demo: 'GET /demo/ (phone web trial — no Expo Go)',
     auth: 'POST /api/auth/login | /api/auth/register',
     scan: 'POST /api/scan (Bearer JWT)',
     portal: 'GET /p/:token',
@@ -75,6 +78,15 @@ app.get('/', (_req, res) => {
     ...providerStatus(),
   });
 });
+
+// Mobile-friendly web demo (same-origin API calls). Public, no auth on HTML.
+app.use(
+  '/demo',
+  express.static(path.join(publicDir, 'demo'), {
+    index: 'index.html',
+    fallthrough: false,
+  })
+);
 
 app.get('/api/metrics', (_req, res) => {
   res.json(getMetricsSnapshot());
@@ -192,9 +204,11 @@ async function syncSerialSequences() {
 async function main() {
   await ensureMigrated();
   const providers = providerStatus();
-  app.listen(PORT, () => {
+  app.listen(PORT, HOST, () => {
     log.info('api_listening', {
+      host: HOST,
       port: PORT,
+      demo: `http://${HOST === '0.0.0.0' ? '127.0.0.1' : HOST}:${PORT}/demo/`,
       openai_configured: providers.openai_configured,
       vision_mock_allowed: providers.vision_mock_allowed,
       email_transport: emailTransportName(),

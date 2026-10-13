@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f766e" />
+  <title>OmniClean · Phone demo</title>
+  <style>
+    :root {
+      --bg: #f0f7f6;
+      --bg-deep: #d8ebe8;
+      --ink: #134e4a;
+      --muted: #5f7a76;
+      --card: #ffffff;
+      --accent: #0f766e;
+      --accent-ink: #ffffff;
+      --warn: #b45309;
+      --danger: #b91c1c;
+      --line: #c5ddd9;
+      --radius: 14px;
+      --shadow: 0 10px 30px rgba(15, 118, 110, 0.08);
+      --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      font-family: var(--font);
+      color: var(--ink);
+      background:
+        radial-gradient(120% 80% at 10% -10%, #b8e4de 0%, transparent 55%),
+        radial-gradient(90% 60% at 100% 0%, #e8f4c8 0%, transparent 45%),
+        linear-gradient(180deg, var(--bg) 0%, var(--bg-deep) 100%);
+    }
+    body { padding: 16px 16px 48px; }
+    .wrap { max-width: 520px; margin: 0 auto; }
+    header {
+      padding: 8px 4px 20px;
+    }
+    .brand {
+      font-size: 1.75rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin: 0;
+    }
+    .tag {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.4;
+    }
+    .steps {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin: 16px 0 20px;
+    }
+    .step-pill {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.65);
+      color: var(--muted);
+      border: 1px solid var(--line);
+    }
+    .step-pill.active {
+      background: var(--accent);
+      color: var(--accent-ink);
+      border-color: var(--accent);
+    }
+    .step-pill.done {
+      background: #ccfbf1;
+      color: var(--accent);
+      border-color: #99f6e4;
+    }
+    .panel {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(15, 118, 110, 0.08);
+      padding: 18px 16px 20px;
+      margin-bottom: 14px;
+    }
+    h2 {
+      margin: 0 0 6px;
+      font-size: 1.2rem;
+      letter-spacing: -0.02em;
+    }
+    .sub {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+    label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      margin: 12px 0 6px;
+    }
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 12px;
+      font: inherit;
+      color: var(--ink);
+      background: #fbfffe;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: 2px solid rgba(15, 118, 110, 0.35);
+      border-color: var(--accent);
+    }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      margin-top: 16px;
+      border: none;
+      border-radius: 12px;
+      padding: 14px 16px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--accent);
+      color: var(--accent-ink);
+    }
+    .btn:disabled { opacity: 0.55; cursor: wait; }
+    .btn.secondary {
+      background: #ecfdf5;
+      color: var(--accent);
+      border: 1px solid #99f6e4;
+      margin-top: 10px;
+    }
+    .btn.ghost {
+      background: transparent;
+      color: var(--muted);
+      margin-top: 8px;
+      font-weight: 600;
+    }
+    .err {
+      display: none;
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #fef2f2;
+      color: var(--danger);
+      font-size: 0.9rem;
+      line-height: 1.35;
+    }
+    .err.show { display: block; }
+    .note {
+      margin-top: 12px;
+      font-size: 0.82rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    .kpi {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin: 12px 0;
+    }
+    .kpi > div {
+      background: #f0fdfa;
+      border: 1px solid #99f6e4;
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .kpi span {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+    }
+    .kpi strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 1.15rem;
+    }
+    .line {
+      padding: 8px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 0.92rem;
+      line-height: 1.35;
+    }
+    .line:last-child { border-bottom: none; }
+    .badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #fff7ed;
+      color: var(--warn);
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    .zone {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      margin-top: 10px;
+      background: #fbfffe;
+    }
+    .zone h3 {
+      margin: 0 0 6px;
+      font-size: 1rem;
+    }
+    .zone ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--ink);
+      font-size: 0.9rem;
+    }
+    .fixture {
+      display: grid;
+      grid-template-columns: 1.4fr 0.6fr 0.8fr;
+      gap: 8px;
+      align-items: end;
+      margin-bottom: 8px;
+    }
+    .fixture label { margin-top: 0; }
+    .hidden { display: none !important; }
+    .userbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .userbar button {
+      border: none;
+      background: transparent;
+      color: var(--accent);
+      font-weight: 700;
+      cursor: pointer;
+      padding: 0;
+    }
+    .calc {
+      margin-top: 8px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+    .calc strong { color: var(--ink); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <p class="brand">OmniClean</p>
+      <p class="tag">Phone trial — login, mock scan, calibrate, bid, checklist. No Expo Go.</p>
+    </header>
+
+    <div class="steps" id="stepper" aria-label="Demo steps"></div>
+    <div class="userbar hidden" id="userbar">
+      <span id="userLabel"></span>
+      <button type="button" id="logoutBtn">Log out</button>
+    </div>
+    <div class="err" id="err" role="alert"></div>
+
+    <!-- LOGIN -->
+    <section class="panel" id="view-login">
+      <h2>Sign in</h2>
+      <p class="sub">Demo account is pre-filled. Same API the mobile app uses.</p>
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="username" value="demo@omniclean.demo" />
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" value="demo1234" />
+      <button class="btn" id="loginBtn" type="button">Continue</button>
+      <p class="note">Mock vision is on by default — no OpenAI key needed.</p>
+    </section>
+
+    <!-- SCAN -->
+    <section class="panel hidden" id="view-scan">
+      <h2>Mock walkthrough scan</h2>
+      <p class="sub">Creates a provisional bid from mocked spatial extract. Pricing commits after calibrate.</p>
+      <label for="clientName">Client name</label>
+      <input id="clientName" value="Philipsburg Medical Plaza" />
+      <label for="address">Property address</label>
+      <input id="address" value="1 Front Street, Philipsburg, SXM" />
+      <div class="row">
+        <div>
+          <label for="frequency">Frequency</label>
+          <input id="frequency" value="5x / week" />
+        </div>
+        <div>
+          <label for="hintSqFt">Hint sq ft (optional)</label>
+          <input id="hintSqFt" type="number" inputmode="decimal" placeholder="e.g. 9000" />
+        </div>
+      </div>
+      <button class="btn" id="scanBtn" type="button">Run mock scan</button>
+    </section>
+
+    <!-- CALIBRATE -->
+    <section class="panel hidden" id="view-calibrate">
+      <h2>Calibrate before pricing</h2>
+      <p class="sub">Adjust cleanable sq ft and fixtures, then commit Decimal pricing (not LLM math).</p>
+      <label for="sqFt">Cleanable sq ft</label>
+      <input id="sqFt" type="number" inputmode="decimal" />
+      <div id="fixtureEditor"></div>
+      <button class="btn" id="calibrateBtn" type="button">Commit price</button>
+    </section>
+
+    <!-- LEDGER -->
+    <section class="panel hidden" id="view-ledger">
+      <h2>Bid summary</h2>
+      <p class="sub" id="ledgerSub"></p>
+      <div class="kpi">
+        <div><span>Monthly</span><strong id="kpiMonthly">—</strong></div>
+        <div><span>Per shift</span><strong id="kpiShift">—</strong></div>
+      </div>
+      <div id="dualQuote" class="hidden calc"></div>
+      <div id="ledgerLines"></div>
+      <div id="calcSteps"></div>
+      <button class="btn" id="toChecklistBtn" type="button">Next · Checklist</button>
+      <button class="btn secondary hidden" id="portalBtn" type="button">Open proposal portal</button>
+    </section>
+
+    <!-- CHECKLIST -->
+    <section class="panel hidden" id="view-checklist">
+      <h2>Crew checklist</h2>
+      <p class="sub">High-risk zones include AI audit prompts. Full GPS / photo QA lives in the Expo app.</p>
+      <div id="checklistList"></div>
+      <button class="btn secondary" id="newScanBtn" type="button">Start another mock scan</button>
+      <button class="btn ghost" id="backLedgerBtn" type="button">Back to bid summary</button>
+    </section>
+  </div>
+
+  <script>
+    const API = ''; // same origin as this page (/demo → API host)
+    const STEPS = ['login', 'scan', 'calibrate', 'bid', 'checklist'];
+    const state = {
+      token: localStorage.getItem('oc_demo_token') || '',
+      user: null,
+      tenantName: '',
+      scan: null,
+      step: 'login',
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const views = {
+      login: $('view-login'),
+      scan: $('view-scan'),
+      calibrate: $('view-calibrate'),
+      bid: $('view-ledger'),
+      checklist: $('view-checklist'),
+    };
+
+    function showError(msg) {
+      const el = $('err');
+      if (!msg) {
+        el.classList.remove('show');
+        el.textContent = '';
+        return;
+      }
+      el.textContent = msg;
+      el.classList.add('show');
+    }
+
+    function setBusy(btn, busy, label) {
+      if (!btn) return;
+      btn.disabled = !!busy;
+      if (label) btn.dataset.label = btn.dataset.label || btn.textContent;
+      btn.textContent = busy ? 'Working…' : (btn.dataset.label || label || btn.textContent);
+    }
+
+    async function api(path, opts = {}) {
+      const headers = { ...(opts.headers || {}) };
+      if (state.token) headers.Authorization = `Bearer ${state.token}`;
+      const res = await fetch(`${API}${path}`, { ...opts, headers });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const err = new Error(body.error || `Request failed (${res.status})`);
+        err.code = body.code;
+        err.status = res.status;
+        throw err;
+      }
+      return body;
+    }
+
+    function renderStepper() {
+      const idx = STEPS.indexOf(state.step);
+      $('stepper').innerHTML = STEPS.map((s, i) => {
+        const cls = i < idx ? 'done' : i === idx ? 'active' : '';
+        return `<span class="step-pill ${cls}">${s}</span>`;
+      }).join('');
+    }
+
+    function showStep(step) {
+      state.step = step;
+      showError('');
+      Object.entries(views).forEach(([key, el]) => {
+        el.classList.toggle('hidden', key !== step);
+      });
+      const loggedIn = !!state.token && step !== 'login';
+      $('userbar').classList.toggle('hidden', !loggedIn);
+      if (loggedIn) {
+        const name = state.user?.full_name || state.user?.email || 'Signed in';
+        $('userLabel').textContent = `${name}${state.tenantName ? ' · ' + state.tenantName : ''}`;
+      }
+      renderStepper();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function fixtureRows(fixtures) {
+      return (fixtures || []).map((f, i) => `
+        <div class="fixture" data-i="${i}">
+          <div>
+            <label>Fixture</label>
+            <input data-f="type" value="${escapeAttr(f.fixture_type || '')}" />
+          </div>
+          <div>
+            <label>Count</label>
+            <input data-f="count" type="number" inputmode="numeric" value="${Number(f.count) || 0}" />
+          </div>
+          <div>
+            <label>Intensity</label>
+            <select data-f="intensity">
+              ${['low','medium','high'].map((v) =>
+                `<option value="${v}" ${f.labor_intensity === v ? 'selected' : ''}>${v}</option>`
+              ).join('')}
+            </select>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function escapeAttr(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    }
+
+    function readFixtures() {
+      return [...document.querySelectorAll('#fixtureEditor .fixture')].map((row) => ({
+        fixture_type: row.querySelector('[data-f="type"]').value.trim(),
+        count: Number(row.querySelector('[data-f="count"]').value) || 0,
+        labor_intensity: row.querySelector('[data-f="intensity"]').value,
+      })).filter((f) => f.fixture_type);
+    }
+
+    function renderCalibrate(scan) {
+      $('sqFt').value = String(scan.spatial_summary?.total_cleanable_sq_ft ?? '');
+      $('fixtureEditor').innerHTML = fixtureRows(scan.spatial_summary?.detected_fixtures || []);
+    }
+
+    function money(v) {
+      if (v == null) return '—';
+      return String(v);
+    }
+
+    function renderLedger(scan) {
+      const L = scan.financial_ledger || {};
+      const S = scan.spatial_summary || {};
+      $('ledgerSub').textContent =
+        `#${scan.bid_id} · ${(S.total_cleanable_sq_ft || 0).toLocaleString()} sq ft · ${scan.meta?.jurisdiction_code || 'SXM'} · ${scan.meta?.extraction_source || 'mock'}`;
+      $('kpiMonthly').textContent = money(L.formatted_monthly);
+      $('kpiShift').textContent = money(L.formatted_per_shift);
+
+      const dual = $('dualQuote');
+      if (L.dual_currency) {
+        dual.classList.remove('hidden');
+        dual.innerHTML = `<strong>Dual quote (${L.dual_currency.currency_code})</strong><br>${L.dual_currency.formatted_monthly}/mo<br>${L.dual_currency.conversion_note || ''}`;
+      } else {
+        dual.classList.add('hidden');
+        dual.innerHTML = '';
+      }
+
+      const lines = [];
+      (S.substrate_breakdown || []).forEach((s) => {
+        lines.push(`<div class="line">${s.material}: ${s.percentage}%</div>`);
+      });
+      (S.detected_fixtures || []).slice(0, 8).forEach((f) => {
+        lines.push(`<div class="line">${f.count}× ${f.fixture_type}${f.labor_intensity ? ' · ' + f.labor_intensity : ''}</div>`);
+      });
+      if (L.fixture_intensity_weighted != null) {
+        lines.push(`<div class="line">Intensity-weighted fixtures: ${L.fixture_intensity_weighted}${L.density_factor != null ? ' · density ×' + L.density_factor : ''}</div>`);
+      }
+      $('ledgerLines').innerHTML = lines.join('') || '<div class="line">No spatial breakdown</div>';
+
+      const steps = (L.calculation_steps || []).slice(0, 6).map((step) =>
+        `<div class="calc"><strong>${step.step}. ${step.label}</strong><br>${step.formula}<br>→ ${step.result}</div>`
+      ).join('');
+      $('calcSteps').innerHTML = steps;
+
+      const portal = scan.proposal?.proposal_secure_url;
+      const portalBtn = $('portalBtn');
+      if (portal) {
+        portalBtn.classList.remove('hidden');
+        portalBtn.onclick = () => window.open(portal, '_blank', 'noopener');
+      } else {
+        portalBtn.classList.add('hidden');
+      }
+    }
+
+    function renderChecklist(scan) {
+      const zones = scan.crew_checklist || [];
+      if (!zones.length) {
+        $('checklistList').innerHTML = '<p class="sub">No checklist zones on this bid.</p>';
+        return;
+      }
+      $('checklistList').innerHTML = zones.map((z) => `
+        <div class="zone">
+          <h3>${z.sequence || ''}. ${z.room_zone || 'Zone'}${z.is_high_risk ? '<span class="badge">High risk</span>' : ''}</h3>
+          <ul>${(z.tasks || []).map((t) => `<li>${t}</li>`).join('')}</ul>
+          ${z.ai_audit_prompt ? `<p class="note">${z.ai_audit_prompt}</p>` : ''}
+        </div>
+      `).join('');
+    }
+
+    async function restoreSession() {
+      if (!state.token) {
+        showStep('login');
+        return;
+      }
+      try {
+        const me = await api('/api/auth/me');
+        state.user = me.user;
+        state.tenantName = me.tenant?.name || '';
+        showStep('scan');
+      } catch {
+        state.token = '';
+        localStorage.removeItem('oc_demo_token');
+        showStep('login');
+      }
+    }
+
+    $('loginBtn').addEventListener('click', async () => {
+      const btn = $('loginBtn');
+      setBusy(btn, true);
+      showError('');
+      try {
+        const body = await api('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: $('email').value.trim(),
+            password: $('password').value,
+          }),
+        });
+        state.token = body.token;
+        state.user = body.user;
+        state.tenantName = body.tenant?.name || '';
+        localStorage.setItem('oc_demo_token', state.token);
+        showStep('scan');
+      } catch (err) {
+        showError(err.message || 'Login failed');
+      } finally {
+        setBusy(btn, false, 'Continue');
+      }
+    });
+
+    $('logoutBtn').addEventListener('click', () => {
+      state.token = '';
+      state.user = null;
+      state.scan = null;
+      localStorage.removeItem('oc_demo_token');
+      showStep('login');
+    });
+
+    $('scanBtn').addEventListener('click', async () => {
+      const btn = $('scanBtn');
+      const client = $('clientName').value.trim();
+      if (!client) {
+        showError('Client name is required');
+        return;
+      }
+      setBusy(btn, true);
+      showError('');
+      try {
+        const form = new FormData();
+        form.append('client_name', client);
+        form.append('property_address', $('address').value.trim());
+        form.append('frequency', $('frequency').value.trim() || '5x / week');
+        form.append('mock', '1');
+        const hint = $('hintSqFt').value.trim();
+        if (hint) form.append('hint_sq_ft', hint);
+        // Do not commit_pricing — calibrate gate stays on
+        const scan = await api('/api/scan', { method: 'POST', body: form });
+        state.scan = scan;
+        renderCalibrate(scan);
+        showStep('calibrate');
+      } catch (err) {
+        showError(err.message || 'Scan failed');
+      } finally {
+        setBusy(btn, false, 'Run mock scan');
+      }
+    });
+
+    $('calibrateBtn').addEventListener('click', async () => {
+      const btn = $('calibrateBtn');
+      const sqFt = Number($('sqFt').value);
+      if (!Number.isFinite(sqFt) || sqFt <= 0) {
+        showError('Enter cleanable sq ft greater than zero');
+        return;
+      }
+      if (!state.scan?.bid_id) {
+        showError('No bid to calibrate — run a scan first');
+        return;
+      }
+      setBusy(btn, true);
+      showError('');
+      try {
+        const next = await api(`/api/bids/${state.scan.bid_id}/calibrate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            total_cleanable_sq_ft: sqFt,
+            detected_fixtures: readFixtures(),
+            substrate_breakdown: state.scan.spatial_summary?.substrate_breakdown,
+          }),
+        });
+        state.scan = {
+          ...state.scan,
+          ...next,
+          bid_id: state.scan.bid_id,
+          proposal_id: next.proposal_id || state.scan.proposal_id,
+          pricing_committed: true,
+          crew_checklist: state.scan.crew_checklist,
+          proposal: { ...state.scan.proposal, ...(next.proposal || {}) },
+          meta: { ...state.scan.meta, ...(next.meta || {}), pricing_committed: true },
+        };
+        renderLedger(state.scan);
+        showStep('bid');
+      } catch (err) {
+        showError(err.message || 'Calibrate failed');
+      } finally {
+        setBusy(btn, false, 'Commit price');
+      }
+    });
+
+    $('toChecklistBtn').addEventListener('click', () => {
+      renderChecklist(state.scan || {});
+      showStep('checklist');
+    });
+    $('backLedgerBtn').addEventListener('click', () => showStep('bid'));
+    $('newScanBtn').addEventListener('click', () => {
+      state.scan = null;
+      showStep('scan');
+    });
+
+    restoreSession();
+  </script>
+</body>
+</html>
