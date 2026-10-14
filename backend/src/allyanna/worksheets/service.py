@@ -1,4 +1,9 @@
-"""Sum posted invoices for a period and read the turnover-tax rate from the table."""
+"""Sum posted invoices for a period and read the turnover-tax rate from the table.
+
+Turnover tax due to the Sint Maarten Tax Office is the tax-table rate on the
+active profile's posted invoice subtotals. Wage tax and SZV are separate. This
+service does not read employee wage runs or wage-tax rows.
+"""
 
 from datetime import date, datetime
 from decimal import Decimal
@@ -20,6 +25,7 @@ from allyanna.tax.service import TaxService
 from allyanna.tenancy.service import TenancyService
 from allyanna.worksheets.models import (
     TotAnnualSummary,
+    TotAnnualSummaryGap,
     TotAnnualSummaryList,
     TotAnnualSummaryStatement,
     TotAnnualSummaryVersion,
@@ -600,10 +606,11 @@ class TotWorksheetService:
         conn: Connection,
         summary_id: UUID,
     ) -> TotAnnualSummaryStatement:
-        """List each stored version and the change from the one before it.
+        """List each stored version, its change, and the unfiled live gap.
 
-        The earlier rows stay as they were filed. The changes are differences
-        of those stored amounts.
+        The earlier rows stay as they were filed. Version changes are differences
+        of those stored amounts. A later payment on a filed return appears under
+        unfiled until another amendment copies the live year statement.
         """
         tenant, _active = await self._tenancy.require_active_tenant(conn)
         summaries = await self._summaries.list_summaries(conn)
@@ -642,15 +649,42 @@ class TotWorksheetService:
             previous_paid = amount_paid
             previous_balance = balance_due
         latest = versions[-1]
+        root = ordered[0]
+        live = await self.get_year_statement(
+            conn,
+            tax_year=root.tax_year,
+            country_code=root.country_code,
+        )
+        if live.currency_code is None:
+            raise InvalidWorksheet("There is no filing to compare with this annual summary")
+        if live.currency_code != root.currency_code:
+            raise InvalidWorksheet("The year statement currency does not match the summary")
+        live_tax = require_money(live.tax_due)
+        live_paid = require_money(live.amount_paid)
+        live_balance = require_money(live.balance_due)
+        if live_balance != money(live_tax - live_paid):
+            raise InvalidPayment("The live year balance does not match the stored tax")
+        unfiled = TotAnnualSummaryGap(
+            tax_due=live_tax,
+            amount_paid=live_paid,
+            balance_due=live_balance,
+            filing_count=len(live.filings),
+            tax_change=money(live_tax - latest.tax_due),
+            amount_paid_change=money(live_paid - latest.amount_paid),
+            balance_change=money(live_balance - latest.balance_due),
+        )
+        if unfiled.balance_change != money(unfiled.tax_change - unfiled.amount_paid_change):
+            raise InvalidPayment("The unfiled summary gap does not match the stored tax")
         return TotAnnualSummaryStatement(
             tenant_id=tenant.id,
-            country_code=ordered[-1].country_code,
-            tax_year=ordered[-1].tax_year,
-            currency_code=ordered[-1].currency_code,
+            country_code=root.country_code,
+            tax_year=root.tax_year,
+            currency_code=root.currency_code,
             tax_due=latest.tax_due,
             amount_paid=latest.amount_paid,
             balance_due=latest.balance_due,
             versions=tuple(versions),
+            unfiled=unfiled,
         )
 
     async def get_refund(self, conn: Connection, refund_id: UUID) -> TotRefundView:

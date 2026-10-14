@@ -1,4 +1,8 @@
-"""Posted invoices for one period. tenant_id comes from the session."""
+"""Posted invoices for one period. tenant_id comes from the session.
+
+Turnover tax for Sint Maarten is the tax-table rate on invoice subtotals.
+This query reads allyanna.invoices only. It does not read wage tax or SZV.
+"""
 
 from datetime import date
 from typing import Any

@@ -103,6 +103,7 @@ def test_health_and_money_schema_without_a_database(monkeypatch: pytest.MonkeyPa
     assert chain_props["tax_due"]["type"] == "string"
     assert chain_props["amount_paid"]["type"] == "string"
     assert chain_props["balance_due"]["type"] == "string"
+    assert "unfiled" in chain_props
     version_props = schema["components"]["schemas"]["TotAnnualSummaryVersionResponse"]["properties"]
     assert version_props["tax_due"]["type"] == "string"
     assert version_props["amount_paid"]["type"] == "string"
@@ -113,6 +114,13 @@ def test_health_and_money_schema_without_a_database(monkeypatch: pytest.MonkeyPa
     version_amends = version_props["amends_summary_id"]["anyOf"]
     assert any(option.get("type") == "string" and option.get("format") == "uuid" for option in version_amends)
     assert any(option.get("type") == "null" for option in version_amends)
+    gap_props = schema["components"]["schemas"]["TotAnnualSummaryGapResponse"]["properties"]
+    assert gap_props["tax_due"]["type"] == "string"
+    assert gap_props["amount_paid"]["type"] == "string"
+    assert gap_props["balance_due"]["type"] == "string"
+    assert gap_props["tax_change"]["type"] == "string"
+    assert gap_props["amount_paid_change"]["type"] == "string"
+    assert gap_props["balance_change"]["type"] == "string"
 
 
 def test_json_float_money_is_rejected() -> None:

@@ -110,6 +110,12 @@ async def test_the_summary_statement_lists_each_version_and_its_change(
     assert missing.status_code == 404
     assert missing.json()["code"] == "tot_annual_summary_not_found"
 
+    year_before = client.get(
+        "/api/v1/tax/tot/statements",
+        headers=_auth(DEV_KEY),
+        params={"tax_year": 2026, "country_code": "SXM"},
+    )
+    assert year_before.status_code == 200
     first = _statement(client, DEV_KEY, ordered[0]["id"])
     assert first.status_code == 200
     body = first.json()
@@ -119,6 +125,14 @@ async def test_the_summary_statement_lists_each_version_and_its_change(
     assert _money(body["versions"][0]["balance_change"]) == _money(ordered[0]["balance_due"])
     assert _money(body["versions"][1]["amount_paid_change"]) > Decimal("0")
     assert _money(body["versions"][2]["amount_paid_change"]) == Decimal("1.00")
+    unfiled = body["unfiled"]
+    assert _money(unfiled["tax_due"]) == _money(year_before.json()["tax_due"])
+    assert _money(unfiled["amount_paid"]) == _money(year_before.json()["amount_paid"])
+    assert _money(unfiled["balance_due"]) == _money(year_before.json()["balance_due"])
+    assert unfiled["filing_count"] == len(year_before.json()["filings"])
+    assert _money(unfiled["tax_change"]) == Decimal("0.00")
+    assert _money(unfiled["amount_paid_change"]) == Decimal("0.00")
+    assert _money(unfiled["balance_change"]) == Decimal("0.00")
     for summary_id in (ordered[1]["id"], ordered[2]["id"]):
         again = _statement(client, DEV_KEY, summary_id)
         assert again.status_code == 200
@@ -128,6 +142,7 @@ async def test_the_summary_statement_lists_each_version_and_its_change(
         assert again.json()["tax_due"] == body["tax_due"]
         assert again.json()["amount_paid"] == body["amount_paid"]
         assert again.json()["balance_due"] == body["balance_due"]
+        assert again.json()["unfiled"] == body["unfiled"]
 
     for stored in ordered:
         readable = client.get(f"/api/v1/tax/tot/summaries/{stored['id']}", headers=_auth(DEV_KEY))
@@ -136,14 +151,8 @@ async def test_the_summary_statement_lists_each_version_and_its_change(
         assert readable.json()["amount_paid"] == stored["amount_paid"]
         assert readable.json()["balance_due"] == stored["balance_due"]
 
-    year = client.get(
-        "/api/v1/tax/tot/statements",
-        headers=_auth(DEV_KEY),
-        params={"tax_year": 2026, "country_code": "SXM"},
-    )
-    assert year.status_code == 200
     payable = next(
-        item for item in year.json()["filings"] if _money(item["balance_due"]) >= Decimal("1.00")
+        item for item in year_before.json()["filings"] if _money(item["balance_due"]) >= Decimal("1.00")
     )
     paid = client.post(
         f"/api/v1/tax/tot/returns/{payable['return_id']}/payments",
@@ -151,6 +160,14 @@ async def test_the_summary_statement_lists_each_version_and_its_change(
         json={"amount": "1.00", "paid_on": "2026-06-12"},
     )
     assert paid.status_code == 201
+    year_after = client.get(
+        "/api/v1/tax/tot/statements",
+        headers=_auth(DEV_KEY),
+        params={"tax_year": 2026, "country_code": "SXM"},
+    )
+    assert year_after.status_code == 200
+    assert _money(year_after.json()["amount_paid"]) == _money(year_before.json()["amount_paid"]) + Decimal("1.00")
+    assert _money(year_after.json()["balance_due"]) == _money(year_before.json()["balance_due"]) - Decimal("1.00")
     held = _statement(client, DEV_KEY, ordered[0]["id"])
     assert held.status_code == 200
     assert held.json()["tax_due"] == body["tax_due"]
@@ -163,6 +180,15 @@ async def test_the_summary_statement_lists_each_version_and_its_change(
         (item["tax_due"], item["amount_paid"], item["balance_due"], item["tax_change"], item["amount_paid_change"], item["balance_change"])
         for item in body["versions"]
     ]
+    gap = held.json()["unfiled"]
+    assert _money(gap["tax_due"]) == _money(year_after.json()["tax_due"])
+    assert _money(gap["amount_paid"]) == _money(year_after.json()["amount_paid"])
+    assert _money(gap["balance_due"]) == _money(year_after.json()["balance_due"])
+    assert gap["filing_count"] == len(year_after.json()["filings"])
+    assert _money(gap["tax_change"]) == Decimal("0.00")
+    assert _money(gap["amount_paid_change"]) == Decimal("1.00")
+    assert _money(gap["balance_change"]) == Decimal("-1.00")
+    assert _money(gap["balance_change"]) == _money(gap["tax_change"]) - _money(gap["amount_paid_change"])
     original = client.get(f"/api/v1/tax/tot/summaries/{ordered[0]['id']}", headers=_auth(DEV_KEY))
     assert original.status_code == 200
     assert original.json()["tax_due"] == ordered[0]["tax_due"]

@@ -49,6 +49,7 @@ from allyanna.schemas import (
     TotAnnualSummaryListResponse,
     TotAnnualSummaryRequest,
     TotAnnualSummaryResponse,
+    TotAnnualSummaryGapResponse,
     TotAnnualSummaryStatementResponse,
     TotAnnualSummaryVersionResponse,
     TotStatementLineResponse,
@@ -74,6 +75,7 @@ from allyanna.tenancy.service import TenancyService
 from allyanna.worksheets.models import (
     TotAnnualSummary,
     TotAnnualSummaryList,
+    TotAnnualSummaryGap,
     TotAnnualSummaryStatement,
     TotAnnualSummaryVersion,
     TotBalanceList,
@@ -837,6 +839,18 @@ def _annual_summary_version(version: TotAnnualSummaryVersion) -> TotAnnualSummar
     )
 
 
+def _annual_summary_gap(gap: TotAnnualSummaryGap) -> TotAnnualSummaryGapResponse:
+    return TotAnnualSummaryGapResponse(
+        tax_due=gap.tax_due,
+        amount_paid=gap.amount_paid,
+        balance_due=gap.balance_due,
+        filing_count=gap.filing_count,
+        tax_change=gap.tax_change,
+        amount_paid_change=gap.amount_paid_change,
+        balance_change=gap.balance_change,
+    )
+
+
 def _annual_summary_statement_response(
     statement: TotAnnualSummaryStatement,
 ) -> TotAnnualSummaryStatementResponse:
@@ -849,6 +863,7 @@ def _annual_summary_statement_response(
         amount_paid=statement.amount_paid,
         balance_due=statement.balance_due,
         versions=[_annual_summary_version(version) for version in statement.versions],
+        unfiled=_annual_summary_gap(statement.unfiled),
     )
 
 
