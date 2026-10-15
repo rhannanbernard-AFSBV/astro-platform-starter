@@ -291,6 +291,8 @@ router.post('/scan', scanRateLimit, walkthroughUpload, async (req, res, next) =>
       pricing_committed: result.pricing_committed,
       spatial_summary: result.payload.spatial_summary,
       scale_and_legend: result.payload.scale_and_legend,
+      room_zones: result.payload.room_zones || [],
+      extraction_confidence: result.payload.extraction_confidence || null,
       financial_ledger: result.payload.financial_ledger,
       proposal_copy: result.payload.proposal_copy,
       crew_checklist,

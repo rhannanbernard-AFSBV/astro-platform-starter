@@ -65,5 +65,9 @@ describe('visionExtract', () => {
     const m = mockSpatialExtraction({});
     assert.equal(m.spatial_summary.total_cleanable_sq_ft, 10000);
     assert.equal(m._scale_calibration, 'pixels_per_foot');
+    assert.notEqual(m.spatial_summary.total_cleanable_sq_ft, 12500);
+    assert.ok(m._extraction_confidence?.overall > 0);
+    assert.ok(Array.isArray(m.uncertain_fields));
+    assert.ok(m.spatial_summary.excluded_breakdown?.length >= 1);
   });
 });
