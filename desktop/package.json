@@ -1,0 +1,70 @@
+{
+  "name": "allyanna-accounting-desktop",
+  "productName": "Allyanna Accounting",
+  "version": "1.0.0",
+  "description": "Allyanna Accounting Software — standalone Windows desktop app (local SQLite, zero cloud required for core tax/payroll).",
+  "main": "main.js",
+  "author": "Allyanna / AFSBV",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --win nsis",
+    "dist:forge": "electron-forge make",
+    "package:forge": "electron-forge package",
+    "publish:forge": "electron-forge publish"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^7.6.0",
+    "@electron-forge/maker-squirrel": "^7.6.0",
+    "@electron-forge/maker-zip": "^7.6.0",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.6.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.allyanna.accounting",
+    "productName": "Allyanna Accounting",
+    "copyright": "Copyright © Allyanna",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "bin/allyanna-backend",
+        "to": "backend/allyanna-backend",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "ui-dist",
+        "to": "ui",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "Allyanna_Accounting_Setup.${ext}",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Allyanna Accounting",
+      "deleteAppDataOnUninstall": false
+    },
+    "asar": true
+  }
+}
