@@ -569,6 +569,20 @@ class TotAnnualSummaryStatementResponse(BaseModel):
     unfiled: TotAnnualSummaryGapResponse
 
 
+class TotAnnualSummaryDueResponse(BaseModel):
+    tenant_id: UUID
+    country_code: str
+    tax_year: int
+    currency_code: str
+    summary_id: UUID
+    filed_tax_due: Money
+    filed_amount_paid: Money
+    filed_balance_due: Money
+    amount_due: Money
+    has_unfiled_gap: bool
+    unfiled: TotAnnualSummaryGapResponse
+
+
 class TotYearStatementResponse(BaseModel):
     tenant_id: UUID
     tax_year: int
