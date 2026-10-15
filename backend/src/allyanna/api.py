@@ -49,6 +49,7 @@ from allyanna.schemas import (
     TotAnnualSummaryListResponse,
     TotAnnualSummaryRequest,
     TotAnnualSummaryResponse,
+    TotAnnualSummaryDueListResponse,
     TotAnnualSummaryDueResponse,
     TotAnnualSummaryGapResponse,
     TotAnnualSummaryStatementResponse,
@@ -78,6 +79,7 @@ from allyanna.worksheets.models import (
     TotAnnualSummary,
     TotAnnualSummaryList,
     TotAnnualSummaryDue,
+    TotAnnualSummaryDueList,
     TotAnnualSummaryGap,
     TotAnnualSummaryStatement,
     TotAnnualSummaryVersion,
@@ -432,6 +434,14 @@ async def get_turnover_tax_annual_summary_statement(
 ) -> TotAnnualSummaryStatementResponse:
     statement = await auth.worksheets.get_annual_summary_statement(auth.conn, summary_id)
     return _annual_summary_statement_response(statement)
+
+
+@router.get("/tax/tot/dues", response_model=TotAnnualSummaryDueListResponse)
+async def list_turnover_tax_annual_summary_dues(
+    auth: AuthContext = Depends(get_auth),
+) -> TotAnnualSummaryDueListResponse:
+    listing = await auth.worksheets.list_annual_summary_dues(auth.conn)
+    return _annual_summary_due_list_response(listing)
 
 
 @router.get(
@@ -910,6 +920,17 @@ def _annual_summary_due_response(reminder: TotAnnualSummaryDue) -> TotAnnualSumm
         amount_due=reminder.amount_due,
         has_unfiled_gap=reminder.has_unfiled_gap,
         unfiled=_annual_summary_gap(reminder.unfiled),
+    )
+
+
+def _annual_summary_due_list_response(
+    listing: TotAnnualSummaryDueList,
+) -> TotAnnualSummaryDueListResponse:
+    return TotAnnualSummaryDueListResponse(
+        tenant_id=listing.tenant_id,
+        amount_due=listing.amount_due,
+        unfiled_count=listing.unfiled_count,
+        dues=[_annual_summary_due_response(row) for row in listing.dues],
     )
 
 

@@ -230,6 +230,14 @@ class TotAnnualSummaryDue:
 
 
 @dataclass(frozen=True)
+class TotAnnualSummaryDueList:
+    tenant_id: UUID
+    amount_due: Decimal
+    unfiled_count: int
+    dues: tuple[TotAnnualSummaryDue, ...]
+
+
+@dataclass(frozen=True)
 class TotYearStatement:
     tenant_id: UUID
     tax_year: int

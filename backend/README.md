@@ -100,6 +100,8 @@ One correcting invoice may name the latest filing for that period with `corrects
 
 `GET /api/v1/tax/tot/summaries/{summary_id}/due` is the pay-due reminder for that chain. It returns the latest filed tax, amount paid, and balance, plus `amount_due` — the live year balance still owed to the Sint Maarten Tax Office. When a later payment has not been filed, `has_unfiled_gap` is true and `unfiled` carries that gap. Any version in the chain may be named. The amounts use `decimal.Decimal`. Row-level security on `tot_annual_summaries` keeps another firm from reading it.
 
+`GET /api/v1/tax/tot/dues` lists that reminder for every tax year that has an annual summary on the active business. Only the latest filed version of each year is included. The header sums `amount_due` and counts how many years still have an unfiled gap. Open years and unfiled gaps show up in one tenant-scoped response. Row-level security on `tot_annual_summaries` keeps another firm from reading them.
+
 `GET /api/v1/tax/tot/balances` lists every filed return for the active business profile. Each row carries the tax stored on that return, the payments recorded against it, the remaining balance, and the due date. A row is past due when a due date is stored, that date is before `as_of`, and a balance remains. The header sums the open balances that are past due. `as_of` defaults to the current date. A settled return stays on the list and is not past due. When a period has been amended, the list follows the latest filing. The query is limited to the active profile's `tenant_id`, and row-level security on the return and payment tables is the backstop. Another firm does not see these balances.
 
 ## Document intake

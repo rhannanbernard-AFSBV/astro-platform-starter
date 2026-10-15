@@ -26,6 +26,7 @@ from allyanna.tenancy.service import TenancyService
 from allyanna.worksheets.models import (
     TotAnnualSummary,
     TotAnnualSummaryDue,
+    TotAnnualSummaryDueList,
     TotAnnualSummaryGap,
     TotAnnualSummaryList,
     TotAnnualSummaryStatement,
@@ -717,6 +718,32 @@ class TotWorksheetService:
             amount_due=amount_due,
             has_unfiled_gap=_has_unfiled_gap(statement.unfiled, latest.filing_count),
             unfiled=statement.unfiled,
+        )
+
+    async def list_annual_summary_dues(self, conn: Connection) -> TotAnnualSummaryDueList:
+        """Pay-due reminders for every tax year with a filed annual summary.
+
+        Only the latest version of each year is listed. Open balances and
+        unfiled gaps for the active business show up in one response.
+        """
+        tenant, _active = await self._tenancy.require_active_tenant(conn)
+        summaries = await self._summaries.list_summaries(conn)
+        latest_by_year: dict[tuple[str, int], TotAnnualSummary] = {}
+        for item in summaries:
+            if item.superseded:
+                continue
+            key = (item.country_code, item.tax_year)
+            if key not in latest_by_year:
+                latest_by_year[key] = item
+        ordered_keys = sorted(latest_by_year.keys(), key=lambda item: (-item[1], item[0]))
+        dues: list[TotAnnualSummaryDue] = []
+        for key in ordered_keys:
+            dues.append(await self.get_annual_summary_due(conn, latest_by_year[key].id))
+        return TotAnnualSummaryDueList(
+            tenant_id=tenant.id,
+            amount_due=sum_money([row.amount_due for row in dues]),
+            unfiled_count=sum(1 for row in dues if row.has_unfiled_gap),
+            dues=tuple(dues),
         )
 
     async def file_unfiled_annual_summary(

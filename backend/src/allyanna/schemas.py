@@ -583,6 +583,13 @@ class TotAnnualSummaryDueResponse(BaseModel):
     unfiled: TotAnnualSummaryGapResponse
 
 
+class TotAnnualSummaryDueListResponse(BaseModel):
+    tenant_id: UUID
+    amount_due: Money
+    unfiled_count: int
+    dues: list[TotAnnualSummaryDueResponse]
+
+
 class TotYearStatementResponse(BaseModel):
     tenant_id: UUID
     tax_year: int

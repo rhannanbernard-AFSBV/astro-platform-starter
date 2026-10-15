@@ -111,7 +111,9 @@ def test_annual_summary_statement_changes_are_decimal() -> None:
     text = (SRC / "allyanna" / "worksheets" / "service.py").read_text(encoding="utf-8")
     assert "def get_annual_summary_statement(" in text
     assert "def get_annual_summary_due(" in text
+    assert "def list_annual_summary_dues(" in text
     assert "def file_unfiled_annual_summary(" in text
+    assert "sum_money([row.amount_due for row in dues])" in text
     assert "def _has_unfiled_gap(" in text
     assert "money(filed_balance + statement.unfiled.balance_change)" in text
     assert "money(tax_due - previous_tax)" in text
