@@ -49,6 +49,7 @@ from allyanna.schemas import (
     TotAnnualSummaryListResponse,
     TotAnnualSummaryRequest,
     TotAnnualSummaryResponse,
+    TotAnnualSummaryDueResponse,
     TotAnnualSummaryGapResponse,
     TotAnnualSummaryStatementResponse,
     TotAnnualSummaryUnfiledRequest,
@@ -76,6 +77,7 @@ from allyanna.tenancy.service import TenancyService
 from allyanna.worksheets.models import (
     TotAnnualSummary,
     TotAnnualSummaryList,
+    TotAnnualSummaryDue,
     TotAnnualSummaryGap,
     TotAnnualSummaryStatement,
     TotAnnualSummaryVersion,
@@ -430,6 +432,18 @@ async def get_turnover_tax_annual_summary_statement(
 ) -> TotAnnualSummaryStatementResponse:
     statement = await auth.worksheets.get_annual_summary_statement(auth.conn, summary_id)
     return _annual_summary_statement_response(statement)
+
+
+@router.get(
+    "/tax/tot/summaries/{summary_id}/due",
+    response_model=TotAnnualSummaryDueResponse,
+)
+async def get_turnover_tax_annual_summary_due(
+    summary_id: UUID,
+    auth: AuthContext = Depends(get_auth),
+) -> TotAnnualSummaryDueResponse:
+    reminder = await auth.worksheets.get_annual_summary_due(auth.conn, summary_id)
+    return _annual_summary_due_response(reminder)
 
 
 @router.post(
@@ -880,6 +894,22 @@ def _annual_summary_statement_response(
         balance_due=statement.balance_due,
         versions=[_annual_summary_version(version) for version in statement.versions],
         unfiled=_annual_summary_gap(statement.unfiled),
+    )
+
+
+def _annual_summary_due_response(reminder: TotAnnualSummaryDue) -> TotAnnualSummaryDueResponse:
+    return TotAnnualSummaryDueResponse(
+        tenant_id=reminder.tenant_id,
+        country_code=reminder.country_code,
+        tax_year=reminder.tax_year,
+        currency_code=reminder.currency_code,
+        summary_id=reminder.summary_id,
+        filed_tax_due=reminder.filed_tax_due,
+        filed_amount_paid=reminder.filed_amount_paid,
+        filed_balance_due=reminder.filed_balance_due,
+        amount_due=reminder.amount_due,
+        has_unfiled_gap=reminder.has_unfiled_gap,
+        unfiled=_annual_summary_gap(reminder.unfiled),
     )
 
 

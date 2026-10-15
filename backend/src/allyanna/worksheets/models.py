@@ -209,6 +209,27 @@ class TotAnnualSummaryStatement:
 
 
 @dataclass(frozen=True)
+class TotAnnualSummaryDue:
+    """Amount still owed to the Sint Maarten Tax Office for the tax year.
+
+    filed_* are the latest filed annual summary. amount_due is the live year
+    balance. unfiled is called out when the live year has moved past that filing.
+    """
+
+    tenant_id: UUID
+    country_code: str
+    tax_year: int
+    currency_code: str
+    summary_id: UUID
+    filed_tax_due: Decimal
+    filed_amount_paid: Decimal
+    filed_balance_due: Decimal
+    amount_due: Decimal
+    has_unfiled_gap: bool
+    unfiled: TotAnnualSummaryGap
+
+
+@dataclass(frozen=True)
 class TotYearStatement:
     tenant_id: UUID
     tax_year: int

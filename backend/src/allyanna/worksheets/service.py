@@ -25,6 +25,7 @@ from allyanna.tax.service import TaxService
 from allyanna.tenancy.service import TenancyService
 from allyanna.worksheets.models import (
     TotAnnualSummary,
+    TotAnnualSummaryDue,
     TotAnnualSummaryGap,
     TotAnnualSummaryList,
     TotAnnualSummaryStatement,
@@ -685,6 +686,37 @@ class TotWorksheetService:
             balance_due=latest.balance_due,
             versions=tuple(versions),
             unfiled=unfiled,
+        )
+
+    async def get_annual_summary_due(
+        self,
+        conn: Connection,
+        summary_id: UUID,
+    ) -> TotAnnualSummaryDue:
+        """Remind what is still owed to the Sint Maarten Tax Office.
+
+        The filed balance is the latest annual summary. amount_due is the live
+        year balance. When a later payment has not been filed, unfiled carries
+        that gap and has_unfiled_gap is true.
+        """
+        statement = await self.get_annual_summary_statement(conn, summary_id)
+        latest = statement.versions[-1]
+        amount_due = require_money(statement.unfiled.balance_due)
+        filed_balance = require_money(latest.balance_due)
+        if amount_due != money(filed_balance + statement.unfiled.balance_change):
+            raise InvalidPayment("The amount due does not match the filed balance and unfiled gap")
+        return TotAnnualSummaryDue(
+            tenant_id=statement.tenant_id,
+            country_code=statement.country_code,
+            tax_year=statement.tax_year,
+            currency_code=statement.currency_code,
+            summary_id=latest.summary_id,
+            filed_tax_due=require_money(latest.tax_due),
+            filed_amount_paid=require_money(latest.amount_paid),
+            filed_balance_due=filed_balance,
+            amount_due=amount_due,
+            has_unfiled_gap=_has_unfiled_gap(statement.unfiled, latest.filing_count),
+            unfiled=statement.unfiled,
         )
 
     async def file_unfiled_annual_summary(

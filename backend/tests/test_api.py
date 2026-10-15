@@ -121,6 +121,13 @@ def test_health_and_money_schema_without_a_database(monkeypatch: pytest.MonkeyPa
     assert gap_props["tax_change"]["type"] == "string"
     assert gap_props["amount_paid_change"]["type"] == "string"
     assert gap_props["balance_change"]["type"] == "string"
+    due_props = schema["components"]["schemas"]["TotAnnualSummaryDueResponse"]["properties"]
+    assert due_props["filed_tax_due"]["type"] == "string"
+    assert due_props["filed_amount_paid"]["type"] == "string"
+    assert due_props["filed_balance_due"]["type"] == "string"
+    assert due_props["amount_due"]["type"] == "string"
+    assert due_props["has_unfiled_gap"]["type"] == "boolean"
+    assert "unfiled" in due_props
 
 
 def test_json_float_money_is_rejected() -> None:

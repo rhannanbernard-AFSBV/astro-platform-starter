@@ -110,8 +110,10 @@ def test_tot_return_table_forces_row_level_security() -> None:
 def test_annual_summary_statement_changes_are_decimal() -> None:
     text = (SRC / "allyanna" / "worksheets" / "service.py").read_text(encoding="utf-8")
     assert "def get_annual_summary_statement(" in text
+    assert "def get_annual_summary_due(" in text
     assert "def file_unfiled_annual_summary(" in text
     assert "def _has_unfiled_gap(" in text
+    assert "money(filed_balance + statement.unfiled.balance_change)" in text
     assert "money(tax_due - previous_tax)" in text
     assert "money(amount_paid - previous_paid)" in text
     assert "money(balance_due - previous_balance)" in text
