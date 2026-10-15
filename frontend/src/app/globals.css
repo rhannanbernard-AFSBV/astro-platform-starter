@@ -1,0 +1,241 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap");
+
+:root {
+  --ink: #0c1f2e;
+  --sea: #0e4d5c;
+  --lagoon: #1a7a8c;
+  --foam: #e8f2f4;
+  --sand: #f3ebe0;
+  --coral: #c45c3e;
+  --ok: #1f6b4a;
+  --warn: #9a6b1f;
+  --line: rgba(12, 31, 46, 0.12);
+  --shadow: 0 18px 40px rgba(12, 31, 46, 0.08);
+  --radius: 14px;
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  background:
+    radial-gradient(1200px 600px at 10% -10%, #b9dce3 0%, transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, #f0e2cf 0%, transparent 50%),
+    linear-gradient(180deg, var(--foam) 0%, var(--sand) 100%);
+}
+
+body {
+  line-height: 1.45;
+}
+
+a {
+  color: var(--lagoon);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+main {
+  width: min(1120px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 2rem 0 4rem;
+}
+
+.brand {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0;
+  animation: rise 0.7s ease both;
+}
+
+.lede {
+  max-width: 36rem;
+  color: rgba(12, 31, 46, 0.72);
+  margin: 0.6rem 0 0;
+  animation: rise 0.7s ease 0.08s both;
+}
+
+.panel {
+  margin-top: 1.5rem;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.25rem 1.35rem;
+  backdrop-filter: blur(8px);
+  animation: rise 0.65s ease both;
+}
+
+.panel h2 {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  margin: 0 0 0.35rem;
+}
+
+.panel p.hint {
+  margin: 0 0 1rem;
+  color: rgba(12, 31, 46, 0.65);
+  font-size: 0.95rem;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+
+label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+input,
+select {
+  min-width: 12rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.btn {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.7rem 1.1rem;
+  background: var(--sea);
+  color: #fff;
+  font-weight: 600;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.btn:hover {
+  background: var(--lagoon);
+  transform: translateY(-1px);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn.secondary {
+  background: transparent;
+  color: var(--sea);
+  border: 1px solid rgba(14, 77, 92, 0.35);
+}
+
+.btn.danger {
+  background: var(--coral);
+}
+
+.muted {
+  color: rgba(12, 31, 46, 0.6);
+  font-size: 0.9rem;
+}
+
+.error {
+  color: var(--coral);
+  font-weight: 600;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 0.65rem 0.4rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.badge.ready {
+  background: rgba(31, 107, 74, 0.12);
+  color: var(--ok);
+}
+
+.badge.blocked {
+  background: rgba(154, 107, 31, 0.14);
+  color: var(--warn);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.stat {
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: linear-gradient(160deg, rgba(14, 77, 92, 0.08), rgba(255, 255, 255, 0.8));
+  border: 1px solid var(--line);
+}
+
+.stat strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+}
+
+.stack {
+  display: grid;
+  gap: 1rem;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 720px) {
+  input,
+  select {
+    min-width: 100%;
+  }
+
+  .row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

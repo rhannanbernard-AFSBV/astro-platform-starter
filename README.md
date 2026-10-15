@@ -1,5 +1,11 @@
 # Astro on Netlify Platform Starter
 
+## Allyanna accounting API
+
+The Sint Maarten accounting foundation lives in [`backend/`](backend/README.md). **Canonical tip:** [`backend/CANONICAL.md`](backend/CANONICAL.md) (`cursor/allyanna-tot-summary-statement-cfe6`). Multi-tenant Postgres with RLS, OCR → TOT period readiness, dues actions, and payroll kept out of turnover-tax math.
+
+Thin compliance desk (review → post → period-ready → dues): [`frontend/`](frontend/README.md). The Astro site below is the existing Netlify starter and is separate from Allyanna.
+
 [Live Demo](https://astro-platform-starter.netlify.app/)
 
 A modern starter based on Astro.js, Tailwind, and [Netlify Core Primitives](https://docs.netlify.com/core/overview/#develop) (Edge Functions, Image CDN, Blobs).
