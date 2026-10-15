@@ -40,10 +40,12 @@ pip install -e ".[dev]"
 export DATABASE_URL=postgresql://allyanna_app:allyanna_app_dev@127.0.0.1:5432/allyanna
 export OPENAI_API_KEY=sk-your-key
 export OPENAI_MODEL=gpt-4o
+# Optional: browser origins for the thin compliance desk under frontend/
+# export CORS_ORIGINS=http://127.0.0.1:3000,http://localhost:3000
 uvicorn allyanna.main:app --reload
 ```
 
-`allyanna_app_dev` and the demo API keys are local defaults. Replace the role password before a shared deployment.
+`allyanna_app_dev` and the demo API keys are local defaults. Replace the role password before a shared deployment. Local CORS defaults allow `http://127.0.0.1:3000` and `http://localhost:3000`.
 
 Demo keys after the seed:
 

@@ -179,6 +179,20 @@ def test_missing_and_unknown_keys_are_unauthorized(client: TestClient) -> None:
     assert unknown.status_code == 401
 
 
+def test_local_compliance_desk_cors_is_allowed(client: TestClient) -> None:
+    response = client.options(
+        "/api/v1/context",
+        headers={
+            "Origin": "http://127.0.0.1:3000",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "authorization",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "http://127.0.0.1:3000"
+    assert "authorization" in response.headers.get("access-control-allow-headers", "").lower()
+
+
 def test_master_account_sees_only_its_business_profiles(client: TestClient) -> None:
     demo = client.get("/api/v1/context", headers=_auth(DEV_KEY))
     other = client.get("/api/v1/context", headers=_auth(OTHER_KEY))

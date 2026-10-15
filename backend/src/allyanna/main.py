@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from allyanna import __version__
 from allyanna.api import allyanna_error_handler, router
@@ -85,12 +86,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
+    settings = get_settings()
     app = FastAPI(
         title="Allyanna Accounting",
         version=__version__,
         summary="Multi-tenant Sint Maarten tax and business-profile API",
         lifespan=lifespan,
     )
+    origins = settings.cors_origin_list()
+    if origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
     app.add_exception_handler(AllyannaError, allyanna_error_handler)
     app.include_router(router, prefix="/api/v1")
     return app

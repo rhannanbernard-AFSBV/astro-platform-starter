@@ -20,12 +20,27 @@ export interface MasterAccount {
   role: string;
 }
 
+/** Normalized desk context (API wire uses master_accounts / available_tenants). */
 export interface ContextResponse {
   user_id: string;
+  email: string;
+  display_name: string;
   accounts: MasterAccount[];
   tenants: Tenant[];
   active_tenant: Tenant | null;
   active_account: MasterAccount | null;
+  switched_at: string | null;
+}
+
+/** Raw `/api/v1/context` payload from FastAPI. */
+export interface ContextWire {
+  user_id: string;
+  email: string;
+  display_name: string;
+  master_accounts: MasterAccount[];
+  active_master_account: MasterAccount | null;
+  active_tenant: Tenant | null;
+  available_tenants: Tenant[];
   switched_at: string | null;
 }
 

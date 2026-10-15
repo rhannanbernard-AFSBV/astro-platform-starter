@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useState, useTransition } from "react";
 import {
+  ensureActiveTenant,
   fileUnfiled,
   getContext,
   getPeriodReadiness,
@@ -52,13 +53,23 @@ export default function ComplianceDeskPage() {
 
   const refresh = useCallback(
     async (key: string) => {
-      const [ctx, reviewList, readiness, dueList] = await Promise.all([
-        getContext(key),
+      let ctx = await getContext(key);
+      ctx = await ensureActiveTenant(key, ctx);
+      setContext(ctx);
+      if (!ctx.active_tenant) {
+        setReviews([]);
+        setReadyCount(0);
+        setBlockedCount(0);
+        setPeriod(null);
+        setDues([]);
+        setDuesTotal("0.00");
+        return;
+      }
+      const [reviewList, readiness, dueList] = await Promise.all([
         listDocumentReviews(key),
         getPeriodReadiness(key, taxYear, countryCode),
         listDues(key),
       ]);
-      setContext(ctx);
       setReviews(reviewList.reviews);
       setReadyCount(reviewList.ready_count);
       setBlockedCount(reviewList.blocked_count);
@@ -381,6 +392,64 @@ export default function ComplianceDeskPage() {
                           <td>{row.invoice_date}</td>
                           <td>{row.subtotal}</td>
                           <td>{row.tot_amount}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+                <h3 style={{ fontSize: "1rem" }}>Open returns</h3>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Period</th>
+                      <th>Balance</th>
+                      <th>Pay</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {period.open_returns.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="muted">
+                          No open filed returns for this year.
+                        </td>
+                      </tr>
+                    ) : (
+                      period.open_returns.map((row) => (
+                        <tr key={row.return_id}>
+                          <td>
+                            {row.period_start} → {row.period_end}
+                            {row.past_due ? (
+                              <>
+                                <br />
+                                <span className="badge blocked">past due</span>
+                              </>
+                            ) : null}
+                          </td>
+                          <td>{row.balance_due}</td>
+                          <td>
+                            <div className="row">
+                              <input
+                                placeholder="0.00"
+                                value={payAmount[row.return_id] ?? ""}
+                                onChange={(event) =>
+                                  setPayAmount((prev) => ({
+                                    ...prev,
+                                    [row.return_id]: event.target.value,
+                                  }))
+                                }
+                              />
+                              <button
+                                type="button"
+                                className="btn"
+                                disabled={pending}
+                                onClick={() =>
+                                  onPay(row.payment_path, row.return_id)
+                                }
+                              >
+                                Pay
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))
                     )}
