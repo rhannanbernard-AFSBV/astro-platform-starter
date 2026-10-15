@@ -116,10 +116,13 @@ Receipt and invoice capture is queued, then finished off the request. The upload
 
 - `POST /api/v1/documents` — multipart field `file`. JPEG, PNG, WEBP, or PDF, up to 8 MB. Returns 202 with status `queued`
 - `GET /api/v1/documents` and `GET /api/v1/documents/{document_id}` — the intake, including recomputed amounts once processing finishes
+- `GET /api/v1/documents/review` and `GET /api/v1/documents/{document_id}/review` — post readiness for each intake. Ready rows carry the `POST /documents/{id}/invoice` path. Blocked rows name why (`amount_mismatch`, `already_posted`, `filed_period`, `not_completed`, `failed`, `incomplete`)
 
 GPT-4o is asked to copy `vendor_name`, `invoice_date`, `subtotal`, `tot_amount`, `grand_total`, and the line items as decimal strings. The instructions tell it not to calculate tax, totals, percentages, or line amounts. `OPENAI_API_KEY` is read from the environment. `OPENAI_MODEL` defaults to `gpt-4o`.
 
 Python validates that payload, prices each line as quantity times unit price with `decimal.Decimal`, and sums those rounded line totals. Turnover tax is the existing tax service applied to that subtotal for the invoice year and the business country. The rate comes from the tax table. The stored subtotal, TOT amount, and grand total are those recomputed figures. Printed amounts are stored beside them and compared. A later profile switch does not move a job that was already accepted.
+
+`GET /api/v1/tax/tot/period-ready?tax_year=2026&country_code=SXM` shows what still needs posting, filing, or paying for that year on the active business: ready and blocked intakes, posted invoices not yet covered by a filed return, open return balances with payment paths, and the annual-summary dues row when one exists. OCR does not auto-file. Row-level security keeps another firm out.
 
 ## Tests
 

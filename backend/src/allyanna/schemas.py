@@ -773,3 +773,63 @@ class TotBalanceListResponse(BaseModel):
     balance_due: Money
     past_due_balance: Money
     returns: list[TotReturnBalanceResponse]
+
+
+class IntakeReviewResponse(BaseModel):
+    document_id: UUID
+    tenant_id: UUID
+    status: str
+    source_filename: str
+    vendor_name: str | None
+    invoice_date: date | None
+    tax_year: int | None
+    country_code: str | None
+    extracted_tot_amount: Money | None
+    table_tot_amount: Money | None
+    tot_rate: Rate | None
+    subtotal: Money | None
+    grand_total: Money | None
+    amounts_match: bool | None
+    discrepancies: list[str]
+    ready_to_post: bool
+    blocked_reason: str | None
+    post_path: str | None
+    invoice_id: UUID | None
+
+
+class IntakeReviewListResponse(BaseModel):
+    tenant_id: UUID
+    ready_count: int
+    blocked_count: int
+    reviews: list[IntakeReviewResponse]
+
+
+class UnfiledInvoiceResponse(BaseModel):
+    invoice_id: UUID
+    vendor_name: str
+    invoice_date: date
+    tax_year: int
+    country_code: str
+    currency_code: str
+    subtotal: Money
+    tot_rate: Rate
+    tot_amount: Money
+    grand_total: Money
+    document_intake_id: UUID | None
+
+
+class TotPeriodReadinessResponse(BaseModel):
+    tenant_id: UUID
+    tax_year: int
+    country_code: str
+    ready_count: int
+    blocked_count: int
+    unfiled_invoice_count: int
+    open_return_count: int
+    unfiled_tot_amount: Money
+    open_balance: Money
+    intakes_ready: list[IntakeReviewResponse]
+    intakes_blocked: list[IntakeReviewResponse]
+    unfiled_invoices: list[UnfiledInvoiceResponse]
+    open_returns: list[TotDueOpenReturnResponse]
+    dues: TotAnnualSummaryDueResponse | None

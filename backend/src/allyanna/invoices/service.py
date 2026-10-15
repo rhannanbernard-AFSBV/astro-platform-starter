@@ -229,6 +229,24 @@ class InvoiceService:
         if await self._repository.correction_exists(conn, corrects_return_id):
             raise CorrectingInvoiceExists("This filing already has a correcting invoice")
 
+    @property
+    def documents(self) -> DocumentIntakeService:
+        return self._documents
+
+    async def find_posted_intake_id(self, conn: Connection, document_id: UUID) -> UUID | None:
+        await self._tenancy.require_active_tenant(conn)
+        return await self._repository.find_posted_intake(conn, document_id)
+
+    async def period_is_filed(
+        self,
+        conn: Connection,
+        *,
+        invoice_date: date,
+        country_code: str,
+    ) -> bool:
+        await self._tenancy.require_active_tenant(conn)
+        return await self._repository.filed_period_covers(conn, invoice_date, country_code)
+
     async def list_invoices(self, conn: Connection) -> tuple[Invoice, ...]:
         await self._tenancy.require_active_tenant(conn)
         return await self._repository.list_invoices(conn)
