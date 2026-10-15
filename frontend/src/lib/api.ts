@@ -6,6 +6,7 @@ import type {
   AnnualDue,
   ApiErrorBody,
   ContextResponse,
+  ContextWire,
   IntakeReviewList,
   PeriodReadiness,
 } from "./types";
@@ -18,10 +19,37 @@ export function getApiBaseUrl(): string {
   return (raw && raw.length > 0 ? raw : DEFAULT_BASE).replace(/\/$/, "");
 }
 
+export function normalizeContext(wire: ContextWire): ContextResponse {
+  return {
+    user_id: wire.user_id,
+    email: wire.email,
+    display_name: wire.display_name,
+    accounts: wire.master_accounts ?? [],
+    tenants: wire.available_tenants ?? [],
+    active_tenant: wire.active_tenant,
+    active_account: wire.active_master_account,
+    switched_at: wire.switched_at,
+  };
+}
+
 async function parseError(res: Response): Promise<ApiError> {
   let body: ApiErrorBody | null = null;
   try {
-    body = (await res.json()) as ApiErrorBody;
+    const raw = (await res.json()) as ApiErrorBody & { detail?: unknown };
+    if (raw && typeof raw === "object") {
+      if (typeof raw.message === "string") {
+        body = raw;
+      } else if (typeof raw.detail === "string") {
+        body = { message: raw.detail };
+      } else if (
+        Array.isArray(raw.detail) &&
+        raw.detail[0] &&
+        typeof raw.detail[0] === "object" &&
+        "msg" in raw.detail[0]
+      ) {
+        body = { message: String((raw.detail[0] as { msg: string }).msg) };
+      }
+    }
   } catch {
     body = null;
   }
@@ -52,18 +80,35 @@ async function request<T>(
   return (await res.json()) as T;
 }
 
-export function getContext(apiKey: string): Promise<ContextResponse> {
-  return request<ContextResponse>("/api/v1/context", apiKey);
+export async function getContext(apiKey: string): Promise<ContextResponse> {
+  const wire = await request<ContextWire>("/api/v1/context", apiKey);
+  return normalizeContext(wire);
 }
 
-export function switchContext(
+export async function switchContext(
   apiKey: string,
   tenantId: string,
 ): Promise<ContextResponse> {
-  return request<ContextResponse>("/api/v1/context/switch", apiKey, {
+  const wire = await request<ContextWire>("/api/v1/context/switch", apiKey, {
     method: "POST",
     body: JSON.stringify({ tenant_id: tenantId }),
   });
+  return normalizeContext(wire);
+}
+
+/** Ensure a business profile is active before tax/desk routes. */
+export async function ensureActiveTenant(
+  apiKey: string,
+  context: ContextResponse,
+): Promise<ContextResponse> {
+  if (context.active_tenant) {
+    return context;
+  }
+  const first = context.tenants[0];
+  if (!first) {
+    return context;
+  }
+  return switchContext(apiKey, first.id);
 }
 
 export function listDocumentReviews(apiKey: string): Promise<IntakeReviewList> {

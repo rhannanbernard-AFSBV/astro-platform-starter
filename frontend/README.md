@@ -21,6 +21,12 @@ npm run dev
 
 Open http://127.0.0.1:3000. Demo key after seed: `allyanna-dev-key`.
 
+Load desk calls the API with that Bearer key, auto-switches to the first
+business profile when none is active, then loads OCR review, period readiness,
+and Tax Office dues. The API allows local CORS origins
+`http://127.0.0.1:3000` and `http://localhost:3000` by default
+(`CORS_ORIGINS`).
+
 ## Scope
 
 - Bearer auth against `/api/v1/*`
