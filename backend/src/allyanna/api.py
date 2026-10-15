@@ -51,6 +51,7 @@ from allyanna.schemas import (
     TotAnnualSummaryResponse,
     TotAnnualSummaryGapResponse,
     TotAnnualSummaryStatementResponse,
+    TotAnnualSummaryUnfiledRequest,
     TotAnnualSummaryVersionResponse,
     TotStatementLineResponse,
     TotStatementResponse,
@@ -429,6 +430,21 @@ async def get_turnover_tax_annual_summary_statement(
 ) -> TotAnnualSummaryStatementResponse:
     statement = await auth.worksheets.get_annual_summary_statement(auth.conn, summary_id)
     return _annual_summary_statement_response(statement)
+
+
+@router.post(
+    "/tax/tot/summaries/{summary_id}/unfiled",
+    response_model=TotAnnualSummaryResponse,
+    status_code=201,
+)
+async def file_turnover_tax_annual_summary_unfiled(
+    summary_id: UUID,
+    body: TotAnnualSummaryUnfiledRequest,
+    auth: AuthContext = Depends(get_auth),
+) -> TotAnnualSummaryResponse:
+    _ = body
+    recorded = await auth.worksheets.file_unfiled_annual_summary(auth.conn, summary_id)
+    return _annual_summary_response(recorded)
 
 
 @router.get("/tax/tot/summaries/{summary_id}", response_model=TotAnnualSummaryResponse)

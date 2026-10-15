@@ -509,6 +509,10 @@ class TotAnnualSummaryAmendmentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class TotAnnualSummaryUnfiledRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
 class TotAnnualSummaryResponse(BaseModel):
     id: UUID
     tenant_id: UUID
