@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "OmniClean AI Scanner",
+    "slug": "omniclean-ai-scanner",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "omniclean",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0f766e"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.omniclean.scanner"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0f766e"
+      },
+      "package": "com.omniclean.scanner"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow OmniClean to access walkthrough and QA photos.",
+          "cameraPermission": "Allow OmniClean to capture walkthrough and high-risk QA photos on site."
+        }
+      ]
+    ],
+    "extra": {
+      "apiUrl": "${EXPO_PUBLIC_API_URL}",
+      "eas": {
+        "projectId": "REPLACE_AFTER_eas_init"
+      }
+    },
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

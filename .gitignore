@@ -23,9 +23,19 @@ pnpm-debug.log*
 # Local Netlify folder
 .netlify
 
+<<<<<<< HEAD
 # Python
 .venv/
 __pycache__/
 .pytest_cache/
 *.py[cod]
 *.egg-info/
+=======
+# OmniClean
+apps/api/data/
+apps/api/.env
+apps/mobile/.env
+apps/mobile/.expo/
+*.pglite/
+.expo/
+>>>>>>> origin/main

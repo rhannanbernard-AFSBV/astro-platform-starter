@@ -1,0 +1,24 @@
+# Railway deploy — set root directory to apps/api in the Railway service settings,
+# or deploy from monorepo with: railway up --service omniclean-api
+#
+# Required Variables (Dashboard → Variables): see .env.example
+# Minimum production set:
+#   NODE_ENV=production
+#   OMNI_ENV=production
+#   JWT_SECRET=<openssl rand -base64 48>
+#   PUBLIC_APP_URL=https://<your-railway-domain>
+#   ALLOWED_ORIGINS=https://<expo-web-or-marketing-origin>
+# Optional live providers:
+#   OPENAI_API_KEY, RESEND_API_KEY (or SENDGRID_API_KEY / SMTP_*)
+# Recommended:
+#   DATABASE_URL from Railway Postgres plugin (otherwise PGlite on volume)
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
