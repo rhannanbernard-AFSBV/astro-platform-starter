@@ -110,13 +110,47 @@ def test_tot_return_table_forces_row_level_security() -> None:
 def test_annual_summary_statement_changes_are_decimal() -> None:
     text = (SRC / "allyanna" / "worksheets" / "service.py").read_text(encoding="utf-8")
     assert "def get_annual_summary_statement(" in text
+    assert "def file_unfiled_annual_summary(" in text
+    assert "def _has_unfiled_gap(" in text
     assert "money(tax_due - previous_tax)" in text
     assert "money(amount_paid - previous_paid)" in text
     assert "money(balance_due - previous_balance)" in text
     assert "money(tax_change - amount_paid_change)" in text
+    assert "money(live_tax - latest.tax_due)" in text
+    assert "money(live_paid - latest.amount_paid)" in text
+    assert "money(live_balance - latest.balance_due)" in text
     assert "0.05" not in text
     summaries = (SRC / "allyanna" / "worksheets" / "summaries.py").read_text(encoding="utf-8")
     assert "tenant_id = current_setting('allyanna.tenant_id', true)::uuid" in summaries
+
+
+def test_turnover_tax_reads_invoices_not_payroll_or_wage() -> None:
+    watched = [
+        SRC / "allyanna" / "worksheets" / "repository.py",
+        SRC / "allyanna" / "worksheets" / "service.py",
+        SRC / "allyanna" / "worksheets" / "returns.py",
+        SRC / "allyanna" / "worksheets" / "payments.py",
+        SRC / "allyanna" / "worksheets" / "refunds.py",
+        SRC / "allyanna" / "worksheets" / "summaries.py",
+        SRC / "allyanna" / "worksheets" / "sum.py",
+    ]
+    forbidden = (
+        "payroll_",
+        "FROM allyanna.payroll",
+        "wage_tax_brackets",
+        "szv_components",
+        "calculate_wage_tax",
+        "calculate_szv",
+        "allyanna.wage",
+    )
+    for path in watched:
+        text = path.read_text(encoding="utf-8")
+        found = [token for token in forbidden if token in text]
+        assert found == [], f"{path.name} contains {found}"
+        assert "0.05" not in text
+    repository = (SRC / "allyanna" / "worksheets" / "repository.py").read_text(encoding="utf-8")
+    assert "FROM allyanna.invoices" in repository
+    assert "list_posted_invoices" in repository
 
 
 def test_annual_summary_amendment_keeps_the_earlier_row() -> None:

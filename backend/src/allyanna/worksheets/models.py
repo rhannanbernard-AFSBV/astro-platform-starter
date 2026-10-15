@@ -183,6 +183,19 @@ class TotAnnualSummaryVersion:
 
 
 @dataclass(frozen=True)
+class TotAnnualSummaryGap:
+    """Live year totals that are not yet filed into the annual summary."""
+
+    tax_due: Decimal
+    amount_paid: Decimal
+    balance_due: Decimal
+    filing_count: int
+    tax_change: Decimal
+    amount_paid_change: Decimal
+    balance_change: Decimal
+
+
+@dataclass(frozen=True)
 class TotAnnualSummaryStatement:
     tenant_id: UUID
     country_code: str
@@ -192,6 +205,7 @@ class TotAnnualSummaryStatement:
     amount_paid: Decimal
     balance_due: Decimal
     versions: tuple[TotAnnualSummaryVersion, ...]
+    unfiled: TotAnnualSummaryGap
 
 
 @dataclass(frozen=True)

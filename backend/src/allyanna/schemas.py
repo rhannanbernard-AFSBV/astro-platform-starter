@@ -509,6 +509,10 @@ class TotAnnualSummaryAmendmentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class TotAnnualSummaryUnfiledRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
 class TotAnnualSummaryResponse(BaseModel):
     id: UUID
     tenant_id: UUID
@@ -543,6 +547,16 @@ class TotAnnualSummaryVersionResponse(BaseModel):
     filed_at: datetime
 
 
+class TotAnnualSummaryGapResponse(BaseModel):
+    tax_due: Money
+    amount_paid: Money
+    balance_due: Money
+    filing_count: int
+    tax_change: Money
+    amount_paid_change: Money
+    balance_change: Money
+
+
 class TotAnnualSummaryStatementResponse(BaseModel):
     tenant_id: UUID
     country_code: str
@@ -552,6 +566,7 @@ class TotAnnualSummaryStatementResponse(BaseModel):
     amount_paid: Money
     balance_due: Money
     versions: list[TotAnnualSummaryVersionResponse]
+    unfiled: TotAnnualSummaryGapResponse
 
 
 class TotYearStatementResponse(BaseModel):

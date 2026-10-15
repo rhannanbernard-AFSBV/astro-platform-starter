@@ -49,7 +49,9 @@ from allyanna.schemas import (
     TotAnnualSummaryListResponse,
     TotAnnualSummaryRequest,
     TotAnnualSummaryResponse,
+    TotAnnualSummaryGapResponse,
     TotAnnualSummaryStatementResponse,
+    TotAnnualSummaryUnfiledRequest,
     TotAnnualSummaryVersionResponse,
     TotStatementLineResponse,
     TotStatementResponse,
@@ -74,6 +76,7 @@ from allyanna.tenancy.service import TenancyService
 from allyanna.worksheets.models import (
     TotAnnualSummary,
     TotAnnualSummaryList,
+    TotAnnualSummaryGap,
     TotAnnualSummaryStatement,
     TotAnnualSummaryVersion,
     TotBalanceList,
@@ -427,6 +430,21 @@ async def get_turnover_tax_annual_summary_statement(
 ) -> TotAnnualSummaryStatementResponse:
     statement = await auth.worksheets.get_annual_summary_statement(auth.conn, summary_id)
     return _annual_summary_statement_response(statement)
+
+
+@router.post(
+    "/tax/tot/summaries/{summary_id}/unfiled",
+    response_model=TotAnnualSummaryResponse,
+    status_code=201,
+)
+async def file_turnover_tax_annual_summary_unfiled(
+    summary_id: UUID,
+    body: TotAnnualSummaryUnfiledRequest,
+    auth: AuthContext = Depends(get_auth),
+) -> TotAnnualSummaryResponse:
+    _ = body
+    recorded = await auth.worksheets.file_unfiled_annual_summary(auth.conn, summary_id)
+    return _annual_summary_response(recorded)
 
 
 @router.get("/tax/tot/summaries/{summary_id}", response_model=TotAnnualSummaryResponse)
@@ -837,6 +855,18 @@ def _annual_summary_version(version: TotAnnualSummaryVersion) -> TotAnnualSummar
     )
 
 
+def _annual_summary_gap(gap: TotAnnualSummaryGap) -> TotAnnualSummaryGapResponse:
+    return TotAnnualSummaryGapResponse(
+        tax_due=gap.tax_due,
+        amount_paid=gap.amount_paid,
+        balance_due=gap.balance_due,
+        filing_count=gap.filing_count,
+        tax_change=gap.tax_change,
+        amount_paid_change=gap.amount_paid_change,
+        balance_change=gap.balance_change,
+    )
+
+
 def _annual_summary_statement_response(
     statement: TotAnnualSummaryStatement,
 ) -> TotAnnualSummaryStatementResponse:
@@ -849,6 +879,7 @@ def _annual_summary_statement_response(
         amount_paid=statement.amount_paid,
         balance_due=statement.balance_due,
         versions=[_annual_summary_version(version) for version in statement.versions],
+        unfiled=_annual_summary_gap(statement.unfiled),
     )
 
 
