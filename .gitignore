@@ -16,6 +16,8 @@ pnpm-debug.log*
 # environment variables
 .env
 .env.production
+.env.local
+.env*.local
 
 # macOS-specific files
 .DS_Store
@@ -23,14 +25,19 @@ pnpm-debug.log*
 # Local Netlify folder
 .netlify
 
-<<<<<<< HEAD
 # Python
 .venv/
 __pycache__/
 .pytest_cache/
 *.py[cod]
 *.egg-info/
-=======
+
+# Allyanna backups / TLS materials
+backups/
+nginx/ssl/*.pem
+nginx/ssl/*.key
+nginx/ssl/*.crt
+
 # OmniClean
 apps/api/data/
 apps/api/.env
@@ -38,4 +45,3 @@ apps/mobile/.env
 apps/mobile/.expo/
 *.pglite/
 .expo/
->>>>>>> origin/main

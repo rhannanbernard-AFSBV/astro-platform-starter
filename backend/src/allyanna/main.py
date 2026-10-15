@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from allyanna import __version__
 from allyanna.api import allyanna_error_handler, router
-from allyanna.config import get_settings
+from allyanna.config import get_settings, validate_production_secrets
 from allyanna.db import create_pool
 from allyanna.errors import AllyannaError
 from allyanna.invoices.repository import InvoiceRepository
@@ -35,10 +35,12 @@ from allyanna.worksheets.service import TotWorksheetService
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
+    validate_production_secrets(settings)
     tax_repository = TaxRepository()
     tenancy_service = TenancyService(TenancyRepository())
     app.state.pool = None
     app.state.tenancy_service = tenancy_service
+    app.state.settings = settings
     if settings.database_url:
         app.state.pool = await create_pool(settings.database_url)
     tax_service = TaxService(
@@ -87,6 +89,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    validate_production_secrets(settings)
     app = FastAPI(
         title="Allyanna Accounting",
         version=__version__,
@@ -99,8 +102,8 @@ def create_app() -> FastAPI:
             CORSMiddleware,
             allow_origins=origins,
             allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
+            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+            allow_headers=["Authorization", "Content-Type", "Accept"],
         )
     app.add_exception_handler(AllyannaError, allyanna_error_handler)
     app.include_router(router, prefix="/api/v1")

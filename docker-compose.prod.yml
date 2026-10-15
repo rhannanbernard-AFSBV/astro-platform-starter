@@ -1,0 +1,118 @@
+# Allyanna tip-aligned production compose (supersedes obsolete PR #8).
+# Schema source of truth: backend/db/ + backend/scripts/migrate_prod.sh
+#
+#   cp .env.production.example .env.production   # fill secrets; never commit
+#   # TLS: see nginx/ssl/README.md
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+
+name: allyanna-prod
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+    volumes:
+      - allyanna_pg_data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    networks:
+      - allyanna_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  migrate:
+    image: postgres:16-alpine
+    restart: "on-failure"
+    env_file:
+      - .env.production
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      ALLYANNA_APP_PASSWORD: ${ALLYANNA_APP_PASSWORD:?set ALLYANNA_APP_PASSWORD}
+      ALLYANNA_SEED_DEMO: ${ALLYANNA_SEED_DEMO:-false}
+    volumes:
+      - ./backend:/backend:ro
+    working_dir: /backend
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - "apk add --no-cache bash >/dev/null && bash /backend/scripts/migrate_prod.sh"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - allyanna_internal
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: allyanna-backend:prod
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      ALLYANNA_ENV: production
+      DATABASE_URL: ${ALLYANNA_DATABASE_URL:?set ALLYANNA_DATABASE_URL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?set OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS}
+      ALLOW_DEMO_API_KEYS: "false"
+      TAX_CACHE_TTL_SECONDS: ${TAX_CACHE_TTL_SECONDS:-300}
+    expose:
+      - "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - allyanna_internal
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:?set NEXT_PUBLIC_API_BASE_URL}
+    image: allyanna-frontend:prod
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:?set NEXT_PUBLIC_API_BASE_URL}
+    expose:
+      - "3000"
+    depends_on:
+      - backend
+    networks:
+      - allyanna_internal
+
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    image: allyanna-nginx:prod
+    restart: unless-stopped
+    ports:
+      - "${ALLYANNA_HTTPS_PORT:-443}:443"
+      - "${ALLYANNA_HTTP_PORT:-80}:80"
+    volumes:
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - allyanna_internal
+
+networks:
+  allyanna_internal:
+    driver: bridge
+
+volumes:
+  allyanna_pg_data:

@@ -29,8 +29,8 @@ function todayIso(): string {
 
 export default function ComplianceDeskPage() {
   const [apiKey, setApiKey] = useState(() => {
-    if (typeof window === "undefined") return "allyanna-dev-key";
-    return window.sessionStorage.getItem(STORAGE_KEY) ?? "allyanna-dev-key";
+    if (typeof window === "undefined") return "";
+    return window.sessionStorage.getItem(STORAGE_KEY) ?? "";
   });
   const [taxYear, setTaxYear] = useState(2026);
   const [countryCode, setCountryCode] = useState("SXM");
@@ -169,8 +169,9 @@ export default function ComplianceDeskPage() {
       <section className="panel">
         <h2>1. Connect</h2>
         <p className="hint">
-          Use a Bearer API key and switch the active business profile. Demo seed
-          key: <code>allyanna-dev-key</code>.
+          Paste a Bearer API key issued for this environment. Local seed may
+          include <code>allyanna-dev-key</code>; production never ships a default
+          key — leave this empty until you have a real secret.
         </p>
         <form className="row" onSubmit={onConnect}>
           <label>

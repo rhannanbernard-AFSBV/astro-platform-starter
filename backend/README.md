@@ -45,9 +45,9 @@ export OPENAI_MODEL=gpt-4o
 uvicorn allyanna.main:app --reload
 ```
 
-`allyanna_app_dev` and the demo API keys are local defaults. Replace the role password before a shared deployment. Local CORS defaults allow `http://127.0.0.1:3000` and `http://localhost:3000`.
+`allyanna_app_dev` and the demo API keys are local defaults. Replace the role password before a shared deployment. Local CORS defaults allow `http://127.0.0.1:3000` and `http://localhost:3000` when `ALLYANNA_ENV` is not `production`. Production requires explicit `CORS_ORIGINS`, real `DATABASE_URL` / `OPENAI_API_KEY`, and rejects demo Bearer keys.
 
-Demo keys after the seed:
+Demo keys after the **local** seed (`001b_local_demo_firms.sql` — skipped when `ALLYANNA_SEED_DEMO=false` in prod migrate):
 
 - `allyanna-dev-key` — Harbour Ledger & Co., with Great Bay Provisions and Simpson Bay Charters
 - `allyanna-other-key` — a second firm, used to prove that firm cannot see the first
@@ -57,6 +57,8 @@ curl -H "Authorization: Bearer allyanna-dev-key" http://127.0.0.1:8000/api/v1/co
 ```
 
 Switch with `POST /api/v1/context/switch` and `{"tenant_id": "..."}` before calling the tax routes.
+
+**Go-live / production:** see [`../deploy/GO_LIVE.md`](../deploy/GO_LIVE.md). Tip-aligned Docker/TLS stack is `docker-compose.prod.yml` (do **not** use obsolete PR #8). Payroll stays out of the TOT desk for go-live.
 
 ## Tax routes
 
