@@ -2,7 +2,9 @@
 
 ## Allyanna accounting API
 
-The Sint Maarten accounting foundation lives in [`backend/`](backend/README.md): multi-tenant Postgres with row-level security, master-account context switching, and decimal tax calculations for turnover tax, wage tax, and SZV. The Astro site below is the existing starter and is separate from that API.
+The Sint Maarten accounting foundation lives in [`backend/`](backend/README.md). **Canonical tip:** [`backend/CANONICAL.md`](backend/CANONICAL.md) (`cursor/allyanna-tot-summary-statement-cfe6`). Multi-tenant Postgres with RLS, OCR → TOT period readiness, dues actions, and payroll kept out of turnover-tax math.
+
+Thin compliance desk (review → post → period-ready → dues): [`frontend/`](frontend/README.md). The Astro site below is the existing Netlify starter and is separate from Allyanna.
 
 [Live Demo](https://astro-platform-starter.netlify.app/)
 

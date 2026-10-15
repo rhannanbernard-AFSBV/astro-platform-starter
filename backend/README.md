@@ -2,6 +2,8 @@
 
 Multi-tenant foundation for Sint Maarten tax calculations. The Astro app at the repository root is the existing Netlify starter and is separate from this service.
 
+**Canonical tip:** see [CANONICAL.md](CANONICAL.md). Stop stacking TOT micro-PRs on intermediate branches. Payroll stays out of turnover-tax worksheets. A thin compliance UI lives under `frontend/` at the repo root when present.
+
 ## What this slice covers
 
 - Master accounts (accounting firms) and the business profiles under them

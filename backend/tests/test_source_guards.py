@@ -172,6 +172,7 @@ def test_turnover_tax_reads_invoices_not_payroll_or_wage() -> None:
     assert "def list_intake_reviews(" in readiness
     assert "def get_period_readiness(" in readiness
     assert 'f"/api/v1/documents/{document.id}/invoice"' in readiness
+    assert "Payroll and wage rows are not read here" in readiness
 
 
 def test_annual_summary_amendment_keeps_the_earlier_row() -> None:
