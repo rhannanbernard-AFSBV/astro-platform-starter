@@ -209,11 +209,38 @@ class TotAnnualSummaryStatement:
 
 
 @dataclass(frozen=True)
+class TotDueOpenReturn:
+    """A latest filed return that still has turnover tax to pay."""
+
+    return_id: UUID
+    period_start: date
+    period_end: date
+    currency_code: str
+    due_on: date | None
+    tax_due: Decimal
+    amount_paid: Decimal
+    balance_due: Decimal
+    past_due: bool
+    payment_path: str
+
+
+@dataclass(frozen=True)
+class TotAnnualSummaryDueActions:
+    """Next steps the active business can take from this pay-due reminder."""
+
+    can_file_unfiled: bool
+    file_unfiled_path: str | None
+    year_statement_path: str
+    open_returns: tuple[TotDueOpenReturn, ...]
+
+
+@dataclass(frozen=True)
 class TotAnnualSummaryDue:
     """Amount still owed to the Sint Maarten Tax Office for the tax year.
 
     filed_* are the latest filed annual summary. amount_due is the live year
     balance. unfiled is called out when the live year has moved past that filing.
+    actions names the file-unfiled, year-statement, and payment paths.
     """
 
     tenant_id: UUID
@@ -227,6 +254,7 @@ class TotAnnualSummaryDue:
     amount_due: Decimal
     has_unfiled_gap: bool
     unfiled: TotAnnualSummaryGap
+    actions: TotAnnualSummaryDueActions
 
 
 @dataclass(frozen=True)

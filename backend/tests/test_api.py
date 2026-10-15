@@ -128,9 +128,25 @@ def test_health_and_money_schema_without_a_database(monkeypatch: pytest.MonkeyPa
     assert due_props["amount_due"]["type"] == "string"
     assert due_props["has_unfiled_gap"]["type"] == "boolean"
     assert "unfiled" in due_props
+    assert "actions" in due_props
+    action_props = schema["components"]["schemas"]["TotAnnualSummaryDueActionsResponse"]["properties"]
+    assert action_props["can_file_unfiled"]["type"] == "boolean"
+    assert "file_unfiled_path" in action_props
+    assert action_props["year_statement_path"]["type"] == "string"
+    open_props = schema["components"]["schemas"]["TotDueOpenReturnResponse"]["properties"]
+    assert open_props["balance_due"]["type"] == "string"
+    assert open_props["payment_path"]["type"] == "string"
+    assert open_props["past_due"]["type"] == "boolean"
     dues_props = schema["components"]["schemas"]["TotAnnualSummaryDueListResponse"]["properties"]
     assert dues_props["amount_due"]["type"] == "string"
     assert dues_props["unfiled_count"]["type"] == "integer"
+    payroll_props = schema["components"]["schemas"]["PayrollRunResponse"]["properties"]
+    assert payroll_props["gross_wages"]["type"] == "string"
+    assert payroll_props["wage_tax_total"]["type"] == "string"
+    assert payroll_props["net_wages"]["type"] == "string"
+    payroll_line_props = schema["components"]["schemas"]["PayrollLineResponse"]["properties"]
+    assert payroll_line_props["wage_tax_withheld"]["type"] == "string"
+    assert payroll_line_props["wage_tax_base"]["type"] == "string"
 
 
 def test_json_float_money_is_rejected() -> None:

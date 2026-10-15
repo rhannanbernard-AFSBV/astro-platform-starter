@@ -9,7 +9,14 @@ from typing import Any
 from uuid import UUID
 
 from allyanna.money import as_decimal
-from allyanna.tax.models import SzvComponent, TaxBundle, TaxSchedule, WageTaxBracket
+from allyanna.tax.models import (
+    SzvComponent,
+    TaxBundle,
+    TaxSchedule,
+    WageTaxBracket,
+    WageTaxLookupRow,
+    WageTaxWithholdingRules,
+)
 
 Connection = Any
 
@@ -81,6 +88,8 @@ class TaxRepository:
             tot_rate=await self._tot_rate(conn, schedule.id),
             brackets=await self._brackets(conn, schedule.id),
             components=await self._components(conn, schedule.id),
+            withholding_rules=await self._withholding_rules(conn, schedule.id),
+            lookup_rows=await self._lookup_rows(conn, schedule.id),
         )
 
     async def _tot_rate(self, conn: Connection, schedule_id: UUID) -> Any:
@@ -122,7 +131,7 @@ class TaxRepository:
             """
             SELECT component_order, component_code, group_code, employee_rate, employer_rate,
                    monthly_wage_ceiling, annual_wage_ceiling, employer_rate_min,
-                   employer_rate_max, rate_is_variable
+                   employer_rate_max, rate_is_variable, reduces_wage_tax_base
             FROM allyanna.szv_components
             WHERE tax_schedule_id = $1
             ORDER BY component_order
@@ -149,6 +158,46 @@ class TaxRepository:
                     None if row["employer_rate_max"] is None else as_decimal(row["employer_rate_max"])
                 ),
                 rate_is_variable=row["rate_is_variable"],
+                reduces_wage_tax_base=row["reduces_wage_tax_base"],
+            )
+            for row in rows
+        )
+
+    async def _withholding_rules(
+        self,
+        conn: Connection,
+        schedule_id: UUID,
+    ) -> WageTaxWithholdingRules | None:
+        row = await conn.fetchrow(
+            """
+            SELECT withholding_free_maximum, excess_rate, monthly_acquisition_cost
+            FROM allyanna.wage_tax_withholding_rules
+            WHERE tax_schedule_id = $1
+            """,
+            schedule_id,
+        )
+        if row is None:
+            return None
+        return WageTaxWithholdingRules(
+            withholding_free_maximum=as_decimal(row["withholding_free_maximum"]),
+            excess_rate=as_decimal(row["excess_rate"]),
+            monthly_acquisition_cost=as_decimal(row["monthly_acquisition_cost"]),
+        )
+
+    async def _lookup_rows(self, conn: Connection, schedule_id: UUID) -> tuple[WageTaxLookupRow, ...]:
+        rows = await conn.fetch(
+            """
+            SELECT wage_amount, tax_amount
+            FROM allyanna.wage_tax_lookup_rows
+            WHERE tax_schedule_id = $1
+            ORDER BY wage_amount
+            """,
+            schedule_id,
+        )
+        return tuple(
+            WageTaxLookupRow(
+                wage_amount=as_decimal(row["wage_amount"]),
+                tax_amount=as_decimal(row["tax_amount"]),
             )
             for row in rows
         )

@@ -85,6 +85,11 @@ async def test_the_pay_due_reminder_calls_out_an_unfiled_gap(
     assert body["filed_balance_due"] == latest["balance_due"]
     assert body["amount_due"] == latest["balance_due"]
     assert body["has_unfiled_gap"] is False
+    assert body["actions"]["can_file_unfiled"] is False
+    assert body["actions"]["file_unfiled_path"] is None
+    assert body["actions"]["year_statement_path"] == (
+        "/api/v1/tax/tot/statements?tax_year=2026&country_code=SXM"
+    )
     assert _money(body["unfiled"]["tax_change"]) == Decimal("0.00")
     assert _money(body["unfiled"]["amount_paid_change"]) == Decimal("0.00")
     assert _money(body["unfiled"]["balance_change"]) == Decimal("0.00")
@@ -96,6 +101,7 @@ async def test_the_pay_due_reminder_calls_out_an_unfiled_gap(
     assert from_latest.json()["summary_id"] == latest["id"]
     assert from_latest.json()["amount_due"] == body["amount_due"]
     assert from_latest.json()["has_unfiled_gap"] is False
+    assert from_latest.json()["actions"] == body["actions"]
 
     year = client.get(
         "/api/v1/tax/tot/statements",
@@ -129,6 +135,24 @@ async def test_the_pay_due_reminder_calls_out_an_unfiled_gap(
     assert reminder["filed_amount_paid"] == latest["amount_paid"]
     assert reminder["filed_balance_due"] == latest["balance_due"]
     assert reminder["has_unfiled_gap"] is True
+    assert reminder["actions"]["can_file_unfiled"] is True
+    assert reminder["actions"]["file_unfiled_path"] == (
+        f"/api/v1/tax/tot/summaries/{latest['id']}/unfiled"
+    )
+    assert reminder["actions"]["year_statement_path"] == (
+        "/api/v1/tax/tot/statements?tax_year=2026&country_code=SXM"
+    )
+    open_ids = {item["return_id"] for item in reminder["actions"]["open_returns"]}
+    assert payable["return_id"] in open_ids
+    paid_open = next(
+        item
+        for item in reminder["actions"]["open_returns"]
+        if item["return_id"] == payable["return_id"]
+    )
+    assert paid_open["payment_path"] == (
+        f"/api/v1/tax/tot/returns/{payable['return_id']}/payments"
+    )
+    assert _money(paid_open["balance_due"]) > Decimal("0")
     assert _money(reminder["amount_due"]) == _money(live.json()["balance_due"])
     assert _money(reminder["unfiled"]["tax_due"]) == _money(live.json()["tax_due"])
     assert _money(reminder["unfiled"]["amount_paid"]) == _money(live.json()["amount_paid"])

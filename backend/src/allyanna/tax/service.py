@@ -5,8 +5,13 @@ from typing import Any
 
 from allyanna.errors import InvalidTaxTable
 from allyanna.tax.cache import TaxTableCache
-from allyanna.tax.calculate import calculate_szv, calculate_tot, calculate_wage_tax
-from allyanna.tax.models import SzvResult, TaxBundle, TotResult, WageTaxResult
+from allyanna.tax.calculate import (
+    calculate_monthly_wage_tax,
+    calculate_szv,
+    calculate_tot,
+    calculate_wage_tax,
+)
+from allyanna.tax.models import MonthlyWageTaxResult, SzvResult, TaxBundle, TotResult, WageTaxResult
 from allyanna.tax.repository import TaxRepository
 from allyanna.tenancy.service import TenancyService
 
@@ -182,6 +187,65 @@ class TaxService:
                 "gross_monthly_wage": format(result.gross_monthly_wage, "f"),
                 "employee_total": format(result.employee_total, "f"),
                 "employer_total": format(result.employer_total, "f"),
+            },
+        )
+        return tenant, bundle, result
+
+    async def load_schedule(
+        self,
+        conn: Connection,
+        *,
+        country_code: str,
+        tax_year: int,
+        schedule_code: str,
+        calculation_method: str,
+    ) -> TaxBundle:
+        await self._tenancy.require_active_tenant(conn)
+        return await self._require_bundle(
+            conn,
+            country_code=country_code,
+            tax_year=tax_year,
+            schedule_code=schedule_code,
+            calculation_method=calculation_method,
+        )
+
+    async def calculate_monthly_wage_tax(
+        self,
+        conn: Connection,
+        *,
+        country_code: str,
+        tax_year: int,
+        wage_tax_base: Decimal,
+    ) -> tuple[Any, TaxBundle, MonthlyWageTaxResult]:
+        tenant, _active = await self._tenancy.require_active_tenant(conn)
+        bundle = await self._require_bundle(
+            conn,
+            country_code=country_code,
+            tax_year=tax_year,
+            schedule_code="WAGE_TAX_MONTHLY",
+            calculation_method="wage_class_lookup",
+        )
+        if bundle.schedule.amount_period != "month":
+            raise InvalidTaxTable("monthly wage-tax schedule amount_period must be month")
+        if bundle.withholding_rules is None:
+            raise InvalidTaxTable("monthly wage-tax schedule is missing withholding rules")
+        rules = bundle.withholding_rules
+        result = calculate_monthly_wage_tax(
+            wage_tax_base,
+            bundle.lookup_rows,
+            withholding_free_maximum=rules.withholding_free_maximum,
+            excess_rate=rules.excess_rate,
+        )
+        await self._audit(
+            conn,
+            action="tax.wage_monthly.calculate",
+            detail={
+                "schedule_id": str(bundle.schedule.id),
+                "tax_year": tax_year,
+                "country_code": country_code,
+                "wage_tax_base": format(result.wage_tax_base, "f"),
+                "tax_amount": format(result.tax_amount, "f"),
+                "method": result.method,
             },
         )
         return tenant, bundle, result

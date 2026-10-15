@@ -6,8 +6,13 @@ import pytest
 
 from allyanna.errors import InvalidMoney, InvalidOvRate, InvalidTaxTable
 from allyanna.money import as_decimal, money
-from allyanna.tax.calculate import calculate_szv, calculate_tot, calculate_wage_tax
-from allyanna.tax.models import SzvComponent, WageTaxBracket
+from allyanna.tax.calculate import (
+    calculate_monthly_wage_tax,
+    calculate_szv,
+    calculate_tot,
+    calculate_wage_tax,
+)
+from allyanna.tax.models import SzvComponent, WageTaxBracket, WageTaxLookupRow
 
 # AB 2026, no. 11 schijventarief, copied here as the expected table contents.
 SXM_2026_BRACKETS = (
@@ -158,6 +163,62 @@ def test_szv_caps_each_component_at_its_monthly_ceiling() -> None:
     assert aov.employee_amount == Decimal("9.00")
     assert result.groups[0].group_code == "ZV_OV"
     assert result.employee_total == Decimal("19.00")
+
+
+def test_monthly_withholding_reads_the_class_table_and_the_supplied_excess_rate() -> None:
+    rows = (
+        WageTaxLookupRow(Decimal("10.00"), Decimal("1.00")),
+        WageTaxLookupRow(Decimal("20.00"), Decimal("3.00")),
+    )
+    free = calculate_monthly_wage_tax(
+        Decimal("15.00"),
+        rows,
+        withholding_free_maximum=Decimal("15.00"),
+        excess_rate=Decimal("0.10"),
+    )
+    assert free.method == "free_threshold"
+    assert free.tax_amount == Decimal("0.00")
+    floored = calculate_monthly_wage_tax(
+        Decimal("19.99"),
+        rows,
+        withholding_free_maximum=Decimal("0.00"),
+        excess_rate=Decimal("0.10"),
+    )
+    assert floored.method == "table"
+    assert floored.table_wage_amount == Decimal("10.00")
+    assert floored.tax_amount == Decimal("1.00")
+    above = calculate_monthly_wage_tax(
+        Decimal("24.00"),
+        rows,
+        withholding_free_maximum=Decimal("0.00"),
+        excess_rate=Decimal("0.25"),
+    )
+    assert above.method == "table_plus_excess"
+    assert above.table_tax_amount == Decimal("3.00")
+    assert above.excess_wage == Decimal("4.00")
+    assert above.tax_amount == Decimal("4.00")
+    other_rate = calculate_monthly_wage_tax(
+        Decimal("24.00"),
+        rows,
+        withholding_free_maximum=Decimal("0.00"),
+        excess_rate=Decimal("0.10"),
+    )
+    assert other_rate.tax_amount == Decimal("3.40")
+    below = calculate_monthly_wage_tax(
+        Decimal("5.00"),
+        rows,
+        withholding_free_maximum=Decimal("0.00"),
+        excess_rate=Decimal("0.10"),
+    )
+    assert below.method == "below_table"
+    assert below.tax_amount == Decimal("0.00")
+    with pytest.raises(InvalidTaxTable):
+        calculate_monthly_wage_tax(
+            Decimal("10.00"),
+            (),
+            withholding_free_maximum=Decimal("0.00"),
+            excess_rate=Decimal("0.10"),
+        )
 
 
 def test_variable_employer_rate_must_stay_inside_the_table_band() -> None:

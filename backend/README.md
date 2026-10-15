@@ -6,8 +6,8 @@ Multi-tenant foundation for Sint Maarten tax calculations. The Astro app at the 
 
 - Master accounts (accounting firms) and the business profiles under them
 - A signed-in user can switch the active business profile, and Postgres row-level security keeps that switch inside the firm
-- Turnover tax, annual wage-tax step brackets, and SZV ZV/OV plus AOV/AWW splits and monthly wage ceilings
-- Rates, brackets, and ceilings are rows for `country_code = SXM` and a `tax_year`. The Python functions only multiply and cap the decimals they are given
+- Turnover tax, annual wage-tax step brackets, the monthly loonbelasting withholding table, and SZV ZV/OV plus AOV/AWW splits and monthly wage ceilings
+- Rates, brackets, ceilings, and withholding classes are rows for `country_code = SXM` and a `tax_year`. The Python functions only multiply, cap, and look up the decimals they are given
 - Async FastAPI routes with Pydantic responses. Money is a decimal string
 - Invoice headers and line items for the active business profile. Subtotal is the sum of the lines. Turnover tax is the existing TOT calculation against that subtotal
 - Asynchronous receipt and invoice intake. GPT-4o copies the printed fields. Python recomputes line totals and turnover tax from the tax tables
@@ -23,8 +23,7 @@ Multi-tenant foundation for Sint Maarten tax calculations. The Astro app at the 
 - A statement for the latest filing that lists each payment and refund in date order with a running balance
 - A year-to-date statement that lists each latest filing in a tax year, with that filing's payments and refunds and a running balance across the year
 - An annual summary that stores that year's tax, amount paid, and balance, while the earlier filings stay readable
-
-Payroll runs are not in this service yet.
+- Payroll runs for the active business profile. Withholding uses the monthly loonbelasting table. SZV premiums use the existing capped-split calculator. Payroll does not enter the turnover-tax worksheet
 
 ## Run locally
 
@@ -57,14 +56,19 @@ Switch with `POST /api/v1/context/switch` and `{"tenant_id": "..."}` before call
 
 ## Tax routes
 
-All three require an active business profile. Amounts are decimal strings, not JSON floats.
+The tax routes require an active business profile. Amounts are decimal strings, not JSON floats.
 
 - `POST /api/v1/tax/tot` — `gross_taxable_revenue`. Turnover tax is `revenue * rate` using the TOT row
-- `POST /api/v1/tax/wage` — annual taxable wage (grondslag) for the AB 2026 schijventarief. The monthly loonbelasting lookup tables are not loaded yet
+- `POST /api/v1/tax/wage` — annual taxable wage (grondslag) for the AB 2026 schijventarief
+- `POST /api/v1/tax/wage-monthly` — monthly loonbelasting grondslag. The class at or below that amount is the withholding, unless the grondslag is at or below the free maximum stored on the schedule. Above the last class, the stored excess rate applies to the excess
 - `POST /api/v1/tax/szv` — monthly gross wage. Each component caps the wage at its own monthly ceiling. OV uses the request rate, otherwise the business profile rate, otherwise the statutory minimum stored on the component. The rate must sit inside the band stored on that row
 - `GET /api/v1/tax/schedules?tax_year=2026&country_code=SXM` — the rows the calculators will read
 
-The 2026 seed cites the statutory turnover-tax rate, AB 2026 no. 11, and the SZV AOV/AWW notice plus the published premium splits. The ZV/OV monthly ceiling is the Cg 10,000.00 maximum in force from 1 August 2022; SZV's public index did not show a later amendment. Confirm those rows before filing.
+The 2026 seed cites the statutory turnover-tax rate, AB 2026 no. 11 (annual schijventarief and Bijlage II maandtabel), and the SZV AOV/AWW notice plus the published premium splits. The ZV/OV monthly ceiling is the Cg 10,000.00 maximum in force from 1 August 2022; SZV's public index did not show a later amendment. Confirm those rows before filing.
+
+## Payroll
+
+`POST /api/v1/payroll/runs` records one month for the active business profile. Send `period_year`, `period_month`, and lines (`employee_name`, optional `employee_code`, `gross_wage`) as decimal strings. The service subtracts the monthly acquisition cost stored on the withholding rules, then the employee AOV/AWW premiums from the SZV calculator on that reduced wage, and looks the resulting grondslag up in the maandtabel. SZV amounts on the payslip are the calculator applied to gross wage. `GET /api/v1/payroll/runs` and `GET /api/v1/payroll/runs/{run_id}` return only that profile's runs.
 
 ## Invoices
 
@@ -100,7 +104,9 @@ One correcting invoice may name the latest filing for that period with `corrects
 
 `GET /api/v1/tax/tot/summaries/{summary_id}/due` is the pay-due reminder for that chain. It returns the latest filed tax, amount paid, and balance, plus `amount_due` — the live year balance still owed to the Sint Maarten Tax Office. When a later payment has not been filed, `has_unfiled_gap` is true and `unfiled` carries that gap. Any version in the chain may be named. The amounts use `decimal.Decimal`. Row-level security on `tot_annual_summaries` keeps another firm from reading it.
 
-`GET /api/v1/tax/tot/dues` lists that reminder for every tax year that has an annual summary on the active business. Only the latest filed version of each year is included. The header sums `amount_due` and counts how many years still have an unfiled gap. Open years and unfiled gaps show up in one tenant-scoped response. Row-level security on `tot_annual_summaries` keeps another firm from reading them.
+`GET /api/v1/tax/tot/dues` lists that reminder for every tax year that has an annual summary on the active business. Only the latest filed version of each year is included. The header sums `amount_due` and counts how many years still have an unfiled gap. Open years and unfiled gaps show up in one tenant-scoped response. Each row carries `actions`: the `POST` path to file an unfiled gap when one exists, the year-statement `GET` path, and every latest filing in that year that still has a balance with its payment `POST` path. Settled returns are left out of `open_returns`. Row-level security on `tot_annual_summaries` and the return tables keeps another firm from reading them.
+
+`GET /api/v1/tax/tot/summaries/{summary_id}/due` carries the same `actions` block for that one year.
 
 `GET /api/v1/tax/tot/balances` lists every filed return for the active business profile. Each row carries the tax stored on that return, the payments recorded against it, the remaining balance, and the due date. A row is past due when a due date is stored, that date is before `as_of`, and a balance remains. The header sums the open balances that are past due. `as_of` defaults to the current date. A settled return stays on the list and is not past due. When a period has been amended, the list follows the latest filing. The query is limited to the active profile's `tenant_id`, and row-level security on the return and payment tables is the backstop. Another firm does not see these balances.
 

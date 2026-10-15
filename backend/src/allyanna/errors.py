@@ -145,6 +145,21 @@ class TotAnnualSummarySuperseded(AllyannaError):
     status_code = 409
 
 
+class InvalidPayroll(AllyannaError):
+    code = "invalid_payroll"
+    status_code = 422
+
+
+class PayrollNotFound(AllyannaError):
+    code = "payroll_not_found"
+    status_code = 404
+
+
+class DuplicatePayrollPeriod(AllyannaError):
+    code = "duplicate_payroll_period"
+    status_code = 409
+
+
 class ServiceUnavailable(AllyannaError):
     code = "service_unavailable"
     status_code = 503

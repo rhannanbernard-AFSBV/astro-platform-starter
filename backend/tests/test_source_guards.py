@@ -11,9 +11,16 @@ FORBIDDEN_IN_CODE = (
     "0.042",
     "0.2625",
     "0.3375",
+    "0.475",
+    "41.67",
+    "85.62",
+    "2273.44",
+    "3933.16",
+    "4331.05",
     "4571.95",
     "10928.01",
     "132824.35",
+    "14162.33",
 )
 
 
@@ -43,6 +50,7 @@ def test_calculation_modules_do_not_embed_statutory_rates() -> None:
         SRC / "allyanna" / "worksheets" / "repository.py",
         SRC / "allyanna" / "worksheets" / "returns.py",
         SRC / "allyanna" / "worksheets" / "payments.py",
+        SRC / "allyanna" / "payroll" / "service.py",
         SRC / "allyanna" / "api.py",
     ]
     for path in watched:
@@ -113,9 +121,12 @@ def test_annual_summary_statement_changes_are_decimal() -> None:
     assert "def get_annual_summary_due(" in text
     assert "def list_annual_summary_dues(" in text
     assert "def file_unfiled_annual_summary(" in text
+    assert "def _due_actions(" in text
     assert "sum_money([row.amount_due for row in dues])" in text
     assert "def _has_unfiled_gap(" in text
     assert "money(filed_balance + statement.unfiled.balance_change)" in text
+    assert 'f"/api/v1/tax/tot/summaries/{summary_id}/unfiled"' in text
+    assert 'f"/api/v1/tax/tot/returns/{row.return_id}/payments"' in text
     assert "money(tax_due - previous_tax)" in text
     assert "money(amount_paid - previous_paid)" in text
     assert "money(balance_due - previous_balance)" in text
@@ -286,3 +297,17 @@ def test_posted_intake_stays_on_the_invoice_tenant() -> None:
     assert "status = 'completed'" in sql
     assert "invoices_document_intake_idx" in sql
     assert "0.05" not in sql
+
+
+def test_payroll_tables_force_row_level_security() -> None:
+    sql = (Path(__file__).resolve().parents[1] / "db" / "migrations" / "003_payroll.sql").read_text(
+        encoding="utf-8"
+    )
+    for table in ("payroll_runs", "payroll_lines", "payroll_szv_lines"):
+        assert "tenant_id uuid NOT NULL" in sql
+        assert f"ALTER TABLE allyanna.{table} ENABLE ROW LEVEL SECURITY;" in sql
+        assert f"ALTER TABLE allyanna.{table} FORCE ROW LEVEL SECURITY;" in sql
+    assert "0.475" not in sql
+    assert "41.67" not in sql
+    assert "GRANT SELECT, INSERT ON allyanna.payroll_runs TO allyanna_app;" in sql
+    assert "GRANT UPDATE ON allyanna.payroll_runs" not in sql

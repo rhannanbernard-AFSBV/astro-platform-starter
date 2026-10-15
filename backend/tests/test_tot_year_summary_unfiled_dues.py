@@ -83,6 +83,18 @@ async def test_the_dues_list_shows_each_summarized_year_and_unfiled_gaps(
     assert row["filed_balance_due"] == single.json()["filed_balance_due"]
     assert row["amount_due"] == single.json()["amount_due"]
     assert row["unfiled"] == single.json()["unfiled"]
+    assert row["actions"] == single.json()["actions"]
+    assert row["actions"]["can_file_unfiled"] is True
+    assert row["actions"]["file_unfiled_path"] == f"/api/v1/tax/tot/summaries/{latest['id']}/unfiled"
+    assert row["actions"]["year_statement_path"] == (
+        "/api/v1/tax/tot/statements?tax_year=2026&country_code=SXM"
+    )
+    assert row["actions"]["open_returns"]
+    for open_row in row["actions"]["open_returns"]:
+        assert _money(open_row["balance_due"]) > Decimal("0")
+        assert open_row["payment_path"] == (
+            f"/api/v1/tax/tot/returns/{open_row['return_id']}/payments"
+        )
     assert _money(body["amount_due"]) == _money(row["amount_due"])
     assert _money(body["amount_due"]) == sum(
         (_money(item["amount_due"]) for item in body["dues"]),
