@@ -147,6 +147,17 @@ def test_health_and_money_schema_without_a_database(monkeypatch: pytest.MonkeyPa
     payroll_line_props = schema["components"]["schemas"]["PayrollLineResponse"]["properties"]
     assert payroll_line_props["wage_tax_withheld"]["type"] == "string"
     assert payroll_line_props["wage_tax_base"]["type"] == "string"
+    review_props = schema["components"]["schemas"]["IntakeReviewResponse"]["properties"]
+    assert "table_tot_amount" in review_props
+    assert "post_path" in review_props
+    assert review_props["ready_to_post"]["type"] == "boolean"
+    period_props = schema["components"]["schemas"]["TotPeriodReadinessResponse"]["properties"]
+    assert period_props["unfiled_tot_amount"]["type"] == "string"
+    assert period_props["open_balance"]["type"] == "string"
+    assert "intakes_ready" in period_props
+    assert "unfiled_invoices" in period_props
+    assert "open_returns" in period_props
+    assert "dues" in period_props
 
 
 def test_json_float_money_is_rejected() -> None:

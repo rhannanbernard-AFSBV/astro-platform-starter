@@ -51,6 +51,7 @@ def test_calculation_modules_do_not_embed_statutory_rates() -> None:
         SRC / "allyanna" / "worksheets" / "returns.py",
         SRC / "allyanna" / "worksheets" / "payments.py",
         SRC / "allyanna" / "payroll" / "service.py",
+        SRC / "allyanna" / "readiness" / "service.py",
         SRC / "allyanna" / "api.py",
     ]
     for path in watched:
@@ -148,6 +149,7 @@ def test_turnover_tax_reads_invoices_not_payroll_or_wage() -> None:
         SRC / "allyanna" / "worksheets" / "refunds.py",
         SRC / "allyanna" / "worksheets" / "summaries.py",
         SRC / "allyanna" / "worksheets" / "sum.py",
+        SRC / "allyanna" / "readiness" / "service.py",
     ]
     forbidden = (
         "payroll_",
@@ -166,6 +168,10 @@ def test_turnover_tax_reads_invoices_not_payroll_or_wage() -> None:
     repository = (SRC / "allyanna" / "worksheets" / "repository.py").read_text(encoding="utf-8")
     assert "FROM allyanna.invoices" in repository
     assert "list_posted_invoices" in repository
+    readiness = (SRC / "allyanna" / "readiness" / "service.py").read_text(encoding="utf-8")
+    assert "def list_intake_reviews(" in readiness
+    assert "def get_period_readiness(" in readiness
+    assert 'f"/api/v1/documents/{document.id}/invoice"' in readiness
 
 
 def test_annual_summary_amendment_keeps_the_earlier_row() -> None:

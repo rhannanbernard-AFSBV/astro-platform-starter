@@ -13,6 +13,13 @@ from allyanna.ocr.models import DocumentIntake
 from allyanna.ocr.service import DocumentIntakeService
 from allyanna.payroll.models import PayrollLineInput, PayrollRun
 from allyanna.payroll.service import PayrollService
+from allyanna.readiness.models import (
+    IntakeReview,
+    IntakeReviewList,
+    TotPeriodReadiness,
+    UnfiledInvoice,
+)
+from allyanna.readiness.service import TotPeriodReadinessService
 from allyanna.schemas import (
     ContextResponse,
     DocumentIntakeListResponse,
@@ -20,6 +27,8 @@ from allyanna.schemas import (
     DocumentLineResponse,
     ErrorResponse,
     HealthResponse,
+    IntakeReviewListResponse,
+    IntakeReviewResponse,
     MasterAccountResponse,
     MonthlyWageTaxRequest,
     MonthlyWageTaxResponse,
@@ -50,6 +59,7 @@ from allyanna.schemas import (
     TotPaymentListResponse,
     TotPaymentRequest,
     TotPaymentResponse,
+    TotPeriodReadinessResponse,
     TotRefundItem,
     TotRefundListResponse,
     TotRefundRequest,
@@ -71,6 +81,7 @@ from allyanna.schemas import (
     TotYearFilingResponse,
     TotYearStatementResponse,
     TotReturnBalanceResponse,
+    UnfiledInvoiceResponse,
     TotReturnFileRequest,
     TotReturnListResponse,
     TotReturnResponse,
@@ -127,6 +138,7 @@ class AuthContext:
     invoices: InvoiceService
     worksheets: TotWorksheetService
     payroll: PayrollService
+    readiness: TotPeriodReadinessService
 
 
 async def allyanna_error_handler(_request: Request, exc: AllyannaError) -> JSONResponse:
@@ -164,6 +176,7 @@ async def get_auth(
         invoices=request.app.state.invoice_service,
         worksheets=request.app.state.worksheet_service,
         payroll=request.app.state.payroll_service,
+        readiness=request.app.state.readiness_service,
     )
 
 
@@ -460,6 +473,22 @@ async def list_turnover_tax_annual_summary_dues(
     return _annual_summary_due_list_response(listing)
 
 
+@router.get("/tax/tot/period-ready", response_model=TotPeriodReadinessResponse)
+async def get_turnover_tax_period_readiness(
+    tax_year: int = Query(ge=2000, le=2100),
+    country_code: str = Query(default="SXM", pattern=r"^[A-Z]{3}$"),
+    as_of: date | None = Query(default=None),
+    auth: AuthContext = Depends(get_auth),
+) -> TotPeriodReadinessResponse:
+    readiness = await auth.readiness.get_period_readiness(
+        auth.conn,
+        tax_year=tax_year,
+        country_code=country_code,
+        as_of=as_of,
+    )
+    return _period_readiness_response(readiness)
+
+
 @router.get(
     "/tax/tot/summaries/{summary_id}/due",
     response_model=TotAnnualSummaryDueResponse,
@@ -671,6 +700,23 @@ async def list_documents(auth: AuthContext = Depends(get_auth)) -> DocumentIntak
         tenant_id=tenant.id,
         documents=[_document_response(item) for item in documents],
     )
+
+
+@router.get("/documents/review", response_model=IntakeReviewListResponse)
+async def list_document_reviews(
+    auth: AuthContext = Depends(get_auth),
+) -> IntakeReviewListResponse:
+    listing = await auth.readiness.list_intake_reviews(auth.conn)
+    return _intake_review_list_response(listing)
+
+
+@router.get("/documents/{document_id}/review", response_model=IntakeReviewResponse)
+async def get_document_review(
+    document_id: UUID,
+    auth: AuthContext = Depends(get_auth),
+) -> IntakeReviewResponse:
+    review = await auth.readiness.get_intake_review(auth.conn, document_id)
+    return _intake_review_response(review)
 
 
 @router.get("/documents/{document_id}", response_model=DocumentIntakeResponse)
@@ -1046,6 +1092,78 @@ def _annual_summary_due_list_response(
         amount_due=listing.amount_due,
         unfiled_count=listing.unfiled_count,
         dues=[_annual_summary_due_response(row) for row in listing.dues],
+    )
+
+
+def _intake_review_response(review: IntakeReview) -> IntakeReviewResponse:
+    return IntakeReviewResponse(
+        document_id=review.document_id,
+        tenant_id=review.tenant_id,
+        status=review.status,
+        source_filename=review.source_filename,
+        vendor_name=review.vendor_name,
+        invoice_date=review.invoice_date,
+        tax_year=review.tax_year,
+        country_code=review.country_code,
+        extracted_tot_amount=review.extracted_tot_amount,
+        table_tot_amount=review.table_tot_amount,
+        tot_rate=review.tot_rate,
+        subtotal=review.subtotal,
+        grand_total=review.grand_total,
+        amounts_match=review.amounts_match,
+        discrepancies=list(review.discrepancies),
+        ready_to_post=review.ready_to_post,
+        blocked_reason=review.blocked_reason,
+        post_path=review.post_path,
+        invoice_id=review.invoice_id,
+    )
+
+
+def _intake_review_list_response(listing: IntakeReviewList) -> IntakeReviewListResponse:
+    return IntakeReviewListResponse(
+        tenant_id=listing.tenant_id,
+        ready_count=listing.ready_count,
+        blocked_count=listing.blocked_count,
+        reviews=[_intake_review_response(row) for row in listing.reviews],
+    )
+
+
+def _unfiled_invoice_response(row: UnfiledInvoice) -> UnfiledInvoiceResponse:
+    return UnfiledInvoiceResponse(
+        invoice_id=row.invoice_id,
+        vendor_name=row.vendor_name,
+        invoice_date=row.invoice_date,
+        tax_year=row.tax_year,
+        country_code=row.country_code,
+        currency_code=row.currency_code,
+        subtotal=row.subtotal,
+        tot_rate=row.tot_rate,
+        tot_amount=row.tot_amount,
+        grand_total=row.grand_total,
+        document_intake_id=row.document_intake_id,
+    )
+
+
+def _period_readiness_response(readiness: TotPeriodReadiness) -> TotPeriodReadinessResponse:
+    return TotPeriodReadinessResponse(
+        tenant_id=readiness.tenant_id,
+        tax_year=readiness.tax_year,
+        country_code=readiness.country_code,
+        ready_count=readiness.ready_count,
+        blocked_count=readiness.blocked_count,
+        unfiled_invoice_count=readiness.unfiled_invoice_count,
+        open_return_count=readiness.open_return_count,
+        unfiled_tot_amount=readiness.unfiled_tot_amount,
+        open_balance=readiness.open_balance,
+        intakes_ready=[_intake_review_response(row) for row in readiness.intakes_ready],
+        intakes_blocked=[_intake_review_response(row) for row in readiness.intakes_blocked],
+        unfiled_invoices=[_unfiled_invoice_response(row) for row in readiness.unfiled_invoices],
+        open_returns=[_due_open_return_response(row) for row in readiness.open_returns],
+        dues=(
+            None
+            if readiness.dues is None
+            else _annual_summary_due_response(readiness.dues)
+        ),
     )
 
 

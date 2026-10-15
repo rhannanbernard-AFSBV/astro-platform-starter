@@ -17,6 +17,7 @@ from allyanna.ocr.repository import DocumentRepository
 from allyanna.ocr.service import DocumentIntakeService
 from allyanna.payroll.repository import PayrollRepository
 from allyanna.payroll.service import PayrollService
+from allyanna.readiness.service import TotPeriodReadinessService
 from allyanna.tax.cache import TaxTableCache
 from allyanna.tax.repository import TaxRepository
 from allyanna.tax.service import TaxService
@@ -72,6 +73,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         summaries=TotAnnualSummaryRepository(),
     )
     app.state.payroll_service = PayrollService(PayrollRepository(), tax_service, tenancy_service)
+    app.state.readiness_service = TotPeriodReadinessService(
+        app.state.invoice_service,
+        app.state.worksheet_service,
+        tenancy_service,
+    )
     yield
     pool = app.state.pool
     if pool is not None:
