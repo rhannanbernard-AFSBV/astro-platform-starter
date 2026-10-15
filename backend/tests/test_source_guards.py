@@ -121,9 +121,12 @@ def test_annual_summary_statement_changes_are_decimal() -> None:
     assert "def get_annual_summary_due(" in text
     assert "def list_annual_summary_dues(" in text
     assert "def file_unfiled_annual_summary(" in text
+    assert "def _due_actions(" in text
     assert "sum_money([row.amount_due for row in dues])" in text
     assert "def _has_unfiled_gap(" in text
     assert "money(filed_balance + statement.unfiled.balance_change)" in text
+    assert 'f"/api/v1/tax/tot/summaries/{summary_id}/unfiled"' in text
+    assert 'f"/api/v1/tax/tot/returns/{row.return_id}/payments"' in text
     assert "money(tax_due - previous_tax)" in text
     assert "money(amount_paid - previous_paid)" in text
     assert "money(balance_due - previous_balance)" in text

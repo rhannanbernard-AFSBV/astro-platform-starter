@@ -697,6 +697,26 @@ class TotAnnualSummaryStatementResponse(BaseModel):
     unfiled: TotAnnualSummaryGapResponse
 
 
+class TotDueOpenReturnResponse(BaseModel):
+    return_id: UUID
+    period_start: date
+    period_end: date
+    currency_code: str
+    due_on: date | None
+    tax_due: Money
+    amount_paid: Money
+    balance_due: Money
+    past_due: bool
+    payment_path: str
+
+
+class TotAnnualSummaryDueActionsResponse(BaseModel):
+    can_file_unfiled: bool
+    file_unfiled_path: str | None
+    year_statement_path: str
+    open_returns: list[TotDueOpenReturnResponse]
+
+
 class TotAnnualSummaryDueResponse(BaseModel):
     tenant_id: UUID
     country_code: str
@@ -709,6 +729,7 @@ class TotAnnualSummaryDueResponse(BaseModel):
     amount_due: Money
     has_unfiled_gap: bool
     unfiled: TotAnnualSummaryGapResponse
+    actions: TotAnnualSummaryDueActionsResponse
 
 
 class TotAnnualSummaryDueListResponse(BaseModel):

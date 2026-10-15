@@ -58,9 +58,11 @@ from allyanna.schemas import (
     TotAnnualSummaryListResponse,
     TotAnnualSummaryRequest,
     TotAnnualSummaryResponse,
+    TotAnnualSummaryDueActionsResponse,
     TotAnnualSummaryDueListResponse,
     TotAnnualSummaryDueResponse,
     TotAnnualSummaryGapResponse,
+    TotDueOpenReturnResponse,
     TotAnnualSummaryStatementResponse,
     TotAnnualSummaryUnfiledRequest,
     TotAnnualSummaryVersionResponse,
@@ -89,10 +91,12 @@ from allyanna.worksheets.models import (
     TotAnnualSummary,
     TotAnnualSummaryList,
     TotAnnualSummaryDue,
+    TotAnnualSummaryDueActions,
     TotAnnualSummaryDueList,
     TotAnnualSummaryGap,
     TotAnnualSummaryStatement,
     TotAnnualSummaryVersion,
+    TotDueOpenReturn,
     TotBalanceList,
     TotPayment,
     TotPaymentList,
@@ -991,6 +995,32 @@ def _annual_summary_statement_response(
     )
 
 
+def _due_open_return_response(row: TotDueOpenReturn) -> TotDueOpenReturnResponse:
+    return TotDueOpenReturnResponse(
+        return_id=row.return_id,
+        period_start=row.period_start,
+        period_end=row.period_end,
+        currency_code=row.currency_code,
+        due_on=row.due_on,
+        tax_due=row.tax_due,
+        amount_paid=row.amount_paid,
+        balance_due=row.balance_due,
+        past_due=row.past_due,
+        payment_path=row.payment_path,
+    )
+
+
+def _annual_summary_due_actions(
+    actions: TotAnnualSummaryDueActions,
+) -> TotAnnualSummaryDueActionsResponse:
+    return TotAnnualSummaryDueActionsResponse(
+        can_file_unfiled=actions.can_file_unfiled,
+        file_unfiled_path=actions.file_unfiled_path,
+        year_statement_path=actions.year_statement_path,
+        open_returns=[_due_open_return_response(row) for row in actions.open_returns],
+    )
+
+
 def _annual_summary_due_response(reminder: TotAnnualSummaryDue) -> TotAnnualSummaryDueResponse:
     return TotAnnualSummaryDueResponse(
         tenant_id=reminder.tenant_id,
@@ -1004,6 +1034,7 @@ def _annual_summary_due_response(reminder: TotAnnualSummaryDue) -> TotAnnualSumm
         amount_due=reminder.amount_due,
         has_unfiled_gap=reminder.has_unfiled_gap,
         unfiled=_annual_summary_gap(reminder.unfiled),
+        actions=_annual_summary_due_actions(reminder.actions),
     )
 
 

@@ -26,12 +26,14 @@ from allyanna.tenancy.service import TenancyService
 from allyanna.worksheets.models import (
     TotAnnualSummary,
     TotAnnualSummaryDue,
+    TotAnnualSummaryDueActions,
     TotAnnualSummaryDueList,
     TotAnnualSummaryGap,
     TotAnnualSummaryList,
     TotAnnualSummaryStatement,
     TotAnnualSummaryVersion,
     TotBalanceList,
+    TotDueOpenReturn,
     TotFiledTax,
     TotPayment,
     TotPaymentList,
@@ -693,12 +695,16 @@ class TotWorksheetService:
         self,
         conn: Connection,
         summary_id: UUID,
+        *,
+        as_of: date | None = None,
+        open_returns: tuple[TotReturnBalance, ...] | None = None,
     ) -> TotAnnualSummaryDue:
         """Remind what is still owed to the Sint Maarten Tax Office.
 
         The filed balance is the latest annual summary. amount_due is the live
         year balance. When a later payment has not been filed, unfiled carries
-        that gap and has_unfiled_gap is true.
+        that gap and has_unfiled_gap is true. actions names the file-unfiled,
+        year-statement, and open-return payment paths for this year.
         """
         statement = await self.get_annual_summary_statement(conn, summary_id)
         latest = statement.versions[-1]
@@ -706,6 +712,17 @@ class TotWorksheetService:
         filed_balance = require_money(latest.balance_due)
         if amount_due != money(filed_balance + statement.unfiled.balance_change):
             raise InvalidPayment("The amount due does not match the filed balance and unfiled gap")
+        has_gap = _has_unfiled_gap(statement.unfiled, latest.filing_count)
+        day = date.today() if as_of is None else as_of
+        actions = await self._due_actions(
+            conn,
+            summary_id=latest.summary_id,
+            country_code=statement.country_code,
+            tax_year=statement.tax_year,
+            has_unfiled_gap=has_gap,
+            as_of=day,
+            open_returns=open_returns,
+        )
         return TotAnnualSummaryDue(
             tenant_id=statement.tenant_id,
             country_code=statement.country_code,
@@ -716,15 +733,22 @@ class TotWorksheetService:
             filed_amount_paid=require_money(latest.amount_paid),
             filed_balance_due=filed_balance,
             amount_due=amount_due,
-            has_unfiled_gap=_has_unfiled_gap(statement.unfiled, latest.filing_count),
+            has_unfiled_gap=has_gap,
             unfiled=statement.unfiled,
+            actions=actions,
         )
 
-    async def list_annual_summary_dues(self, conn: Connection) -> TotAnnualSummaryDueList:
+    async def list_annual_summary_dues(
+        self,
+        conn: Connection,
+        *,
+        as_of: date | None = None,
+    ) -> TotAnnualSummaryDueList:
         """Pay-due reminders for every tax year with a filed annual summary.
 
         Only the latest version of each year is listed. Open balances and
-        unfiled gaps for the active business show up in one response.
+        unfiled gaps for the active business show up in one response. Each row
+        carries the file-unfiled, year-statement, and payment paths.
         """
         tenant, _active = await self._tenancy.require_active_tenant(conn)
         summaries = await self._summaries.list_summaries(conn)
@@ -736,14 +760,75 @@ class TotWorksheetService:
             if key not in latest_by_year:
                 latest_by_year[key] = item
         ordered_keys = sorted(latest_by_year.keys(), key=lambda item: (-item[1], item[0]))
+        day = date.today() if as_of is None else as_of
+        balances = await self.list_balances(conn, as_of=day)
+        open_by_year: dict[tuple[str, int], list[TotReturnBalance]] = {}
+        for row in balances.returns:
+            if row.balance_due <= Decimal("0"):
+                continue
+            open_by_year.setdefault((row.country_code, row.tax_year), []).append(row)
         dues: list[TotAnnualSummaryDue] = []
         for key in ordered_keys:
-            dues.append(await self.get_annual_summary_due(conn, latest_by_year[key].id))
+            dues.append(
+                await self.get_annual_summary_due(
+                    conn,
+                    latest_by_year[key].id,
+                    as_of=day,
+                    open_returns=tuple(open_by_year.get(key, ())),
+                )
+            )
         return TotAnnualSummaryDueList(
             tenant_id=tenant.id,
             amount_due=sum_money([row.amount_due for row in dues]),
             unfiled_count=sum(1 for row in dues if row.has_unfiled_gap),
             dues=tuple(dues),
+        )
+
+    async def _due_actions(
+        self,
+        conn: Connection,
+        *,
+        summary_id: UUID,
+        country_code: str,
+        tax_year: int,
+        has_unfiled_gap: bool,
+        as_of: date,
+        open_returns: tuple[TotReturnBalance, ...] | None = None,
+    ) -> TotAnnualSummaryDueActions:
+        if open_returns is None:
+            balances = await self.list_balances(conn, as_of=as_of)
+            open_returns = tuple(
+                row
+                for row in balances.returns
+                if row.country_code == country_code
+                and row.tax_year == tax_year
+                and row.balance_due > Decimal("0")
+            )
+        file_path = (
+            f"/api/v1/tax/tot/summaries/{summary_id}/unfiled" if has_unfiled_gap else None
+        )
+        year_path = (
+            f"/api/v1/tax/tot/statements?tax_year={tax_year}&country_code={country_code}"
+        )
+        return TotAnnualSummaryDueActions(
+            can_file_unfiled=has_unfiled_gap,
+            file_unfiled_path=file_path,
+            year_statement_path=year_path,
+            open_returns=tuple(
+                TotDueOpenReturn(
+                    return_id=row.return_id,
+                    period_start=row.period_start,
+                    period_end=row.period_end,
+                    currency_code=row.currency_code,
+                    due_on=row.due_on,
+                    tax_due=require_money(row.tax_due),
+                    amount_paid=require_money(row.amount_paid),
+                    balance_due=require_money(row.balance_due),
+                    past_due=row.past_due,
+                    payment_path=f"/api/v1/tax/tot/returns/{row.return_id}/payments",
+                )
+                for row in open_returns
+            ),
         )
 
     async def file_unfiled_annual_summary(
