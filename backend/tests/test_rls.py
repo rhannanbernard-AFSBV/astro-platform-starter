@@ -29,6 +29,8 @@ async def test_app_role_cannot_read_credentials_or_write_tax_tables(database_url
             await conn.fetch("SELECT email FROM allyanna.users")
         with pytest.raises(asyncpg.InsufficientPrivilegeError):
             await conn.execute("UPDATE allyanna.tot_rates SET rate = 0.09000000")
+        with pytest.raises(asyncpg.InsufficientPrivilegeError):
+            await conn.execute("UPDATE allyanna.wage_tax_lookup_rows SET tax_amount = 0")
     finally:
         await conn.close()
 

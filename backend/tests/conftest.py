@@ -62,6 +62,8 @@ def database_url() -> str:
         "db/migrations/001_foundation.sql",
         "db/seeds/001_sxm_2026.sql",
         "db/migrations/002_invoices.sql",
+        "db/migrations/003_payroll.sql",
+        "db/seeds/002_sxm_2026_monthly_wage_tax.sql",
         "db/migrations/004_document_intakes.sql",
         "db/migrations/005_post_intake.sql",
         "db/migrations/006_tot_returns.sql",
