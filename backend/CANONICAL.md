@@ -15,8 +15,9 @@ This branch is the Allyanna SXM API tip. It includes multi-tenant tax foundation
 | Track | Scope |
 |-------|--------|
 | Turnover tax / OCR | Invoices, worksheets, returns, payments, summaries, dues, period-ready |
-| Payroll | Monthly runs, wage-monthly, SZV on payslips — never in TOT worksheets |
+| Payroll | Monthly runs, wage-monthly, SZV on payslips — never in TOT worksheets. **Go-live: deferred** (API-only; no desk) |
 | Product UI | Thin client under `frontend/` against this API |
+| Production ops | Tip-aligned compose under repo-root `docker-compose.prod.yml` + `deploy/GO_LIVE.md` (supersedes obsolete PR #8) |
 
 ## Compliance path (no auto-file from OCR)
 

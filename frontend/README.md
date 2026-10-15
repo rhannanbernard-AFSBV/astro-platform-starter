@@ -19,13 +19,14 @@ npm install
 npm run dev
 ```
 
-Open http://127.0.0.1:3000. Demo key after seed: `allyanna-dev-key`.
+Open http://127.0.0.1:3000. Paste a Bearer API key — the desk **does not**
+default to `allyanna-dev-key` (local seed still creates that key for manual use).
 
 Load desk calls the API with that Bearer key, auto-switches to the first
 business profile when none is active, then loads OCR review, period readiness,
 and Tax Office dues. The API allows local CORS origins
-`http://127.0.0.1:3000` and `http://localhost:3000` by default
-(`CORS_ORIGINS`).
+`http://127.0.0.1:3000` and `http://localhost:3000` by default in development
+(`CORS_ORIGINS`). Production must set an explicit allowlist.
 
 ## Scope
 
@@ -33,4 +34,4 @@ and Tax Office dues. The API allows local CORS origins
 - Context switch among business profiles
 - Document review / post / upload
 - Period readiness and dues payment / file-unfiled actions
-- Payroll is intentionally not on this desk
+- Payroll is intentionally not on this desk (go-live: TOT only; payroll deferred)

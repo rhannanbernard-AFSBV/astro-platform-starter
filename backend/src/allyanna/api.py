@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 
+from allyanna.config import KNOWN_DEMO_API_KEYS, get_settings
 from allyanna.errors import AllyannaError, ServiceUnavailable, Unauthenticated
 from allyanna.ocr.models import DocumentIntake
 from allyanna.ocr.service import DocumentIntakeService
@@ -165,6 +166,9 @@ async def get_auth(
     raw_key = header.removeprefix("Bearer ").strip()
     if not raw_key:
         raise Unauthenticated("Bearer API key is required")
+    settings = get_settings()
+    if raw_key in KNOWN_DEMO_API_KEYS and not settings.demo_keys_allowed():
+        raise Unauthenticated("Demo API keys are disabled in this environment")
     tenancy: TenancyService = request.app.state.tenancy_service
     user = await tenancy.authenticate(conn, raw_key)
     return AuthContext(
