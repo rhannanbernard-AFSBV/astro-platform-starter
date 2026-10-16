@@ -1,4 +1,15 @@
-import type { BillSnapshot, MenuItem, TableOrder, TipPreset } from './types';
+import { DEFAULT_RESTAURANT } from './defaults';
+import type {
+    BillSnapshot,
+    MenuItem,
+    OrderLine,
+    PaymentMethod,
+    PaymentTender,
+    RestaurantProfile,
+    SaleRecord,
+    TableOrder,
+    TipPreset,
+} from './types';
 
 export const money = (cents: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
@@ -11,15 +22,27 @@ export function percentOfCents(amountCents: number, percent: number): number {
     return Math.round((amountCents * percent) / 100);
 }
 
-export function lineSubtotalCents(lines: TableOrder['lines'], menuById: Map<string, MenuItem>): number {
+export function unitPriceCents(item: MenuItem, line: Pick<OrderLine, 'modifiers'>): number {
+    const modifierTotal = line.modifiers.reduce((sum, mod) => sum + mod.priceDeltaCents, 0);
+    return item.priceCents + modifierTotal;
+}
+
+export function lineTotalCents(item: MenuItem, line: OrderLine): number {
+    return unitPriceCents(item, line) * line.quantity;
+}
+
+export function lineSubtotalCents(lines: OrderLine[], menuById: Map<string, MenuItem>): number {
     return lines.reduce((total, line) => {
         const item = menuById.get(line.menuItemId);
         if (!item) return total;
-        return total + item.priceCents * line.quantity;
+        return total + lineTotalCents(item, line);
     }, 0);
 }
 
-export function computeBill(table: TableOrder, menu: MenuItem[]): {
+export function computeBill(
+    table: TableOrder,
+    menu: MenuItem[],
+): {
     subtotalCents: number;
     taxCents: number;
     tipCents: number;
@@ -35,12 +58,15 @@ export function computeBill(table: TableOrder, menu: MenuItem[]): {
             const item = menuById.get(line.menuItemId);
             if (!item) return null;
             const guest = table.guests.find((entry) => entry.id === line.guestId);
+            const unit = unitPriceCents(item, line);
             return {
                 name: item.name,
                 quantity: line.quantity,
-                unitPriceCents: item.priceCents,
-                lineTotalCents: item.priceCents * line.quantity,
+                unitPriceCents: unit,
+                lineTotalCents: unit * line.quantity,
                 guestName: guest?.name ?? null,
+                note: line.note,
+                modifiers: line.modifiers.map((mod) => mod.name),
             };
         })
         .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
@@ -66,7 +92,6 @@ export function computeBill(table: TableOrder, menu: MenuItem[]): {
         };
     });
 
-    // Fix rounding drift on the last guest with items
     const guestsWithSpend = guestBreakdown.filter((guest) => guest.subtotalCents > 0);
     if (guestsWithSpend.length > 0) {
         const allocatedTax = guestBreakdown.reduce((sum, guest) => sum + guest.taxCents, 0);
@@ -80,13 +105,19 @@ export function computeBill(table: TableOrder, menu: MenuItem[]): {
     return { subtotalCents, taxCents, tipCents, totalCents, tipPercent, guestBreakdown, items };
 }
 
-export function buildSnapshot(table: TableOrder, menu: MenuItem[]): BillSnapshot {
+export function buildSnapshot(
+    table: TableOrder,
+    menu: MenuItem[],
+    restaurant: RestaurantProfile = DEFAULT_RESTAURANT,
+    serverName = 'Server',
+): BillSnapshot {
     const bill = computeBill(table, menu);
     return {
-        restaurant: 'Savory Kitchen & Bar',
+        restaurant,
         tableLabel: table.label,
         generatedAt: table.billGeneratedAt ?? new Date().toISOString(),
         status: table.status,
+        serverName,
         items: bill.items,
         guests: bill.guestBreakdown,
         subtotalCents: bill.subtotalCents,
@@ -96,18 +127,17 @@ export function buildSnapshot(table: TableOrder, menu: MenuItem[]): BillSnapshot
         tipPercent: bill.tipPercent,
         tipCents: bill.tipCents,
         totalCents: bill.totalCents,
+        payment: table.payment,
     };
 }
 
 export function encodeSnapshot(snapshot: BillSnapshot): string {
-    const json = JSON.stringify(snapshot);
-    return btoa(unescape(encodeURIComponent(json)));
+    return btoa(unescape(encodeURIComponent(JSON.stringify(snapshot))));
 }
 
 export function decodeSnapshot(encoded: string): BillSnapshot | null {
     try {
-        const json = decodeURIComponent(escape(atob(encoded)));
-        return JSON.parse(json) as BillSnapshot;
+        return JSON.parse(decodeURIComponent(escape(atob(encoded)))) as BillSnapshot;
     } catch {
         return null;
     }
@@ -115,4 +145,101 @@ export function decodeSnapshot(encoded: string): BillSnapshot | null {
 
 export function tipLabel(preset: TipPreset, customPercent: number): string {
     return preset === 'custom' ? `${customPercent}%` : `${preset}%`;
+}
+
+export function computePayment(
+    totalCents: number,
+    method: PaymentMethod,
+    cashCents: number,
+    cardCents: number,
+): PaymentTender {
+    const paidAt = new Date().toISOString();
+    if (method === 'card') {
+        return { method, cashCents: 0, cardCents: totalCents, changeDueCents: 0, paidAt };
+    }
+    if (method === 'cash') {
+        const tendered = Math.max(cashCents, totalCents);
+        return {
+            method,
+            cashCents: tendered,
+            cardCents: 0,
+            changeDueCents: Math.max(0, tendered - totalCents),
+            paidAt,
+        };
+    }
+    const card = Math.max(0, Math.min(cardCents, totalCents));
+    const remaining = totalCents - card;
+    const cash = Math.max(cashCents, remaining);
+    return {
+        method,
+        cashCents: cash,
+        cardCents: card,
+        changeDueCents: Math.max(0, cash - remaining),
+        paidAt,
+    };
+}
+
+export function salesForDay(sales: SaleRecord[], day = new Date()): SaleRecord[] {
+    const key = day.toISOString().slice(0, 10);
+    return sales.filter((sale) => sale.paidAt.slice(0, 10) === key);
+}
+
+export function summarizeSales(sales: SaleRecord[]) {
+    return sales.reduce(
+        (acc, sale) => {
+            acc.count += 1;
+            acc.subtotalCents += sale.subtotalCents;
+            acc.taxCents += sale.taxCents;
+            acc.tipCents += sale.tipCents;
+            acc.totalCents += sale.totalCents;
+            acc.cashCents += sale.payment.cashCents - sale.payment.changeDueCents;
+            acc.cardCents += sale.payment.cardCents;
+            acc.itemCount += sale.itemCount;
+            return acc;
+        },
+        {
+            count: 0,
+            subtotalCents: 0,
+            taxCents: 0,
+            tipCents: 0,
+            totalCents: 0,
+            cashCents: 0,
+            cardCents: 0,
+            itemCount: 0,
+        },
+    );
+}
+
+export function salesToCsv(sales: SaleRecord[]): string {
+    const header = [
+        'paid_at',
+        'table',
+        'server',
+        'items',
+        'subtotal',
+        'tax',
+        'tip',
+        'total',
+        'method',
+        'cash',
+        'card',
+        'change',
+    ];
+    const rows = sales.map((sale) =>
+        [
+            sale.paidAt,
+            sale.tableLabel,
+            sale.serverName,
+            sale.itemCount,
+            (sale.subtotalCents / 100).toFixed(2),
+            (sale.taxCents / 100).toFixed(2),
+            (sale.tipCents / 100).toFixed(2),
+            (sale.totalCents / 100).toFixed(2),
+            sale.payment.method,
+            (sale.payment.cashCents / 100).toFixed(2),
+            (sale.payment.cardCents / 100).toFixed(2),
+            (sale.payment.changeDueCents / 100).toFixed(2),
+        ].join(','),
+    );
+    return [header.join(','), ...rows].join('\n');
 }
