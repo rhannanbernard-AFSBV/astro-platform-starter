@@ -26,7 +26,12 @@ const {
         <meta name="viewport" content="width=device-width" />
         <meta name="description" content={description} />
         <meta name="generator" content={Astro.generator} />
+        <meta name="theme-color" content="#244d3c" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <link rel="manifest" href="/manifest.webmanifest" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <link rel="apple-touch-icon" href="/favicon.svg" />
         <link rel="preload" as="font" type="font/woff2" href={interWoff2} crossorigin />
     </head>
     <body class:list={['antialiased', chrome && 'text-white bg-complementary']}>
@@ -41,6 +46,17 @@ const {
                 </div>
             ) : (
                 <main><slot /></main>
+            )
+        }
+        {
+            !chrome && (
+                <script is:inline>
+                    if ('serviceWorker' in navigator) {
+                        window.addEventListener('load', () => {
+                            navigator.serviceWorker.register('/sw.js').catch(() => {});
+                        });
+                    }
+                </script>
             )
         }
     </body>
