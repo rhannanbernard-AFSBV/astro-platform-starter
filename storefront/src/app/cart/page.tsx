@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCart } from "@/lib/cart";
-import { formatMoney } from "@/lib/products";
+import { formatMoney } from "@/lib/catalog-types";
 
 export default function CartPage() {
   const { lines, resolve, setQty, remove, subtotalCents, itemCount } = useCart();

@@ -2,18 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AddToCartButton } from "@/components/AddToCartButton";
-import {
-  PRODUCTS,
-  SHIPPING_NOTE,
-  formatMoney,
-  getProduct,
-} from "@/lib/products";
+import { formatMoney, getCatalog, getProduct } from "@/lib/catalog";
 
 type Props = { params: Promise<{ slug: string }> };
 
-export function generateStaticParams() {
-  return PRODUCTS.map((p) => ({ slug: p.slug }));
-}
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
@@ -29,6 +22,7 @@ export default async function ProductPage({ params }: Props) {
   const { slug } = await params;
   const product = getProduct(slug);
   if (!product) notFound();
+  const { shippingNote } = getCatalog();
 
   return (
     <div className="container">
@@ -43,7 +37,12 @@ export default async function ProductPage({ params }: Props) {
         </div>
         <div>
           <p className="eyebrow">{product.categoryLabel}</p>
-          <h1 style={{ fontSize: "clamp(2rem, 4vw, 3rem)", margin: "0.35rem 0 0.75rem" }}>
+          <h1
+            style={{
+              fontSize: "clamp(2rem, 4vw, 3rem)",
+              margin: "0.35rem 0 0.75rem",
+            }}
+          >
             {product.name}
           </h1>
           <p style={{ color: "var(--ink-soft)", marginBottom: "0.75rem" }}>
@@ -73,11 +72,14 @@ export default async function ProductPage({ params }: Props) {
               <strong>Ships in:</strong> {product.shipsInDays}
             </li>
           </ul>
-          <p className="ship-note">{SHIPPING_NOTE}</p>
+          <p className="ship-note">{shippingNote}</p>
           <div className="hero__actions">
             <AddToCartButton slug={product.slug} />
             <Link href="/cart" className="btn btn-ghost">
               View cart
+            </Link>
+            <Link href="/placeholders" className="btn btn-ghost">
+              Edit placeholder
             </Link>
           </div>
         </div>

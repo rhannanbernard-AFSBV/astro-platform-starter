@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { formatMoney, type Product } from "@/lib/products";
+import { formatMoney, type Product } from "@/lib/catalog-types";
 import { AddToCartButton } from "./AddToCartButton";
 
 export function ProductTile({ product }: { product: Product }) {

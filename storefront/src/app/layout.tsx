@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { Source_Sans_3, Syne } from "next/font/google";
+import { CatalogProvider } from "@/lib/catalog-context";
 import { CartProvider } from "@/lib/cart";
+import { getCatalog } from "@/lib/catalog";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
-import { BRAND } from "@/lib/products";
 import "./globals.css";
 
 const syne = Syne({
@@ -18,30 +19,36 @@ const sourceSans = Source_Sans_3({
   weight: ["400", "500", "600"],
 });
 
-export const metadata: Metadata = {
-  title: {
-    default: `${BRAND.name} — Home, style, pets, and play`,
-    template: `%s · ${BRAND.name}`,
-  },
-  description:
-    "Northlane is a multi-niche US store for bed, bath, kitchens, home decor, jewelry, women's fashion, pet accessories, and video games. Ships in 8–14 business days.",
-};
+export function generateMetadata(): Metadata {
+  const { brand } = getCatalog();
+  return {
+    title: {
+      default: `${brand.name} — Home, style, pets, and play`,
+      template: `%s · ${brand.name}`,
+    },
+    description: `${brand.name}: ${brand.tagline} Ships in 8–14 business days.`,
+  };
+}
 
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const catalog = getCatalog();
+
   return (
     <html lang="en-US">
       <body className={`${syne.variable} ${sourceSans.variable}`}>
-        <CartProvider>
-          <div className="site-shell">
-            <Header />
-            <main className="site-main">{children}</main>
-            <Footer />
-          </div>
-        </CartProvider>
+        <CatalogProvider initial={catalog}>
+          <CartProvider>
+            <div className="site-shell">
+              <Header />
+              <main className="site-main">{children}</main>
+              <Footer />
+            </div>
+          </CartProvider>
+        </CatalogProvider>
       </body>
     </html>
   );

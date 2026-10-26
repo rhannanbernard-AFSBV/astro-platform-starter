@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { SHIPPING_NOTE } from "@/lib/products";
+import { getCatalog } from "@/lib/catalog";
 
 export const metadata: Metadata = {
   title: "Shipping policy",
 };
 
 export default function ShippingPolicyPage() {
+  const { shippingNote } = getCatalog();
   return (
     <div className="container">
       <header className="page-hero">
@@ -14,7 +15,7 @@ export default function ShippingPolicyPage() {
         <p>Clear timelines for United States orders.</p>
       </header>
       <div className="prose">
-        <p>{SHIPPING_NOTE}</p>
+        <p>{shippingNote}</p>
         <h2>Processing</h2>
         <p>
           Orders are forwarded to our fulfillment partner the same business day

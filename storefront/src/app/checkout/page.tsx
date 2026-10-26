@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { useCart } from "@/lib/cart";
-import { formatMoney } from "@/lib/products";
+import { formatMoney } from "@/lib/catalog-types";
 
 export default function CheckoutPage() {
   const { lines, itemCount, subtotalCents, clear, resolve } = useCart();

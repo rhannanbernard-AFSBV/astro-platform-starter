@@ -1,26 +1,26 @@
 import type { Metadata } from "next";
 import { ProductTile } from "@/components/ProductTile";
-import { CATEGORIES, productsByCategory } from "@/lib/products";
+import { getCatalog, productsByCategory } from "@/lib/catalog";
 
 export const metadata: Metadata = {
   title: "Shop",
-  description:
-    "Shop Northlane departments: bed, bath, kitchens, home decor, jewelry, women's fashion, pet accessories, and video games.",
+  description: "Shop Northlane departments and placeholder products.",
 };
 
 export default function ShopPage() {
+  const { categories } = getCatalog();
+
   return (
     <div className="container">
       <header className="page-hero">
         <p className="eyebrow">Shop</p>
         <h1>All departments</h1>
         <p>
-          Eight niches in one store. Placeholder catalog—supplier samples come
-          next.
+          Edit department blurbs and products anytime under Edit placeholders.
         </p>
       </header>
 
-      {CATEGORIES.map((cat) => {
+      {categories.map((cat) => {
         const items = productsByCategory(cat.id);
         if (items.length === 0) return null;
         return (

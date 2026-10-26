@@ -9,7 +9,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { PRODUCTS, type Product } from "./products";
+import { useCatalog } from "./catalog-context";
+import type { Product } from "./catalog-types";
 
 export type CartLine = {
   slug: string;
@@ -45,6 +46,7 @@ function loadLines(): CartLine[] {
 }
 
 export function CartProvider({ children }: { children: ReactNode }) {
+  const { products } = useCatalog();
   const [lines, setLines] = useState<CartLine[]>([]);
   const [ready, setReady] = useState(false);
 
@@ -83,19 +85,22 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const clear = useCallback(() => setLines([]), []);
 
-  const resolve = useCallback((line: CartLine) => {
-    const product = PRODUCTS.find((p) => p.slug === line.slug);
-    if (!product) return null;
-    return { product, qty: line.qty };
-  }, []);
+  const resolve = useCallback(
+    (line: CartLine) => {
+      const product = products.find((p) => p.slug === line.slug);
+      if (!product) return null;
+      return { product, qty: line.qty };
+    },
+    [products],
+  );
 
   const subtotalCents = useMemo(
     () =>
       lines.reduce((sum, line) => {
-        const product = PRODUCTS.find((p) => p.slug === line.slug);
+        const product = products.find((p) => p.slug === line.slug);
         return sum + (product ? product.priceCents * line.qty : 0);
       }, 0),
-    [lines],
+    [lines, products],
   );
 
   const itemCount = useMemo(
