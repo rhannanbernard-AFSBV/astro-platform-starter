@@ -393,16 +393,8 @@ export default function RestaurantBillGenerator() {
             paidAt,
             billGeneratedAt: table.billGeneratedAt ?? paidAt,
         }));
-        const snapshot = buildSnapshot(
-            {
-                ...activeTable,
-                status: 'paid',
-                paidAt,
-                billGeneratedAt: activeTable.billGeneratedAt ?? paidAt,
-            },
-            state.menu,
-        );
-        setReceipt(snapshot);
+        setReceipt(null);
+        setShareFeedback('Table marked as paid. Open the receipt anytime from View paid receipt.');
     };
 
     const reopenTable = () => {
