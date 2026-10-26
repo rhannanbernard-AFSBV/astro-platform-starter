@@ -1,5 +1,9 @@
 # Astro on Netlify Platform Starter
 
+## Deskora dropshipping storefront
+
+Next.js store + high-converting landing page: [`storefront/`](storefront/README.md). Companion AgentCore helper: [`agents/DropshipHelper/`](agents/DropshipHelper/README.md).
+
 ## Allyanna accounting API
 
 The Sint Maarten accounting foundation lives in [`backend/`](backend/README.md). **Canonical tip:** [`backend/CANONICAL.md`](backend/CANONICAL.md) (`cursor/allyanna-tot-summary-statement-cfe6`). Multi-tenant Postgres with RLS, OCR → TOT period readiness, dues actions, and payroll kept out of turnover-tax math.
