@@ -22,6 +22,15 @@ export type Product = {
   benefit: string;
   featured?: boolean;
   accent: string;
+  /** Shopify Admin / Storefront compatibility fields (optional). */
+  vendor?: string;
+  sku?: string;
+  barcode?: string;
+  imageSrc?: string;
+  productCategory?: string;
+  status?: "active" | "draft" | "archived";
+  /** gid://shopify/ProductVariant/... after CSV import — enables Checkout with Shopify. */
+  shopifyVariantId?: string;
 };
 
 export type Brand = {
@@ -80,6 +89,10 @@ export function emptyProduct(category?: Category): Product {
     benefit: "What outcome do they get?",
     featured: false,
     accent: "#0d6b5c",
+    vendor: "",
+    sku: "",
+    status: "active",
+    shopifyVariantId: "",
   };
 }
 
@@ -153,6 +166,20 @@ export function validateCatalog(input: unknown): Catalog {
       benefit: String(p.benefit || ""),
       featured: Boolean(p.featured),
       accent: String(p.accent || "#0d6b5c"),
+      vendor: p.vendor ? String(p.vendor) : undefined,
+      sku: p.sku ? String(p.sku) : undefined,
+      barcode: p.barcode ? String(p.barcode) : undefined,
+      imageSrc: p.imageSrc ? String(p.imageSrc) : undefined,
+      productCategory: p.productCategory
+        ? String(p.productCategory)
+        : undefined,
+      status:
+        p.status === "draft" || p.status === "archived" || p.status === "active"
+          ? p.status
+          : "active",
+      shopifyVariantId: p.shopifyVariantId
+        ? String(p.shopifyVariantId)
+        : undefined,
     })),
   };
 }

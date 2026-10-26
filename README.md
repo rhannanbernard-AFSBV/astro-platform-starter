@@ -2,7 +2,7 @@
 
 ## Northlane dropshipping storefront
 
-Multi-niche Next.js store (bed, bath, kitchens, decor, jewelry, women's fashion, pets, video games) + landing page: [`storefront/`](storefront/README.md). Companion AgentCore helper: [`agents/DropshipHelper/`](agents/DropshipHelper/README.md).
+Multi-niche Next.js store (bed, bath, kitchens, decor, jewelry, women's fashion, pets, video games) + landing page: [`storefront/`](storefront/README.md). Shopify-compatible CSV export on build: [`storefront/shopify/`](storefront/shopify/README.md). Companion AgentCore helper: [`agents/DropshipHelper/`](agents/DropshipHelper/README.md).
 
 ## Allyanna accounting API
 

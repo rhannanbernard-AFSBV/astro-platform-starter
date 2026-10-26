@@ -1,0 +1,120 @@
+{
+  "generatedAt": "2026-10-26T16:20:56.010Z",
+  "shopifyImport": {
+    "format": "products-csv",
+    "adminPath": "Products → Import",
+    "file": "products.csv"
+  },
+  "brand": {
+    "name": "Northlane",
+    "tagline": "Home, style, pets, and play—shipped across the US.",
+    "url": "https://northlane.example",
+    "supportEmail": "hello@northlane.example"
+  },
+  "products": [
+    {
+      "handle": "cloudrest-sheet-set",
+      "title": "Cloudrest Sheet Set",
+      "vendor": "Northlane",
+      "productType": "Bed",
+      "sku": "CLOUDREST-SHEET-SET",
+      "price": 59,
+      "compareAtPrice": 79,
+      "grams": 1400,
+      "shopifyVariantId": null,
+      "imageSrc": null,
+      "status": "active"
+    },
+    {
+      "handle": "mistline-towel-set",
+      "title": "Mistline Towel Set",
+      "vendor": "Northlane",
+      "productType": "Bath",
+      "sku": "MISTLINE-TOWEL-SET",
+      "price": 48,
+      "compareAtPrice": null,
+      "grams": 1800,
+      "shopifyVariantId": null,
+      "imageSrc": null,
+      "status": "active"
+    },
+    {
+      "handle": "hearth-pan-set",
+      "title": "Hearth Nonstick Pan Set",
+      "vendor": "Northlane",
+      "productType": "Kitchens",
+      "sku": "HEARTH-PAN-SET",
+      "price": 72,
+      "compareAtPrice": 89,
+      "grams": 3200,
+      "shopifyVariantId": null,
+      "imageSrc": null,
+      "status": "active"
+    },
+    {
+      "handle": "linen-arc-vase",
+      "title": "Linen Arc Vase",
+      "vendor": "Northlane",
+      "productType": "Home decor",
+      "sku": "LINEN-ARC-VASE",
+      "price": 34,
+      "compareAtPrice": null,
+      "grams": 900,
+      "shopifyVariantId": null,
+      "imageSrc": null,
+      "status": "active"
+    },
+    {
+      "handle": "aurora-hoop-set",
+      "title": "Aurora Hoop Set",
+      "vendor": "Northlane",
+      "productType": "Jewelry",
+      "sku": "AURORA-HOOP-SET",
+      "price": 28,
+      "compareAtPrice": null,
+      "grams": 45,
+      "shopifyVariantId": null,
+      "imageSrc": null,
+      "status": "active"
+    },
+    {
+      "handle": "softline-wrap-cardigan",
+      "title": "Softline Wrap Cardigan",
+      "vendor": "Northlane",
+      "productType": "Women's fashion",
+      "sku": "SOFTLINE-WRAP-CARDIGAN",
+      "price": 54,
+      "compareAtPrice": 68,
+      "grams": 480,
+      "shopifyVariantId": null,
+      "imageSrc": null,
+      "status": "active"
+    },
+    {
+      "handle": "trailpaw-travel-kit",
+      "title": "Trailpaw Travel Kit",
+      "vendor": "Northlane",
+      "productType": "Pet accessories",
+      "sku": "TRAILPAW-TRAVEL-KIT",
+      "price": 32,
+      "compareAtPrice": null,
+      "grams": 350,
+      "shopifyVariantId": null,
+      "imageSrc": null,
+      "status": "active"
+    },
+    {
+      "handle": "pixelrest-controller-stand",
+      "title": "Pixelrest Controller Stand",
+      "vendor": "Northlane",
+      "productType": "Video games",
+      "sku": "PIXELREST-CONTROLLER-STAND",
+      "price": 36,
+      "compareAtPrice": null,
+      "grams": 620,
+      "shopifyVariantId": null,
+      "imageSrc": null,
+      "status": "active"
+    }
+  ]
+}

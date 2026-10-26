@@ -37,9 +37,20 @@ Open [http://localhost:3000](http://localhost:3000).
 3. Click **Save placeholders** — writes `data/catalog.json`
 4. Or edit `data/catalog.json` directly in your editor and refresh the browser
 
+## Shopify-compatible build
+
+Every `npm run build` (and `npm run shopify:export`) writes:
+
+- `shopify/export/products.csv` — import in Shopify Admin → Products → Import
+- `shopify/export/products.json` — JSON mirror
+
+Live download: `/api/shopify/export?format=csv` or **Download Shopify CSV** on the placeholders page.
+
+Optional headless checkout: copy `.env.example` → `.env.local`, add Storefront credentials + `shopifyVariantId` on products. See [`shopify/README.md`](shopify/README.md).
+
 ## Next steps for you
 
 1. Replace placeholders via `/placeholders` after supplier samples
-2. Connect Stripe or PayPal on the checkout page
+2. Import `shopify/export/products.csv` into Shopify (or connect Storefront checkout)
 3. Register the business, open a bank account, and set your real support email
 4. Pair with the AgentCore helper in `../agents/DropshipHelper` for FAQ and niche research

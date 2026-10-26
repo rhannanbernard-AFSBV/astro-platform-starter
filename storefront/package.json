@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
+    "shopify:export": "node scripts/export-shopify.mjs",
+    "prebuild": "npm run shopify:export",
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint"

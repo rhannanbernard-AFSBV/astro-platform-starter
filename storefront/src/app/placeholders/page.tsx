@@ -195,6 +195,9 @@ export default function PlaceholdersEditorPage() {
         <button type="button" className="btn btn-ghost" onClick={resetDraft}>
           Reset unsaved
         </button>
+        <a href="/api/shopify/export?format=csv" className="btn btn-ghost">
+          Download Shopify CSV
+        </a>
         <Link href="/" className="btn btn-ghost">
           View storefront
         </Link>
@@ -461,6 +464,69 @@ export default function PlaceholdersEditorPage() {
                             })
                           }
                         />
+                      </label>
+                      <label>
+                        Vendor (Shopify)
+                        <input
+                          value={product.vendor || ""}
+                          placeholder={draft.brand.name}
+                          onChange={(e) =>
+                            updateProduct(product.slug, {
+                              vendor: e.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        SKU
+                        <input
+                          value={product.sku || ""}
+                          placeholder={product.slug.toUpperCase()}
+                          onChange={(e) =>
+                            updateProduct(product.slug, {
+                              sku: e.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        Shopify variant GID
+                        <input
+                          value={product.shopifyVariantId || ""}
+                          placeholder="gid://shopify/ProductVariant/…"
+                          onChange={(e) =>
+                            updateProduct(product.slug, {
+                              shopifyVariantId: e.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        Image URL
+                        <input
+                          value={product.imageSrc || ""}
+                          placeholder="https://…"
+                          onChange={(e) =>
+                            updateProduct(product.slug, {
+                              imageSrc: e.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        Status
+                        <select
+                          value={product.status || "active"}
+                          onChange={(e) =>
+                            updateProduct(product.slug, {
+                              status: e.target.value as Product["status"],
+                            })
+                          }
+                        >
+                          <option value="active">active</option>
+                          <option value="draft">draft</option>
+                          <option value="archived">archived</option>
+                        </select>
                       </label>
                       <label className="editor-full">
                         Tagline
