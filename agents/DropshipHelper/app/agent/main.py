@@ -7,14 +7,16 @@ from model.load import load_model
 from parse import parse_payload
 from memory.session import get_memory_session_manager
 
-DEFAULT_SYSTEM_PROMPT = """You are Deskora Helper, an operations assistant for the Deskora dropshipping brand.
+DEFAULT_SYSTEM_PROMPT = """You are Northlane Helper, an operations assistant for the Northlane dropshipping brand.
 
-Deskora sells compact desk tools for apartment remote workers in the United States (USD).
+Northlane sells across eight niches for United States customers (USD):
+bed, bath, kitchens, home decor, jewelry, women's fashion, pet accessories, and video games.
+
 Shipping promise on the storefront: 8–14 business days. Catalog items start as placeholders until supplier samples are approved.
 
 Your jobs:
-- Help refine niche, product angles, and landing-page copy in plain language
-- Draft customer FAQ answers that match Deskora shipping and returns policies
+- Help refine niche angles and landing-page copy for those eight departments
+- Draft customer FAQ answers that match Northlane shipping and returns policies
 - Outline supplier sample checklists (quality, packaging, real transit time)
 - Warn against fake reviews, inflated shipping claims, and LLM-invented financial math
 
@@ -25,8 +27,8 @@ tools = []
 
 
 @tool
-def deskora_shipping_policy() -> str:
-    """Return Deskora's current shipping policy text for customer replies."""
+def northlane_shipping_policy() -> str:
+    """Return Northlane's current shipping policy text for customer replies."""
     return (
         "Ships from the fulfillment partner in 8–14 business days to US addresses. "
         "Tracking is emailed when the package leaves the warehouse. "
@@ -37,13 +39,15 @@ def deskora_shipping_policy() -> str:
 
 
 @tool
-def deskora_returns_policy() -> str:
-    """Return Deskora's returns policy summary for customer replies."""
+def northlane_returns_policy() -> str:
+    """Return Northlane's returns policy summary for customer replies."""
     return (
         "Within 30 days of delivery: damaged, wrong, or not-as-described items get a "
         "replacement or refund after photos. Change-of-mind unused returns may require "
         "the customer to cover return shipping—confirm before anything is sent back. "
-        "Approved refunds post in 5–10 business days."
+        "Approved refunds post in 5–10 business days. "
+        "Hygiene-sensitive bath and intimate apparel may have stricter return rules—"
+        "confirm before promising a return."
     )
 
 
@@ -56,7 +60,7 @@ def supplier_sample_checklist(product_name: str) -> str:
         "1. Order one unit to your own US address; note order date and carrier.\n"
         "2. Measure real transit days vs the 8–14 business day promise.\n"
         "3. Photograph packaging, inserts, and the unboxed item.\n"
-        "4. Compare materials and finish to storefront claims.\n"
+        "4. Compare materials, sizing, and finish to storefront claims.\n"
         "5. Test a damaged-item scenario with the supplier support channel.\n"
         "6. Confirm unit cost + shipping + payment fees still leave margin after ads.\n"
         "7. Keep a backup supplier contact before scaling paid traffic."
@@ -64,23 +68,24 @@ def supplier_sample_checklist(product_name: str) -> str:
 
 
 @tool
-def niche_angle_suggestions(audience: str) -> str:
-    """Suggest Deskora-aligned product angles for a described audience."""
-    focus = audience.strip() or "apartment remote workers"
+def niche_angle_suggestions(department: str) -> str:
+    """Suggest Northlane-aligned product angles for one of the eight departments."""
+    focus = department.strip().lower() or "home"
     return (
         f"Angles for {focus}:\n"
-        "- Lead with one daily friction (cables, screen height, glare, clutter).\n"
-        "- Keep the kit under ten SKUs; every SKU must earn desk space.\n"
-        "- Show shipping time in the first viewport near the price.\n"
-        "- Prefer product-in-use photography over abstract lifestyle collage.\n"
-        "- Test one hero SKU (Cable Harbor) before expanding the grid."
+        "- Lead with one daily friction (messy bed, thin towels, cluttered counters, empty shelves, missing basics, pet walk chaos, controller clutter).\n"
+        "- Keep each department to a short SKU list; every item must earn the aisle.\n"
+        "- Show shipping time near the price on every PDP.\n"
+        "- Prefer product-in-use photography over abstract collage.\n"
+        "- Test one hero SKU per department before expanding the grid.\n"
+        "- Valid departments: bed, bath, kitchens, home decor, jewelry, women's fashion, pet accessories, video games."
     )
 
 
 tools.extend(
     [
-        deskora_shipping_policy,
-        deskora_returns_policy,
+        northlane_shipping_policy,
+        northlane_returns_policy,
         supplier_sample_checklist,
         niche_angle_suggestions,
     ]
@@ -108,7 +113,7 @@ def create_app():
 
     @app.entrypoint
     async def invoke(payload, context):
-        log.info("Invoking Deskora Helper.....")
+        log.info("Invoking Northlane Helper.....")
 
         session_id = getattr(context, "session_id", None) or "default-session"
         prompt, actor_id = parse_payload(payload)

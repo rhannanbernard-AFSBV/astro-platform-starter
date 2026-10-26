@@ -42,7 +42,7 @@ export default async function ProductPage({ params }: Props) {
           <span>{product.name}</span>
         </div>
         <div>
-          <p className="eyebrow">Deskora product</p>
+          <p className="eyebrow">{product.categoryLabel}</p>
           <h1 style={{ fontSize: "clamp(2rem, 4vw, 3rem)", margin: "0.35rem 0 0.75rem" }}>
             {product.name}
           </h1>

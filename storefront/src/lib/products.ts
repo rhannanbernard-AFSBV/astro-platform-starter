@@ -1,6 +1,18 @@
+export type Category =
+  | "bed"
+  | "bath"
+  | "kitchens"
+  | "home-decor"
+  | "jewelry"
+  | "womens-fashion"
+  | "pets"
+  | "video-games";
+
 export type Product = {
   slug: string;
   name: string;
+  category: Category;
+  categoryLabel: string;
   tagline: string;
   priceCents: number;
   compareAtCents?: number;
@@ -14,119 +26,151 @@ export type Product = {
   accent: string;
 };
 
+export const CATEGORIES: { id: Category; label: string; blurb: string }[] = [
+  { id: "bed", label: "Bed", blurb: "Softer nights, cleaner rest." },
+  { id: "bath", label: "Bath", blurb: "Rituals that feel like a hotel." },
+  { id: "kitchens", label: "Kitchens", blurb: "Tools that earn counter space." },
+  { id: "home-decor", label: "Home decor", blurb: "Finish the room, not the cart." },
+  { id: "jewelry", label: "Jewelry", blurb: "Everyday pieces with quiet shine." },
+  { id: "womens-fashion", label: "Women's fashion", blurb: "Layers you actually reach for." },
+  { id: "pets", label: "Pet accessories", blurb: "Gear your pet will use daily." },
+  { id: "video-games", label: "Video games", blurb: "Play setups that stay tidy." },
+];
+
 /** Placeholder catalog until a supplier is selected and samples arrive. */
 export const PRODUCTS: Product[] = [
   {
-    slug: "cable-harbor",
-    name: "Cable Harbor",
-    tagline: "Dock power, USB-C, and headphones in one calm strip.",
-    priceCents: 3900,
-    compareAtCents: 4900,
-    shipsInDays: "8–14 business days",
-    weight: "420 g",
-    materials: "Anodized aluminum, silicone cable guides",
-    includes: ["Harbor base", "Two silicone guides", "Felt pad kit"],
-    problem: "Cables tangle at the edge of a small desk.",
-    benefit: "One place for every cord you touch daily.",
-    featured: true,
-    accent: "#0d6b5c",
-  },
-  {
-    slug: "lift-riser",
-    name: "Lift Riser",
-    tagline: "Raise your screen to eye level without a bulky stand.",
-    priceCents: 5400,
-    shipsInDays: "8–14 business days",
-    weight: "1.1 kg",
-    materials: "Solid ash, non-slip feet",
-    includes: ["Riser shelf", "Felt feet", "Cable pass-through"],
-    problem: "Laptop screens sit too low on apartment desks.",
-    benefit: "Straighter posture in a footprint under 12 inches.",
-    accent: "#1f4b63",
-  },
-  {
-    slug: "softfocus-mat",
-    name: "SoftFocus Mat",
-    tagline: "A quiet desk surface that stops the visual noise.",
-    priceCents: 4200,
-    shipsInDays: "8–14 business days",
-    weight: "680 g",
-    materials: "Natural rubber base, woven polyester top",
-    includes: ["Desk mat 31×15 in", "Care card"],
-    problem: "Glossy desks glare and feel cold for long sessions.",
-    benefit: "A defined work zone that feels finished, not temporary.",
-    accent: "#3d4a3a",
-  },
-  {
-    slug: "angle-lamp",
-    name: "Angle Lamp",
-    tagline: "Warm task light that stays out of your camera frame.",
-    priceCents: 6900,
+    slug: "cloudrest-sheet-set",
+    name: "Cloudrest Sheet Set",
+    category: "bed",
+    categoryLabel: "Bed",
+    tagline: "Breathable queen sheets that stay cool through the night.",
+    priceCents: 5900,
     compareAtCents: 7900,
+    shipsInDays: "8–14 business days",
+    weight: "1.4 kg",
+    materials: "Washed microfiber, deep-pocket fitted sheet",
+    includes: ["Fitted sheet", "Flat sheet", "2 pillowcases"],
+    problem: "Hot sleepers wake up tangled in stiff hotel-style sheets.",
+    benefit: "A softer bed that feels finished without a full bedding overhaul.",
+    featured: true,
+    accent: "#3d5a6c",
+  },
+  {
+    slug: "mistline-towel-set",
+    name: "Mistline Towel Set",
+    category: "bath",
+    categoryLabel: "Bath",
+    tagline: "Thick bath towels that dry fast and stay lofted.",
+    priceCents: 4800,
+    shipsInDays: "8–14 business days",
+    weight: "1.8 kg",
+    materials: "Combed cotton terry",
+    includes: ["2 bath towels", "2 hand towels", "2 washcloths"],
+    problem: "Thin towels go flat after a few washes.",
+    benefit: "A spa-weight set that still ships light enough for dropshipping.",
+    accent: "#2f6f6a",
+  },
+  {
+    slug: "hearth-pan-set",
+    name: "Hearth Nonstick Pan Set",
+    category: "kitchens",
+    categoryLabel: "Kitchens",
+    tagline: "Three pans that cover weeknight cooking without the clutter.",
+    priceCents: 7200,
+    compareAtCents: 8900,
     shipsInDays: "10–16 business days",
-    weight: "950 g",
-    materials: "Powder-coated steel, frosted diffuser",
-    includes: ["Lamp body", "USB-C cable", "Dimmer dial"],
-    problem: "Overhead lights wash out video calls and tire eyes.",
-    benefit: "Focused light for work without lighting the whole room.",
+    weight: "3.2 kg",
+    materials: "Aluminum body, PFOA-free coating, stay-cool handles",
+    includes: ["8 in skillet", "10 in skillet", "2.5 qt saucepan", "Lids"],
+    problem: "Starter kitchens collect mismatched pans that stick.",
+    benefit: "One set for eggs, sauces, and sears—then stop shopping pans.",
+    accent: "#6b4f3a",
+  },
+  {
+    slug: "linen-arc-vase",
+    name: "Linen Arc Vase",
+    category: "home-decor",
+    categoryLabel: "Home decor",
+    tagline: "A matte ceramic vase that anchors a shelf or table.",
+    priceCents: 3400,
+    shipsInDays: "8–14 business days",
+    weight: "900 g",
+    materials: "Stoneware ceramic, matte glaze",
+    includes: ["Vase", "Care card"],
+    problem: "Empty shelves make a room feel temporary.",
+    benefit: "One sculptural piece that photographs well and ships safely packed.",
+    accent: "#5a6b52",
+  },
+  {
+    slug: "aurora-hoop-set",
+    name: "Aurora Hoop Set",
+    category: "jewelry",
+    categoryLabel: "Jewelry",
+    tagline: "Lightweight gold-tone hoops for everyday wear.",
+    priceCents: 2800,
+    shipsInDays: "8–12 business days",
+    weight: "45 g",
+    materials: "Gold-plated brass, hypoallergenic posts",
+    includes: ["Pair of hoops", "Velvet pouch", "Polish cloth"],
+    problem: "Statement jewelry sits unworn while basics go missing.",
+    benefit: "A daily pair that layers with anything in the cart.",
     accent: "#8a6a2f",
   },
   {
-    slug: "fold-laptop-stand",
-    name: "Fold Stand",
-    tagline: "A travel-ready laptop stand that disappears in a bag.",
-    priceCents: 3600,
+    slug: "softline-wrap-cardigan",
+    name: "Softline Wrap Cardigan",
+    category: "womens-fashion",
+    categoryLabel: "Women's fashion",
+    tagline: "A mid-weight wrap for cool offices and weekend errands.",
+    priceCents: 5400,
+    compareAtCents: 6800,
     shipsInDays: "8–14 business days",
-    weight: "280 g",
-    materials: "Aircraft-grade aluminum",
-    includes: ["Foldable stand", "Carry sleeve"],
-    problem: "Hotel and café tables put your screen too low.",
-    benefit: "Better posture anywhere you open the laptop.",
-    accent: "#2c3e50",
+    weight: "480 g",
+    materials: "Cotton-blend knit",
+    includes: ["Cardigan", "Care label"],
+    problem: "Thin tops need a layer that still looks put-together.",
+    benefit: "One flattering wrap that works with jeans or a dress.",
+    accent: "#6b3f4e",
   },
   {
-    slug: "quiet-hook",
-    name: "Quiet Hook",
-    tagline: "Hang headphones off the desk edge—no clamp marks.",
-    priceCents: 2400,
-    shipsInDays: "8–12 business days",
-    weight: "110 g",
-    materials: "Silicone-lined steel",
-    includes: ["Hook", "Felt protectors"],
-    problem: "Headphones eat desk space or fall to the floor.",
-    benefit: "One calm place for gear between calls.",
-    accent: "#4a5d4e",
-  },
-  {
-    slug: "pocket-tray",
-    name: "Pocket Tray",
-    tagline: "Catch keys, AirPods, and pens before they scatter.",
-    priceCents: 2800,
-    shipsInDays: "8–14 business days",
-    weight: "310 g",
-    materials: "Cast concrete composite",
-    includes: ["Tray", "Cork base"],
-    problem: "Small items migrate into every drawer.",
-    benefit: "A single landing spot next to your keyboard.",
-    accent: "#5c4f3a",
-  },
-  {
-    slug: "focus-cube",
-    name: "Focus Cube",
-    tagline: "A physical timer that keeps phones out of the loop.",
+    slug: "trailpaw-travel-kit",
+    name: "Trailpaw Travel Kit",
+    category: "pets",
+    categoryLabel: "Pet accessories",
+    tagline: "Collapsible bowl, treat pouch, and leash clip for walks.",
     priceCents: 3200,
     shipsInDays: "8–14 business days",
-    weight: "190 g",
-    materials: "Beech wood, silent flip mechanism",
-    includes: ["Cube timer", "Quick-start guide"],
-    problem: "Phone timers pull you back into notifications.",
-    benefit: "Start a focus block with a flip—no screen required.",
-    accent: "#0d6b5c",
+    weight: "350 g",
+    materials: "Food-grade silicone, nylon webbing",
+    includes: ["Collapsible bowl", "Treat pouch", "Carabiner clip"],
+    problem: "Walks turn into juggling water bottles and loose treats.",
+    benefit: "One grab-and-go kit for dogs on the move.",
+    accent: "#3f5c45",
+  },
+  {
+    slug: "pixelrest-controller-stand",
+    name: "Pixelrest Controller Stand",
+    category: "video-games",
+    categoryLabel: "Video games",
+    tagline: "A dual stand that keeps controllers charged and off the floor.",
+    priceCents: 3600,
+    shipsInDays: "8–14 business days",
+    weight: "620 g",
+    materials: "ABS shell, USB-C charge docks",
+    includes: ["Stand", "USB-C cable", "Non-slip feet"],
+    problem: "Controllers vanish into the couch between sessions.",
+    benefit: "A clean play station that looks intentional on camera.",
+    accent: "#2c3e70",
   },
 ];
 
 export function getProduct(slug: string): Product | undefined {
   return PRODUCTS.find((p) => p.slug === slug);
+}
+
+export function productsByCategory(category: Category): Product[] {
+  return PRODUCTS.filter((p) => p.category === category);
 }
 
 export function formatMoney(cents: number): string {
@@ -140,8 +184,8 @@ export const SHIPPING_NOTE =
   "Ships from our fulfillment partner in 8–14 business days to addresses in the United States. Tracking is emailed when the package leaves the warehouse.";
 
 export const BRAND = {
-  name: "Deskora",
-  tagline: "Calm tools for apartment desks.",
-  url: "https://deskora.example",
-  supportEmail: "hello@deskora.example",
+  name: "Northlane",
+  tagline: "Home, style, pets, and play—shipped across the US.",
+  url: "https://northlane.example",
+  supportEmail: "hello@northlane.example",
 };

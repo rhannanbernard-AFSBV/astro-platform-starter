@@ -27,7 +27,7 @@ type CartContextValue = {
   resolve: (line: CartLine) => { product: Product; qty: number } | null;
 };
 
-const STORAGE_KEY = "deskora-cart-v1";
+const STORAGE_KEY = "northlane-cart-v1";
 const CartContext = createContext<CartContextValue | null>(null);
 
 function loadLines(): CartLine[] {

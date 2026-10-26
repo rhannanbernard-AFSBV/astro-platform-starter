@@ -1,10 +1,10 @@
-# DropshipHelper (Deskora)
+# DropshipHelper (Northlane)
 
-AWS AgentCore Strands agent that helps operate the Deskora dropshipping brand:
+AWS AgentCore Strands agent that helps operate the Northlane dropshipping brand across:
 
-- Shipping and returns FAQ drafts
-- Supplier sample checklists
-- Niche / landing-page angles for apartment desk tools
+- Bed, bath, kitchens, home decor
+- Jewelry, women's fashion
+- Pet accessories, video games
 
 ## Prerequisites
 
@@ -23,18 +23,18 @@ agentcore dev
 Then invoke (port is printed by the CLI; default HTTP is often `8080`):
 
 ```bash
-agentcore invoke "Draft a reply for a customer asking when Cable Harbor will arrive."
+agentcore invoke "Draft a reply for a customer asking when Cloudrest sheets will arrive."
 ```
 
 ## Tools
 
 | Tool | Purpose |
 | --- | --- |
-| `deskora_shipping_policy` | Canonical US shipping copy |
-| `deskora_returns_policy` | Returns / refund summary |
+| `northlane_shipping_policy` | Canonical US shipping copy |
+| `northlane_returns_policy` | Returns / refund summary |
 | `supplier_sample_checklist` | Pre-ads sample QA steps |
-| `niche_angle_suggestions` | Product / LP angle prompts |
+| `niche_angle_suggestions` | Product / LP angles by department |
 
 ## Pairing with the storefront
 
-The Next.js store lives in `../../storefront`. Use this agent for ops copy; keep prices and tax math in human-reviewed Python/store config—not in the LLM.
+The Next.js store lives in `../../storefront`. Use this agent for ops copy; keep prices and tax math in human-reviewed store config—not in the LLM.

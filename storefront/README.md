@@ -1,16 +1,16 @@
-# Deskora storefront
+# Northlane storefront
 
-High-converting Next.js dropshipping storefront for **Deskora** — calm desk tools for apartment remote workers.
+High-converting Next.js dropshipping storefront for **Northlane** — multi-niche lifestyle shop for the United States.
 
 ## Locked recommendations
 
 | Decision | Choice |
 | --- | --- |
-| Niche | Compact home-office / desk setup for apartment remote workers |
+| Niche | Bed, bath, kitchens, home decor, jewelry, women's fashion, pet accessories, video games |
 | Customers | United States, USD |
 | Stack | Next.js App Router in `storefront/` |
 | Supplier | Placeholder catalog until samples are ordered |
-| Brand | **Deskora** — teal + cool paper palette, Syne + Source Sans 3 |
+| Brand | **Northlane** — teal + cool paper palette, Syne + Source Sans 3 |
 
 ## Run locally
 
@@ -24,8 +24,8 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## What is included
 
-- Landing page with full-bleed hero, problem/solution, featured product, kit grid, trust strip, CTA
-- Shop + product detail pages (8 placeholders)
+- Landing page with department grid, featured bed SKU, product kit, trust strip, CTA
+- Shop grouped by department + product detail pages (8 placeholders)
 - LocalStorage cart and demo checkout (no payment processor yet)
 - Shipping, returns, and about pages with honest 8–14 business day shipping copy
 

@@ -20,11 +20,11 @@ const sourceSans = Source_Sans_3({
 
 export const metadata: Metadata = {
   title: {
-    default: `${BRAND.name} — Calm tools for apartment desks`,
+    default: `${BRAND.name} — Home, style, pets, and play`,
     template: `%s · ${BRAND.name}`,
   },
   description:
-    "Deskora sells compact desk tools for remote workers in small spaces. Ships to the United States in 8–14 business days.",
+    "Northlane is a multi-niche US store for bed, bath, kitchens, home decor, jewelry, women's fashion, pet accessories, and video games. Ships in 8–14 business days.",
 };
 
 export default function RootLayout({

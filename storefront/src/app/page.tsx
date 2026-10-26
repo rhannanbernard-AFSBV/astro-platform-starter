@@ -3,6 +3,7 @@ import { AddToCartButton } from "@/components/AddToCartButton";
 import { ProductTile } from "@/components/ProductTile";
 import {
   BRAND,
+  CATEGORIES,
   PRODUCTS,
   SHIPPING_NOTE,
   formatMoney,
@@ -10,8 +11,8 @@ import {
 } from "@/lib/products";
 
 export default function HomePage() {
-  const featured = getProduct("cable-harbor")!;
-  const grid = PRODUCTS.filter((p) => p.slug !== featured.slug).slice(0, 6);
+  const featured = getProduct("cloudrest-sheet-set")!;
+  const grid = PRODUCTS.filter((p) => p.slug !== featured.slug);
 
   return (
     <>
@@ -19,44 +20,80 @@ export default function HomePage() {
         <div className="hero__media" aria-hidden="true" />
         <div className="container hero__content">
           <p className="eyebrow">{BRAND.name}</p>
-          <h1>Calm tools for apartment desks.</h1>
+          <h1>Home, style, pets, and play.</h1>
           <p>
-            Compact desk gear for remote workers who share a small space—and
-            still want a setup that feels finished.
+            Eight focused departments—bed, bath, kitchens, decor, jewelry,
+            women&apos;s fashion, pet accessories, and video games—with shipping
+            times stated up front.
           </p>
           <div className="hero__actions">
-            <Link href="/product/cable-harbor" className="btn btn-light">
-              Shop Cable Harbor
+            <Link href="/shop" className="btn btn-light">
+              Shop all departments
             </Link>
-            <Link href="/shop" className="btn btn-ghost" style={{ color: "#f4faf8", borderColor: "rgba(244,250,248,0.35)" }}>
-              Browse the desk kit
+            <Link
+              href="/product/cloudrest-sheet-set"
+              className="btn btn-ghost"
+              style={{ color: "#f4faf8", borderColor: "rgba(244,250,248,0.35)" }}
+            >
+              Start with Cloudrest sheets
             </Link>
           </div>
         </div>
       </section>
 
-      <section className="section" id="why">
+      <section className="section" id="departments">
+        <div className="container">
+          <div className="section__head">
+            <p className="eyebrow">Departments</p>
+            <h2>Shop by niche.</h2>
+            <p>
+              A clear aisle for every lifestyle corner—no junk drawer of random
+              SKUs.
+            </p>
+          </div>
+          <div className="category-grid">
+            {CATEGORIES.map((cat) => (
+              <Link
+                key={cat.id}
+                href={`/shop#${cat.id}`}
+                className="category-tile"
+              >
+                <span className="eyebrow">{cat.label}</span>
+                <strong>{cat.blurb}</strong>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="section" id="why" style={{ paddingTop: 0 }}>
         <div className="container split">
           <div className="problem-panel">
             <p className="eyebrow" style={{ color: "#7dbea8" }}>
               The problem
             </p>
-            <h3>Small desks collect chaos fast.</h3>
+            <h3>Lifestyle carts get noisy fast.</h3>
             <p>
-              Cables, headphones, and glare turn a kitchen table into a
-              temporary office. Deskora is a short list of tools that reclaim
-              that surface—without filling a closet.
+              Mega-stores bury good products under endless tabs. Northlane keeps
+              eight niches, honest shipping, and a short list of placeholders
+              until samples clear.
             </p>
           </div>
           <div>
-            <p className="eyebrow">What changes</p>
-            <h2 style={{ fontSize: "clamp(1.8rem, 3vw, 2.4rem)", margin: "0.4rem 0 1rem" }}>
-              One clear work zone.
+            <p className="eyebrow">What you get</p>
+            <h2
+              style={{
+                fontSize: "clamp(1.8rem, 3vw, 2.4rem)",
+                margin: "0.4rem 0 1rem",
+              }}
+            >
+              Clarity before checkout.
             </h2>
             <ul className="checklist">
-              <li>Every daily cable lands in one dock—not over the edge.</li>
-              <li>Screen height and task light stay camera-friendly.</li>
-              <li>Shipping time is stated up front: 8–14 business days to the US.</li>
+              <li>Bed, bath, kitchen, and decor for the home.</li>
+              <li>Jewelry and women&apos;s fashion for everyday style.</li>
+              <li>Pet accessories and video-game gear for the rest of life.</li>
+              <li>8–14 business day shipping shown on every product.</li>
             </ul>
           </div>
         </div>
@@ -65,11 +102,11 @@ export default function HomePage() {
       <section className="section" style={{ paddingTop: 0 }}>
         <div className="container">
           <div className="section__head">
-            <p className="eyebrow">Featured</p>
-            <h2>Start with Cable Harbor.</h2>
+            <p className="eyebrow">Featured · Bed</p>
+            <h2>Start with Cloudrest sheets.</h2>
             <p>
-              The first piece most apartment desks need: a single strip for
-              power, USB-C, and headphones.
+              Soft, breathable bedding for hot sleepers—our first bed department
+              placeholder.
             </p>
           </div>
           <div className="feature-product">
@@ -83,13 +120,21 @@ export default function HomePage() {
               <div className="price-row">
                 <span className="now">{formatMoney(featured.priceCents)}</span>
                 {featured.compareAtCents ? (
-                  <span className="was">{formatMoney(featured.compareAtCents)}</span>
+                  <span className="was">
+                    {formatMoney(featured.compareAtCents)}
+                  </span>
                 ) : null}
               </div>
               <p className="ship-note">{SHIPPING_NOTE}</p>
               <div className="hero__actions">
-                <AddToCartButton slug={featured.slug} label="Add Cable Harbor" />
-                <Link href={`/product/${featured.slug}`} className="btn btn-ghost">
+                <AddToCartButton
+                  slug={featured.slug}
+                  label="Add Cloudrest sheets"
+                />
+                <Link
+                  href={`/product/${featured.slug}`}
+                  className="btn btn-ghost"
+                >
                   See details
                 </Link>
               </div>
@@ -101,11 +146,11 @@ export default function HomePage() {
       <section className="section" style={{ paddingTop: 0 }}>
         <div className="container">
           <div className="section__head">
-            <p className="eyebrow">The desk kit</p>
-            <h2>Eight pieces. No filler aisle.</h2>
+            <p className="eyebrow">Across the store</p>
+            <h2>One pick from each department.</h2>
             <p>
-              Placeholder products with realistic prices until supplier samples
-              are approved.
+              Placeholder products with realistic US pricing until supplier
+              samples are approved.
             </p>
           </div>
           <div className="product-grid">
@@ -152,14 +197,14 @@ export default function HomePage() {
       <div className="container">
         <div className="cta-band">
           <div>
-            <h2>Clear the edge of your desk.</h2>
+            <h2>Pick a department. Keep the cart short.</h2>
             <p>
-              Start with Cable Harbor, then add the pieces your setup actually
-              needs—nothing more.
+              Start with bed, then add bath, kitchen, style, pets, or play—only
+              what you need.
             </p>
           </div>
-          <Link href="/product/cable-harbor" className="btn btn-light">
-            Get Cable Harbor
+          <Link href="/shop" className="btn btn-light">
+            Browse Northlane
           </Link>
         </div>
       </div>

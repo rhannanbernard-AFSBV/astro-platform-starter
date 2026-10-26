@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BRAND } from "@/lib/products";
+import { BRAND, CATEGORIES } from "@/lib/products";
 
 export function Footer() {
   return (
@@ -7,7 +7,7 @@ export function Footer() {
       <div className="container site-footer__inner">
         <div>
           <p className="brand">
-            Desk<span>ora</span>
+            North<span>lane</span>
           </p>
           <p style={{ marginTop: "0.65rem", maxWidth: "26rem" }}>
             {BRAND.tagline} Placeholder catalog for US customers until supplier
@@ -15,16 +15,15 @@ export function Footer() {
           </p>
         </div>
         <div>
-          <h3>Shop</h3>
+          <h3>Departments</h3>
           <ul>
+            {CATEGORIES.slice(0, 4).map((cat) => (
+              <li key={cat.id}>
+                <Link href={`/shop#${cat.id}`}>{cat.label}</Link>
+              </li>
+            ))}
             <li>
               <Link href="/shop">All products</Link>
-            </li>
-            <li>
-              <Link href="/product/cable-harbor">Cable Harbor</Link>
-            </li>
-            <li>
-              <Link href="/cart">Cart</Link>
             </li>
           </ul>
         </div>
