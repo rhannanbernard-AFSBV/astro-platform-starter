@@ -136,7 +136,6 @@ import {
     BEVERAGE_CATEGORIES,
     FOOD_CATEGORIES,
     type AppView,
-    type AuditEntry,
     type BillSnapshot,
     type CourseFire,
     type FilterCategory,
