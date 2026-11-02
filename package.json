@@ -8,7 +8,13 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "demo:phone": "npm --prefix apps/api run demo:phone"
+    "demo:phone": "npm --prefix apps/api run demo:phone",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:smoke": "vitest run src/components/bill/floorSmoke.test.ts",
+    "pos:api": "cd backend && python3 -m uvicorn app.main:app --reload --port 8000",
+    "pos:test": "cd backend && python3 -m pytest -q",
+    "test:all": "vitest run && npm run pos:test"
   },
   "dependencies": {
     "@astrojs/netlify": "^6.6.0",
@@ -30,6 +36,7 @@
     "@types/blobshape": "^1.0.3",
     "@types/node": "^20.12.7",
     "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.2"
+    "@types/react-dom": "^19.2.2",
+    "vitest": "^3.2.4"
   }
 }

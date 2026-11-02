@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240">
+  <rect width="240" height="240" fill="#4a3424"/>
+  <g stroke="#3a281c" stroke-width="2" opacity=".55">
+    <path d="M0 30h240M0 70h240M0 115h240M0 160h240M0 205h240"/>
+  </g>
+  <g stroke="#5c4332" stroke-width="1" opacity=".4">
+    <path d="M20 0v240M80 0v240M140 0v240M200 0v240"/>
+  </g>
+</svg>
