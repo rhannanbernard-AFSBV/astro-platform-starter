@@ -1,6 +1,6 @@
 # Authentic Jamaican Cuisine & Bar POS — production readiness
 
-**Shippable tip:** branch `cursor/pos-pilot-ship-642e` (consolidates pilot hardening, bar revenue, GPT-4o enrich, Meals/Bar admin, bartender sales, floor smoke, shift day-part).
+**Shippable tip:** branch `cursor/pos-p0-p2-improvements-642e` (full floor tip: staff desk, rush, guest loop, menu photos, **plus** P0–P2 hardening — ESC/POS print, conflict rebase, SSE boards, production boot guard, guest card intent).
 
 Older draft PRs for intermediate POS slices are **superseded** by this tip for pilot deploy.
 
@@ -14,20 +14,25 @@ Older draft PRs for intermediate POS slices are **superseded** by this tip for p
 | PIN rate limit / lockout | ✅ Per IP + tenant (`POS_PIN_*`) |
 | Session idle revoke | ✅ Server `POS_SESSION_IDLE_MINUTES` |
 | Station idle lock UI | ✅ Menu setting `idleLockMinutes` |
-| Multi-device sync | ✅ Poll + optimistic revision |
-| Immutable sales ledger | ✅ Insert + manager void only |
+| Multi-device sync | ✅ Poll + optimistic revision + **409 rebase** |
+| Realtime board nudge | ✅ SSE `/pos/events` (plus 2s poll) |
+| Kitchen/bar print | ✅ ESC/POS Web Serial + browser fallback; auto-print on fire |
+| Production boot guard | ✅ Blocks live builds without `PUBLIC_POS_API_URL` |
+| Immutable sales ledger | ✅ Insert + manager/admin void |
 | Audit ledger | ✅ Server-backed |
 | Owner backup + ops summary | ✅ `/pos/ops/*` + `scripts/backup-pos.sh` |
-| Stripe card intents | ✅ Optional (`STRIPE_SECRET_KEY`) |
+| Stripe card intents | ✅ Staff + **guest** optional (`STRIPE_SECRET_KEY`) |
 | Docker Compose pilot | ✅ `docker-compose.yml` |
 | Allyanna Postgres RLS SQL | ✅ `migrations/002` + bartender `003` |
-| Local demo without API | ✅ Unset `PUBLIC_POS_API_URL` |
+| Local demo without API | ✅ Dev only (unset URL); blocked in production builds |
 | Bar station + tabs / HH / comps / 86 | ✅ |
 | Floor smoke path | ✅ `docs/POS_FLOOR_SMOKE.md` + `npm run test:smoke` |
 | Shift day-part (floor vs bar) | ✅ Sales + close-shift confirm |
 | Reopen last closed bar tab | ✅ |
+| Staff desk oversight | ✅ Manager/admin per-staff tickets + payments |
+| My open checks filter | ✅ Service sidebar for servers |
 | Guest `/order` + QR | ✅ Phase B — menu, checkout, kitchen/bar tickets, status |
-| Guest pay-at-counter | ✅ (in-app card = later phase) |
+| Guest pay-at-counter | ✅ Always; in-app card intent when Stripe configured |
 
 See also: `docs/GUEST_ORDER.md`.
 
@@ -75,6 +80,6 @@ npm run test:all
 6. **Configure Stripe Terminal** (or keep cash / recorded card only until hardware is ready).
 7. **Schedule backups** — `scripts/backup-pos.sh` or Sales → Backup DB.
 8. **Apply Postgres migrations** when joining Allyanna compose (`001`, `002`, `003`).
-9. **Kitchen/receipt printers** — ESC-POS or vendor cloud print (still outstanding; browser print works).
+9. **Kitchen printers** — Menu → pair Web Serial ESC/POS (or rely on browser print fallback). Keep **Auto-print on fire** enabled for expo tickets.
 
 Without items 1–5, do not take real customer payments.

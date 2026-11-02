@@ -91,6 +91,8 @@ import {
 } from './bill/roles';
 import ServiceMenu from './bill/ServiceMenu';
 import { buildSaleReceiptSnapshot } from './bill/staffOversight';
+import { evaluateBootGuard } from './bill/bootGuard';
+import { printTicket, ticketFromTable } from './bill/kitchenPrint';
 import {
     createStaffUser,
     findStaffByPin,
@@ -98,6 +100,7 @@ import {
     notificationsForStaff,
     touchState,
 } from './bill/storage';
+import { useVoidFlow } from './bill/useVoidFlow';
 import {
     changePin,
     createOwnerBackup,
@@ -288,14 +291,8 @@ export default function RestaurantBillGenerator() {
     const [payGuestId, setPayGuestId] = useState<string | null>(null);
     const [notifOpen, setNotifOpen] = useState(false);
     const [receiptTemplate, setReceiptTemplate] = useState<ReceiptTemplate>('guest');
-    const [voidPending, setVoidPending] = useState<null | {
-        kind: AuditEntry['kind'];
-        title: string;
-        details: string;
-        tableLabel: string | null;
-        mode: 'void' | 'comp';
-        apply: (reason: string) => void;
-    }>(null);
+    const [mineOnly, setMineOnly] = useState(false);
+    const [bootBlocked] = useState(() => evaluateBootGuard());
     const [posSession, setPosSession] = useState<PosSession | null>(null);
     const [serverRevision, setServerRevision] = useState<number | null>(null);
     const [mustChangePin, setMustChangePin] = useState(false);
@@ -310,14 +307,15 @@ export default function RestaurantBillGenerator() {
 
     useDebouncedSave(state, hydrated && !serverMode, 400);
     usePosSync(state, setState, hydrated && !serverMode);
-    const { serverOnline, syncError } = usePosServer({
-        hydrated,
-        session: posSession && !mustChangePin ? posSession : null,
-        state,
-        setState,
-        revision: serverRevision,
-        setRevision: setServerRevision,
-    });
+    const { serverOnline, syncError, conflictNotice, clearConflictNotice, reloadFloor } =
+        usePosServer({
+            hydrated,
+            session: posSession && !mustChangePin ? posSession : null,
+            state,
+            setState,
+            revision: serverRevision,
+            setRevision: setServerRevision,
+        });
 
     const { locked: idleLocked, unlock: unlockIdle, lockNow } = useIdleLock({
         enabled: hydrated && Boolean(posSession || !serverMode) && !mustChangePin && !showPinGate,
@@ -586,6 +584,8 @@ export default function RestaurantBillGenerator() {
         setShowPinGate(true);
     };
 
+    const { voidPending, requestVoid, clearVoid } = useVoidFlow(requireManager);
+
     const refreshOwnerOps = () => {
         if (!serverMode || !posSession || mustChangePin) return;
         if (staff.role !== 'manager' && staff.role !== 'admin') return;
@@ -827,24 +827,6 @@ export default function RestaurantBillGenerator() {
         setModifierItem(null);
     };
 
-    const requestVoid = (
-        kind: AuditEntry['kind'],
-        title: string,
-        details: string,
-        tableLabel: string | null,
-        apply: (reason: string) => void,
-        needsManager: boolean,
-        mode: 'void' | 'comp' = 'void',
-    ) => {
-        const openVoid = () =>
-            setVoidPending({ kind, title, details, tableLabel, apply, mode });
-        if (needsManager) {
-            requireManager(openVoid);
-            return;
-        }
-        openVoid();
-    };
-
     const openBarTab = (guestName: string) => {
         if (!canOpenBarTab(staff.role)) return;
         const tab = createBarTab(guestName, state.settings.defaultServiceChargePercent);
@@ -981,7 +963,7 @@ export default function RestaurantBillGenerator() {
     const confirmVoid = (reason: string) => {
         if (!voidPending) return;
         const pending = voidPending;
-        setVoidPending(null);
+        clearVoid();
         pending.apply(reason);
         const entry = {
             id: createId('audit'),
@@ -1416,18 +1398,78 @@ export default function RestaurantBillGenerator() {
         finish();
     };
 
+    const printFiredTicket = (
+        kind: 'kitchen' | 'bar',
+        orderNumber: string | null,
+        lineIds: Set<string>,
+    ) => {
+        if (!state.settings.autoPrintOnFire) return;
+        const lines = activeTable.lines.filter((line) => lineIds.has(line.id));
+        // After commit, lines already carry order numbers — rebuild from next state snapshot.
+        const ticket = ticketFromTable({
+            kind,
+            table: {
+                ...activeTable,
+                lines: activeTable.lines
+                    .filter((line) => lineIds.has(line.id) || line.orderNumber === orderNumber)
+                    .map((line) =>
+                        lineIds.has(line.id)
+                            ? {
+                                  ...line,
+                                  kitchenStatus: 'queued',
+                                  orderNumber: orderNumber ?? line.orderNumber,
+                              }
+                            : line,
+                    ),
+            },
+            lines: activeTable.lines
+                .filter((line) => lineIds.has(line.id))
+                .map((line) => ({
+                    ...line,
+                    kitchenStatus: 'queued' as const,
+                    orderNumber: orderNumber ?? line.orderNumber,
+                })),
+            menuById,
+            restaurant: state.restaurant,
+            serverName: staff.name,
+            orderNumber,
+        });
+        void printTicket(ticket, {
+            preferSerial: state.settings.preferSerialPrint,
+        }).then((via) => {
+            if (via === 'serial') {
+                setShareFeedback(
+                    `${kind === 'bar' ? 'Bar' : 'Kitchen'} ticket printed to thermal printer.`,
+                );
+            }
+        });
+        void lines;
+    };
+
     const sendToKitchen = () => {
         if (!draftCount || isPaid || !canSendToKitchen(staff.role)) return;
         let sentCount = 0;
+        let orderNumber: string | null = null;
+        const foodIds = new Set(
+            activeTable.lines
+                .filter(
+                    (line) =>
+                        line.kitchenStatus === 'draft' &&
+                        isKitchenBoundItem(menuById.get(line.menuItemId)),
+                )
+                .map((line) => line.id),
+        );
         commit((current) => {
             const result = applySendFoodToKitchen(current, menuById);
             sentCount = result.sentCount;
+            orderNumber = result.orderNumber;
             return result.state;
         });
         if (sentCount === 0) {
             setShareFeedback('No food drafts to send. Use Send drinks to bar for beverages.');
             return;
         }
+        printFiredTicket('kitchen', orderNumber, foodIds);
         setShareFeedback(
             `${sentCount} food item(s) sent to kitchen. Send drinks to the bar separately.`,
         );
@@ -1437,15 +1479,27 @@ export default function RestaurantBillGenerator() {
     const sendToBar = () => {
         if (!drinkDraftCount || isPaid || !canSendToBar(staff.role)) return;
         let sentCount = 0;
+        let orderNumber: string | null = null;
+        const drinkIds = new Set(
+            activeTable.lines
+                .filter(
+                    (line) =>
+                        line.kitchenStatus === 'draft' &&
+                        isBeverageItem(menuById.get(line.menuItemId)),
+                )
+                .map((line) => line.id),
+        );
         commit((current) => {
             const result = applySendDrinksToBar(current, menuById);
             sentCount = result.sentCount;
+            orderNumber = result.orderNumber;
             return result.state;
         });
         if (sentCount === 0) {
             setShareFeedback('No drink drafts to send to the bar.');
             return;
         }
+        printFiredTicket('bar', orderNumber, drinkIds);
         setShareFeedback(`${sentCount} drink(s) fired to the bar rail.`);
         setNotifOpen(true);
     };
@@ -1548,6 +1602,34 @@ export default function RestaurantBillGenerator() {
     if (!hydrated) {
         return <div className="bistro-app loading-shell">Loading…</div>;
     }
+
+    if (!bootBlocked.ok) {
+        return (
+            <div className="bistro-app boot-guard">
+                <section className="boot-guard-card">
+                    <p className="eyebrow">Production boot guard</p>
+                    <h1>POS API required</h1>
+                    <p>{bootBlocked.message}</p>
+                    <p className="fx-note">
+                        Set <code>PUBLIC_POS_API_URL</code> on this deploy, then reload.
+                    </p>
+                </section>
+            </div>
+        );
+    }
+
+    const visibleTables = mineOnly
+        ? state.tables.filter(
+              (table) =>
+                  table.status !== 'paid' &&
+                  table.lines.some(
+                      (line) =>
+                          line.sentByStaffId === staff.id ||
+                          (line.kitchenStatus === 'draft' &&
+                              table.lines.some((other) => other.sentByStaffId === staff.id)),
+                  ),
+          )
+        : state.tables;
 
     return (
         <div className="bistro-app">
@@ -1748,12 +1830,38 @@ export default function RestaurantBillGenerator() {
                 </div>
             )}
 
+            {conflictNotice && (
+                <div className="conflict-banner" role="status">
+                    <strong>Station sync</strong>
+                    <span>{conflictNotice}</span>
+                    <button type="button" className="secondary-button" onClick={() => void reloadFloor()}>
+                        Reload floor
+                    </button>
+                    <button type="button" className="ghost-text" onClick={clearConflictNotice}>
+                        Dismiss
+                    </button>
+                </div>
+            )}
+
             <main className={`workspace ${view !== 'service' ? 'wide-main' : ''}`}>
                 {view === 'service' && canAccessView(staff.role, 'service') && (
                     <>
                         <div className="service-sidebar-tools">
+                            {(staff.role === 'server' ||
+                                staff.role === 'bartender' ||
+                                staff.role === 'manager' ||
+                                staff.role === 'admin') && (
+                                <label className="checkbox mine-only-check">
+                                    <input
+                                        type="checkbox"
+                                        checked={mineOnly}
+                                        onChange={(event) => setMineOnly(event.target.checked)}
+                                    />
+                                    My open checks
+                                </label>
+                            )}
                             <TableMap
-                                tables={state.tables}
+                                tables={visibleTables}
                                 activeTableId={activeTable.id}
                                 canOpenBarTab={canOpenBarTab(staff.role)}
                                 canCloseBarTab={canOpenBarTab(staff.role)}
@@ -1794,6 +1902,9 @@ export default function RestaurantBillGenerator() {
                                 canDeleteTickets(staff.role) && staff.role !== 'kitchen'
                             }
                             canEightySix={canEightySix(staff.role)}
+                            restaurant={state.restaurant}
+                            serverName={staff.name}
+                            preferSerialPrint={state.settings.preferSerialPrint}
                             onStatus={setKitchenStatus}
                             onDeleteTicket={deleteKitchenTicket}
                             onBump={bumpTicket}
@@ -1816,6 +1927,9 @@ export default function RestaurantBillGenerator() {
                                 canDeleteTickets(staff.role) && staff.role !== 'bartender'
                             }
                             canEightySix={canEightySix(staff.role)}
+                            restaurant={state.restaurant}
+                            serverName={staff.name}
+                            preferSerialPrint={state.settings.preferSerialPrint}
                             onStatus={setKitchenStatus}
                             onDeleteTicket={deleteKitchenTicket}
                             onBump={bumpTicket}
@@ -2610,7 +2724,7 @@ export default function RestaurantBillGenerator() {
                     details={voidPending.details}
                     mode={voidPending.mode}
                     onConfirm={confirmVoid}
-                    onCancel={() => setVoidPending(null)}
+                    onCancel={clearVoid}
                 />
             )}
 

@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.pos import ai as menu_ai
+from app.pos import events as pos_events
 from app.pos import guest_orders
 from app.pos import ops
 from app.pos import payments as pay
@@ -102,12 +104,21 @@ def _bearer(authorization: Optional[str]) -> str:
 
 async def require_session(
     authorization: Optional[str] = Header(default=None),
+    access_token: Optional[str] = Query(default=None),
 ) -> dict[str, Any]:
-    token = _bearer(authorization)
+    token = access_token.strip() if access_token else None
+    if not token:
+        token = _bearer(authorization)
     session = store.resolve_session(token)
     if not session:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Session expired or invalid")
     return {**session, "token": token}
+
+
+async def _publish_state(tenant_id: str, revision: int, kind: str = "state") -> None:
+    await pos_events.bus.publish(
+        {"type": kind, "tenantId": tenant_id, "revision": revision}
+    )
 
 
 def _require_manager(session: dict[str, Any]) -> None:
@@ -247,7 +258,9 @@ async def put_state(
         ) from exc
     except KeyError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="No POS state") from exc
-    return {"state": snap, "revision": snap.get("_revision", 1)}
+    revision = int(snap.get("_revision", 1))
+    await _publish_state(session["tenantId"], revision, "state")
+    return {"state": snap, "revision": revision}
 
 
 @router.post("/bootstrap")
@@ -260,7 +273,50 @@ async def bootstrap(
     snap = store.bootstrap_menu_if_empty(
         session["tenantId"], body.menu, body.tables
     )
-    return {"state": snap, "revision": snap.get("_revision", 1)}
+    revision = int(snap.get("_revision", 1))
+    await _publish_state(session["tenantId"], revision, "bootstrap")
+    return {"state": snap, "revision": revision}
+
+
+@router.get("/events")
+async def pos_events_stream(
+    session: dict[str, Any] = Depends(require_session),
+) -> StreamingResponse:
+    """Server-Sent Events for kitchen/bar/service tablets (realtime refresh)."""
+    _require_pin_changed(session)
+    tenant_id = session["tenantId"]
+    queue = await pos_events.bus.subscribe()
+
+    async def generate():
+        try:
+            snap = store.get_snapshot(tenant_id) or {}
+            hello = {
+                "type": "hello",
+                "tenantId": tenant_id,
+                "revision": snap.get("_revision", 1),
+            }
+            yield pos_events.format_sse(hello)
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=20.0)
+                except asyncio.TimeoutError:
+                    yield pos_events.format_sse({"type": "ping", "tenantId": tenant_id})
+                    continue
+                if event.get("tenantId") and event.get("tenantId") != tenant_id:
+                    continue
+                yield pos_events.format_sse(event)
+        finally:
+            await pos_events.bus.unsubscribe(queue)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/sales")
@@ -486,7 +542,7 @@ async def guest_place_order(body: GuestPlaceOrderBody) -> dict[str, Any]:
     last_err: Exception | None = None
     for _ in range(3):
         try:
-            return guest_orders.place_order(
+            result = guest_orders.place_order(
                 tenant_id=body.tenantId,
                 fulfillment=body.fulfillment,
                 table_label=body.tableLabel,
@@ -494,6 +550,14 @@ async def guest_place_order(body: GuestPlaceOrderBody) -> dict[str, Any]:
                 tip_cents=body.tipCents,
                 lines=[line.model_dump() for line in body.lines],
             )
+            revision = int(result.get("revision") or 0)
+            tid = body.tenantId or DEFAULT_TENANT_ID
+            if revision:
+                await _publish_state(tid, revision, "guest_order")
+            else:
+                snap = store.get_snapshot(tid) or {}
+                await _publish_state(tid, int(snap.get("_revision", 1)), "guest_order")
+            return result
         except ConflictError:
             continue
         except ValueError as exc:
@@ -504,6 +568,50 @@ async def guest_place_order(body: GuestPlaceOrderBody) -> dict[str, Any]:
     if last_err:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not place order")
     raise HTTPException(status.HTTP_409_CONFLICT, detail="POS busy — retry")
+
+
+class GuestCardIntentBody(BaseModel):
+    amountCents: int = Field(gt=0)
+    currency: str = "usd"
+    orderToken: str = Field(min_length=3, max_length=80)
+    guestName: Optional[str] = None
+    tenantId: Optional[str] = None
+
+
+@router.post("/guest/payments/card-intent")
+async def guest_card_intent(body: GuestCardIntentBody) -> dict[str, Any]:
+    """
+    Guest-facing Stripe PaymentIntent for pay-in-app (optional).
+    Counter pay remains the default when Stripe is not configured.
+    """
+    if not pay.stripe_enabled():
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "message": "Card pay-in-app unavailable — please pay at the counter.",
+                "stripeConfigured": False,
+                "payAtCounter": True,
+            },
+        )
+    if not body.orderToken.startswith("go_"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid order token")
+    found = guest_orders.find_order_by_token(body.tenantId, body.orderToken)
+    if not found:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Order not found")
+    try:
+        intent = pay.create_card_intent(
+            amount_cents=body.amountCents,
+            currency=body.currency,
+            metadata={
+                "tenantId": body.tenantId or DEFAULT_TENANT_ID,
+                "orderToken": body.orderToken,
+                "guestName": body.guestName or "",
+                "channel": "guest",
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return {**intent, "payAtCounter": False}
 
 
 @router.get("/guest/orders/{token}")

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { createDefaultState } from './defaults';
 import {
     bootstrapPos,
@@ -8,8 +8,10 @@ import {
     pushPosState,
     type PosSession,
 } from './posApi';
+import { describeConflict, rebaseLocalOntoRemote } from './syncMerge';
 import { saveState, touchState } from './storage';
 import type { PersistedState } from './types';
+import { usePosEvents } from './usePosEvents';
 
 type Args = {
     hydrated: boolean;
@@ -24,6 +26,8 @@ type Args = {
  * Multi-device sync against the POS API:
  * - debounced push on local edits
  * - poll for remote updates every 2s
+ * - SSE nudge for near-realtime board refresh
+ * - 409 conflict rebase (keep non-overlapping local checks)
  */
 export function usePosServer({
     hydrated,
@@ -35,9 +39,65 @@ export function usePosServer({
 }: Args) {
     const [serverOnline, setServerOnline] = useState(false);
     const [syncError, setSyncError] = useState<string | null>(null);
+    const [conflictNotice, setConflictNotice] = useState<string | null>(null);
     const pushing = useRef(false);
     const lastPushedAt = useRef(0);
+    const stateRef = useRef(state);
+    stateRef.current = state;
     const enabled = isServerMode() && Boolean(session);
+
+    const applyRemote = useCallback(
+        (remote: { state: PersistedState; revision: number }, mode: 'poll' | 'conflict') => {
+            const local = stateRef.current;
+            if (mode === 'conflict') {
+                const merged = rebaseLocalOntoRemote({
+                    local,
+                    remote: remote.state,
+                    preserveActiveStaffId: session?.staff.id ?? local.activeStaffId,
+                });
+                lastPushedAt.current = merged.state.updatedAt;
+                setRevision(remote.revision);
+                setState(touchState(merged.state));
+                const message = describeConflict(merged.preservedTableIds);
+                setConflictNotice(message);
+                setSyncError(message);
+                return;
+            }
+            if (remote.state.updatedAt > local.updatedAt) {
+                lastPushedAt.current = remote.state.updatedAt;
+                setRevision(remote.revision);
+                setState(
+                    touchState({
+                        ...remote.state,
+                        activeStaffId: session?.staff.id ?? remote.state.activeStaffId,
+                    }),
+                );
+            } else {
+                setRevision(remote.revision);
+            }
+        },
+        [session, setRevision, setState],
+    );
+
+    const reloadFloor = useCallback(async () => {
+        if (!enabled) return;
+        try {
+            const remote = await fetchPosState();
+            lastPushedAt.current = remote.state.updatedAt;
+            setRevision(remote.revision);
+            setState(
+                touchState({
+                    ...remote.state,
+                    activeStaffId: session?.staff.id ?? remote.state.activeStaffId,
+                }),
+            );
+            setConflictNotice(null);
+            setSyncError(null);
+            setServerOnline(true);
+        } catch (err) {
+            setSyncError(err instanceof Error ? err.message : 'Reload failed');
+        }
+    }, [enabled, session, setRevision, setState]);
 
     useEffect(() => {
         if (!isServerMode()) {
@@ -57,7 +117,6 @@ export function usePosServer({
         };
     }, []);
 
-    // Bootstrap empty server menu from local defaults once
     useEffect(() => {
         if (!enabled || !hydrated) return;
         let cancelled = false;
@@ -84,7 +143,6 @@ export function usePosServer({
         };
     }, [enabled, hydrated, session, setRevision, setState]);
 
-    // Debounced push
     useEffect(() => {
         if (!enabled || !hydrated) return;
         const timer = window.setTimeout(async () => {
@@ -96,20 +154,13 @@ export function usePosServer({
                 lastPushedAt.current = result.state.updatedAt;
                 setRevision(result.revision);
                 setSyncError(null);
+                setConflictNotice(null);
             } catch (err) {
                 const status = (err as { status?: number }).status;
                 if (status === 409) {
                     try {
                         const remote = await fetchPosState();
-                        lastPushedAt.current = remote.state.updatedAt;
-                        setRevision(remote.revision);
-                        setState(
-                            touchState({
-                                ...remote.state,
-                                activeStaffId: session?.staff.id ?? remote.state.activeStaffId,
-                            }),
-                        );
-                        setSyncError('Synced newer state from another station');
+                        applyRemote(remote, 'conflict');
                     } catch (pullErr) {
                         setSyncError(
                             pullErr instanceof Error ? pullErr.message : 'Conflict resolve failed',
@@ -123,39 +174,45 @@ export function usePosServer({
             }
         }, 500);
         return () => window.clearTimeout(timer);
-    }, [enabled, hydrated, state, revision, session, setRevision, setState]);
+    }, [enabled, hydrated, state, revision, applyRemote, setRevision]);
 
-    // Poll pull
     useEffect(() => {
         if (!enabled || !hydrated) return;
         const id = window.setInterval(async () => {
             if (pushing.current) return;
             try {
                 const remote = await fetchPosState();
-                if (remote.state.updatedAt > state.updatedAt) {
-                    lastPushedAt.current = remote.state.updatedAt;
-                    setRevision(remote.revision);
-                    setState(
-                        touchState({
-                            ...remote.state,
-                            activeStaffId: session?.staff.id ?? remote.state.activeStaffId,
-                        }),
-                    );
-                } else {
-                    setRevision(remote.revision);
-                }
+                applyRemote(remote, 'poll');
                 setServerOnline(true);
             } catch {
                 setServerOnline(false);
             }
         }, 2000);
         return () => window.clearInterval(id);
-    }, [enabled, hydrated, state.updatedAt, session, setRevision, setState]);
+    }, [enabled, hydrated, applyRemote]);
+
+    usePosEvents({
+        enabled: Boolean(enabled && hydrated),
+        onEvent: () => {
+            if (pushing.current) return;
+            void fetchPosState()
+                .then((remote) => {
+                    applyRemote(remote, 'poll');
+                    setServerOnline(true);
+                })
+                .catch(() => {
+                    /* poll will retry */
+                });
+        },
+    });
 
     return {
         serverMode: isServerMode(),
         serverOnline,
         syncError,
+        conflictNotice,
+        clearConflictNotice: () => setConflictNotice(null),
+        reloadFloor,
         enabled,
     };
 }

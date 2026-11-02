@@ -221,6 +221,10 @@ export type PosSettings = {
     idleLockMinutes: number;
     /** When true, adding a drink immediately fires it to the bar rail */
     autoFireDrinks: boolean;
+    /** Auto-print kitchen/bar ticket when food/drinks are fired */
+    autoPrintOnFire: boolean;
+    /** Prefer Web Serial ESC/POS when a printer port was paired */
+    preferSerialPrint: boolean;
     /** Peak-service tempo — shorter bumps + faster guest wait estimates */
     rushMode: boolean;
     /** ISO timestamp when Rush mode was last turned on */

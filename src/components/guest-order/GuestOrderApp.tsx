@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import './guest-order.css';
 import GuestOrderHeroQr from './GuestOrderHeroQr';
 import {
+    createGuestCardIntent,
     fetchGuestMenu,
     fetchGuestOrderStatus,
+    fetchGuestPayConfig,
     isGuestApiConfigured,
     placeGuestOrder,
     type GuestFulfillment,
@@ -42,6 +44,9 @@ export default function GuestOrderApp() {
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [order, setOrder] = useState<GuestOrderStatus | null>(null);
+    const [stripeConfigured, setStripeConfigured] = useState(false);
+    const [cardBusy, setCardBusy] = useState(false);
+    const [cardNote, setCardNote] = useState<string | null>(null);
 
     useEffect(() => {
         const fromQr = readTableFromSearch();
@@ -49,6 +54,7 @@ export default function GuestOrderApp() {
             setTableLabel(fromQr);
             setFulfillment('table');
         }
+        void fetchGuestPayConfig().then((cfg) => setStripeConfigured(cfg.stripeConfigured));
     }, []);
 
     useEffect(() => {
@@ -188,13 +194,57 @@ export default function GuestOrderApp() {
                             {order.payNote ||
                                 'Pay at the counter in USD or XCG when you pick up or before you leave.'}
                         </p>
+                        <p className="guest-status-pay">
+                            <strong>Pay at counter</strong> is always available (USD / XCG).
+                            {stripeConfigured
+                                ? ' Card pay-in-app is optional when Stripe is configured.'
+                                : ''}
+                        </p>
                         {(order.tipCents ?? 0) > 0 && (
                             <p className="guest-status-pay">Tip noted: {formatDual(order.tipCents ?? 0)}</p>
                         )}
+                        {cardNote && <p className="guest-status-pay">{cardNote}</p>}
+                        {stripeConfigured &&
+                            order.phase !== 'paid' &&
+                            !order.token.startsWith('go_demo_') && (
+                                <button
+                                    type="button"
+                                    className="guest-cta secondary"
+                                    disabled={cardBusy}
+                                    onClick={() => {
+                                        const amount = order.lines.reduce(
+                                            (sum, line) => sum + line.priceCents * line.quantity,
+                                            0,
+                                        ) + (order.tipCents ?? 0);
+                                        setCardBusy(true);
+                                        setCardNote(null);
+                                        void createGuestCardIntent({
+                                            amountCents: Math.max(amount, 100),
+                                            orderToken: order.token,
+                                            guestName: order.guestName ?? undefined,
+                                        })
+                                            .then((intent) => {
+                                                setCardNote(
+                                                    `Card intent ready (${intent.status}). Complete with Stripe.js / Terminal using secret ${intent.clientSecret.slice(0, 12)}… — or pay at the counter.`,
+                                                );
+                                            })
+                                            .catch((err) => {
+                                                setCardNote(
+                                                    err instanceof Error
+                                                        ? err.message
+                                                        : 'Card pay unavailable — please pay at the counter.',
+                                                );
+                                            })
+                                            .finally(() => setCardBusy(false));
+                                    }}
+                                >
+                                    {cardBusy ? 'Starting card…' : 'Pay by card (in-app)'}
+                                </button>
+                            )}
                         {!isGuestApiConfigured() && (
                             <p className="guest-status-demo">
-                                Demo mode — kitchen will not see this order until{' '}
-                                <code>PUBLIC_POS_API_URL</code> is set.
+                                Kitchen offline — this demo order will not reach the floor until{' '}
+                                <code>PUBLIC_POS_API_URL</code> is set on the live site.
                             </p>
                         )}
                         <ol className="guest-phase-rail" aria-label="Progress">
