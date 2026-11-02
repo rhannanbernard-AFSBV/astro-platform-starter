@@ -31,6 +31,8 @@ __pycache__/
 .pytest_cache/
 *.py[cod]
 *.egg-info/
+**/__pycache__/
+*.pyc
 
 # Allyanna backups / TLS materials
 backups/
@@ -45,3 +47,11 @@ apps/mobile/.env
 apps/mobile/.expo/
 *.pglite/
 .expo/
+
+# POS / vitest
+test-results/
+backend/data/
+backend/.venv/
+backend/tests/_tmp_pos_data/
+backend/tests/_tmp_pos_hardening/
+backend/data/backups/

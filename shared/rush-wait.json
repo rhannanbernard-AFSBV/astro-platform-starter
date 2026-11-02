@@ -1,0 +1,11 @@
+{
+  "normalMinutesPerUnit": 3.5,
+  "rushMinutesPerUnit": 2.2,
+  "normalWaitFloor": 8,
+  "rushWaitFloor": 5,
+  "normalWaitCeiling": 45,
+  "rushWaitCeiling": 28,
+  "defaultRushBumpMinutes": 4,
+  "defaultAutoOffMinutes": 90,
+  "defaultWarnMinutes": 10
+}
