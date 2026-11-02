@@ -475,6 +475,14 @@ function normalizeState(value: unknown): PersistedState | null {
             rawSettings.autoFireDrinks !== undefined
                 ? rawSettings.autoFireDrinks !== false
                 : DEFAULT_SETTINGS.autoFireDrinks,
+        autoPrintOnFire:
+            rawSettings.autoPrintOnFire !== undefined
+                ? rawSettings.autoPrintOnFire !== false
+                : DEFAULT_SETTINGS.autoPrintOnFire,
+        preferSerialPrint:
+            rawSettings.preferSerialPrint !== undefined
+                ? rawSettings.preferSerialPrint !== false
+                : DEFAULT_SETTINGS.preferSerialPrint,
         rushMode: rawSettings.rushMode === true,
         rushModeSince:
             typeof rawSettings.rushModeSince === 'string' ? rawSettings.rushModeSince : null,

@@ -210,3 +210,58 @@ export async function fetchGuestOrderStatus(token: string): Promise<GuestOrderSt
     if (!res.ok) throw new Error(`status ${res.status}`);
     return (await res.json()) as GuestOrderStatus;
 }
+
+export async function fetchGuestPayConfig(): Promise<{
+    stripeConfigured: boolean;
+    stripePublishableKey: string | null;
+}> {
+    const base = apiBase();
+    if (!base) return { stripeConfigured: false, stripePublishableKey: null };
+    try {
+        const res = await fetch(`${base}/pos/config`);
+        if (!res.ok) return { stripeConfigured: false, stripePublishableKey: null };
+        const body = (await res.json()) as {
+            stripeConfigured?: boolean;
+            stripePublishableKey?: string | null;
+        };
+        return {
+            stripeConfigured: Boolean(body.stripeConfigured),
+            stripePublishableKey: body.stripePublishableKey ?? null,
+        };
+    } catch {
+        return { stripeConfigured: false, stripePublishableKey: null };
+    }
+}
+
+/** Creates a Stripe PaymentIntent for guest pay-in-app (falls back to counter). */
+export async function createGuestCardIntent(input: {
+    amountCents: number;
+    orderToken: string;
+    guestName?: string;
+    currency?: string;
+}): Promise<{
+    paymentIntentId: string;
+    clientSecret: string;
+    status: string;
+    payAtCounter: boolean;
+}> {
+    const base = apiBase();
+    if (!base) {
+        throw new Error('Card pay requires PUBLIC_POS_API_URL — please pay at the counter.');
+    }
+    const res = await fetch(`${base}/pos/guest/payments/card-intent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+    });
+    if (!res.ok) {
+        const detail = await res.text();
+        throw new Error(detail || 'Card pay unavailable — please pay at the counter.');
+    }
+    return (await res.json()) as {
+        paymentIntentId: string;
+        clientSecret: string;
+        status: string;
+        payAtCounter: boolean;
+    };
+}

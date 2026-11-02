@@ -35,6 +35,8 @@ export const DEFAULT_SETTINGS: PosSettings = {
     bumpAfterMinutes: 8,
     idleLockMinutes: 5,
     autoFireDrinks: true,
+    autoPrintOnFire: true,
+    preferSerialPrint: true,
     rushMode: false,
     rushModeSince: null,
     rushBumpMinutes: 4,
