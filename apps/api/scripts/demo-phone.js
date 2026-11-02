@@ -281,7 +281,8 @@ async function main() {
   }
   lines.push('');
   lines.push('Login: demo@omniclean.demo / demo1234');
-  lines.push('Flow: login → mock scan → calibrate → bid → checklist');
+  lines.push('Flow: login → camera walkthrough → calibrate → bid → checklist');
+  lines.push('Tip: set OPENAI_API_KEY for live GPT-4o; mock is under Advanced only.');
   lines.push(`This machine: ${localUrl}`);
   banner(lines);
 

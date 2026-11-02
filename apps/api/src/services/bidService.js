@@ -146,25 +146,70 @@ export async function createBidFromWalkthrough({
     jurisdictionCode: ctx.tenant.jurisdiction_code,
   });
 
+  const captureFrames = frameList.map((f, i) => ({
+    index: i,
+    filename: f.filename || `frame-${i + 1}.jpg`,
+    mime_type: f.mimeType || 'image/jpeg',
+    byte_length: f.buffer?.length || 0,
+  }));
+
   const payload = {
     spatial_summary: {
       ...mathPart.spatial_summary,
       excluded_structural_sq_ft:
         extraction.spatial_summary.excluded_structural_sq_ft,
+      excluded_breakdown: extraction.spatial_summary.excluded_breakdown || [],
       measurement_method: extraction.spatial_summary.measurement_method,
+      area_confidence: extraction.spatial_summary.area_confidence,
+      // Preserve AI texture/confidence on substrates & fixtures for calibrate UI
+      substrate_breakdown: (
+        extraction.spatial_summary.substrate_breakdown ||
+        mathPart.spatial_summary.substrate_breakdown ||
+        []
+      ).map((s) => ({
+        ...s,
+        ...(mathPart.spatial_summary.substrate_breakdown || []).find(
+          (m) => m.material === s.material
+        ),
+      })),
+      detected_fixtures: (
+        extraction.spatial_summary.detected_fixtures ||
+        mathPart.spatial_summary.detected_fixtures ||
+        []
+      ).map((f) => ({
+        fixture_type: f.fixture_type,
+        count: f.count,
+        labor_intensity: f.labor_intensity,
+        confidence: f.confidence,
+        notes: f.notes,
+      })),
     },
     scale_and_legend: extraction.scale_and_legend || null,
+    room_zones: extraction.room_zones || [],
+    extraction_confidence: extraction._extraction_confidence || {
+      overall: extraction.overall_confidence,
+      area: extraction.spatial_summary?.area_confidence,
+      scale: extraction.scale_and_legend?.confidence,
+      uncertain_fields: extraction.uncertain_fields || [],
+    },
     financial_ledger: mathPart.financial_ledger,
     proposal_copy,
     crew_checklist,
     meta: {
       extraction_source: extraction._source,
       property_notes: extraction.property_notes,
+      fusion_notes: extraction.fusion_notes || '',
       jurisdiction_code: ctx.tenant.jurisdiction_code,
       scale_calibration: extraction._scale_calibration,
+      scale_method:
+        extraction.spatial_summary?.measurement_method ||
+        extraction._scale_calibration,
       frame_count: extraction._frame_count || frameList.length || 1,
       video_received: Boolean(videoMeta || extraction._video_received),
       video: videoMeta || null,
+      capture_frames: captureFrames,
+      uncertain_fields: extraction.uncertain_fields || [],
+      overall_confidence: extraction.overall_confidence,
       pricing_committed: Boolean(commitPricing),
     },
   };
