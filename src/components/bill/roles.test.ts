@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
     canCompLine,
     canCreateOrders,
+    canDeletePayments,
     canDeleteTickets,
     canEightySix,
     canOpenBarTab,
+    canOverseeStaff,
     canRunBarBoard,
     canSendToBar,
     canTakePayment,
@@ -43,5 +45,15 @@ describe('roles', () => {
     it('includes bar in manager views', () => {
         expect(viewsForRole('manager')).toContain('bar');
         expect(viewsForRole('admin')).toContain('bar');
+    });
+
+    it('gives manager and admin staff desk plus full ticket/payment control', () => {
+        expect(viewsForRole('manager')).toContain('oversight');
+        expect(viewsForRole('admin')).toContain('oversight');
+        expect(canOverseeStaff('manager')).toBe(true);
+        expect(canOverseeStaff('admin')).toBe(true);
+        expect(canOverseeStaff('server')).toBe(false);
+        expect(canDeleteTickets('admin')).toBe(true);
+        expect(canDeletePayments('admin')).toBe(true);
     });
 });

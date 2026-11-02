@@ -301,6 +301,8 @@ function migrateSales(rawSales: unknown): SaleRecord[] {
             compCents: Math.max(0, Number(sale.compCents ?? 0)),
             payment: sale.payment as SaleRecord['payment'],
             serverName: String(sale.serverName ?? 'Server'),
+            serverStaffId:
+                typeof sale.serverStaffId === 'string' ? sale.serverStaffId : null,
             itemCount: Number(sale.itemCount ?? 0),
             orderNumbers: Array.isArray(sale.orderNumbers)
                 ? (sale.orderNumbers as string[])
@@ -473,6 +475,14 @@ function normalizeState(value: unknown): PersistedState | null {
             rawSettings.autoFireDrinks !== undefined
                 ? rawSettings.autoFireDrinks !== false
                 : DEFAULT_SETTINGS.autoFireDrinks,
+        autoPrintOnFire:
+            rawSettings.autoPrintOnFire !== undefined
+                ? rawSettings.autoPrintOnFire !== false
+                : DEFAULT_SETTINGS.autoPrintOnFire,
+        preferSerialPrint:
+            rawSettings.preferSerialPrint !== undefined
+                ? rawSettings.preferSerialPrint !== false
+                : DEFAULT_SETTINGS.preferSerialPrint,
         rushMode: rawSettings.rushMode === true,
         rushModeSince:
             typeof rawSettings.rushModeSince === 'string' ? rawSettings.rushModeSince : null,

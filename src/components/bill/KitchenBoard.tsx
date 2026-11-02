@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Icon } from './Icons';
+import { printTicket, ticketFromTable } from './kitchenPrint';
 import { isTicketLate, ticketWaitMinutes } from './posLogic';
 import StatusTabs, { StatusChip } from './StatusTabs';
 import {
@@ -13,6 +14,7 @@ import {
     type CourseFire,
     type KitchenStatus,
     type MenuItem,
+    type RestaurantProfile,
     type TableOrder,
 } from './types';
 
@@ -32,6 +34,9 @@ type Props = {
     canEightySix?: boolean;
     /** Kitchen expo (food) or bar rail (drinks). */
     board?: BoardKind;
+    restaurant?: RestaurantProfile;
+    serverName?: string;
+    preferSerialPrint?: boolean;
     onStatus: (tableId: string, lineId: string, status: KitchenStatus) => void;
     onDeleteTicket: (tableId: string, lineId: string) => void;
     onBump: (tableId: string, lineId: string) => void;
@@ -48,6 +53,9 @@ export default function KitchenBoard({
     canDeleteTickets,
     canEightySix = false,
     board = 'kitchen',
+    restaurant,
+    serverName = 'Station',
+    preferSerialPrint = true,
     onStatus,
     onDeleteTicket,
     onBump,
@@ -159,7 +167,24 @@ export default function KitchenBoard({
                         <button
                             type="button"
                             className="secondary-button no-print"
-                            onClick={() => window.print()}
+                            onClick={() => {
+                                const ticket = ticketFromTable({
+                                    kind: isBar ? 'bar' : 'kitchen',
+                                    table: activeGroup.table,
+                                    lines: activeGroup.tickets.map((entry) => entry.line),
+                                    menuById,
+                                    restaurant: restaurant ?? {
+                                        name: 'Kitchen',
+                                        tagline: '',
+                                        address: '',
+                                        phone: '',
+                                        taxId: '',
+                                        feedbackUrl: '',
+                                    },
+                                    serverName,
+                                });
+                                void printTicket(ticket, { preferSerial: preferSerialPrint });
+                            }}
                         >
                             <Icon name="receipt" /> Print {isBar ? 'bar' : 'kitchen'} ticket
                         </button>

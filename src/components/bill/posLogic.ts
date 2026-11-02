@@ -398,7 +398,14 @@ export function allGuestsPaid(table: TableOrder): boolean {
     return spenders.every((guest) => Boolean(guest.paidAt));
 }
 
-export type StationKey = 'service' | 'kitchen' | 'bar' | 'reports' | 'admin' | 'users';
+export type StationKey =
+    | 'service'
+    | 'kitchen'
+    | 'bar'
+    | 'reports'
+    | 'oversight'
+    | 'admin'
+    | 'users';
 
 export function parseStationParam(value: string | null | undefined): StationKey | null {
     if (!value) return null;
@@ -408,6 +415,7 @@ export function parseStationParam(value: string | null | undefined): StationKey 
         key === 'kitchen' ||
         key === 'bar' ||
         key === 'reports' ||
+        key === 'oversight' ||
         key === 'admin' ||
         key === 'users'
     ) {
@@ -417,6 +425,7 @@ export function parseStationParam(value: string | null | undefined): StationKey 
     if (key === 'expo' || key === 'kds') return 'kitchen';
     if (key === 'drinks' || key === 'beverage' || key === 'bartender') return 'bar';
     if (key === 'sales') return 'reports';
+    if (key === 'staff' || key === 'desk' || key === 'manager') return 'oversight';
     if (key === 'menu') return 'admin';
     return null;
 }

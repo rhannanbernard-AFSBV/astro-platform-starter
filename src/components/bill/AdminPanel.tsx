@@ -49,6 +49,7 @@ const STATION_LINKS: Array<{ key: StationKey; label: string }> = [
     { key: 'kitchen', label: 'Kitchen expo' },
     { key: 'bar', label: 'Bar rail' },
     { key: 'reports', label: 'Sales' },
+    { key: 'oversight', label: 'Staff desk' },
     { key: 'admin', label: 'Menu admin' },
 ];
 
@@ -373,6 +374,43 @@ export default function AdminPanel({
                         />
                         Auto-fire drinks to bar on add
                     </label>
+                    <label className="checkbox">
+                        <input
+                            type="checkbox"
+                            checked={settings.autoPrintOnFire}
+                            onChange={(event) =>
+                                onSettingsChange({ autoPrintOnFire: event.target.checked })
+                            }
+                        />
+                        Auto-print kitchen/bar ticket on fire
+                    </label>
+                    <label className="checkbox">
+                        <input
+                            type="checkbox"
+                            checked={settings.preferSerialPrint}
+                            onChange={(event) =>
+                                onSettingsChange({ preferSerialPrint: event.target.checked })
+                            }
+                        />
+                        Prefer ESC/POS serial printer when paired
+                    </label>
+                    <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => {
+                            void import('./kitchenPrint').then(({ requestSerialPrinter }) =>
+                                requestSerialPrinter().then((ok) => {
+                                    window.alert(
+                                        ok
+                                            ? 'Thermal printer paired for this browser.'
+                                            : 'Web Serial unavailable or cancelled.',
+                                    );
+                                }),
+                            );
+                        }}
+                    >
+                        Pair kitchen printer (Web Serial)
+                    </button>
                     <label className="checkbox rush-admin-check">
                         <input
                             type="checkbox"
