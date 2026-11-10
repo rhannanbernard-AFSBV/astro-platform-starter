@@ -56,6 +56,19 @@ export type FixtureRow = {
   fixture_type: string;
   count: number;
   labor_intensity?: string;
+  confidence?: number;
+  notes?: string;
+};
+
+export type RoomZone = {
+  room_zone: string;
+  approx_sq_ft?: number;
+  is_high_risk?: boolean;
+  risk_reason?: string;
+  substrate_hint?: string;
+  confidence?: number;
+  source_frame_indices?: number[];
+  suggested_tasks?: string[];
 };
 
 export type ScanResponse = {
@@ -66,9 +79,35 @@ export type ScanResponse = {
   pricing_committed?: boolean;
   spatial_summary: {
     total_cleanable_sq_ft: number;
-    substrate_breakdown: { material: string; percentage: number }[];
+    excluded_structural_sq_ft?: number;
+    measurement_method?: string;
+    area_confidence?: number;
+    substrate_breakdown: {
+      material: string;
+      percentage: number;
+      approx_sq_ft?: number;
+      texture_notes?: string;
+      confidence?: number;
+    }[];
     detected_fixtures: FixtureRow[];
   };
+  scale_and_legend?: {
+    scale_detected?: boolean;
+    scale_text?: string;
+    units?: string;
+    pixels_per_foot?: number;
+    reference_feature?: string;
+    reference_real_world_ft?: number;
+    confidence?: number;
+    notes?: string;
+  } | null;
+  room_zones?: RoomZone[];
+  extraction_confidence?: {
+    overall?: number;
+    area?: number;
+    scale?: number;
+    uncertain_fields?: string[];
+  } | null;
   financial_ledger: {
     recommended_shift_hours: number;
     calculated_labor_cost_per_shift: number;
@@ -112,6 +151,12 @@ export type ScanResponse = {
     frame_count?: number;
     video_received?: boolean;
     pricing_committed?: boolean;
+    fusion_notes?: string;
+    scale_method?: string;
+    scale_calibration?: string;
+    overall_confidence?: number;
+    uncertain_fields?: string[];
+    vision_mode?: string;
   };
   proposal: {
     status: string;
@@ -219,7 +264,8 @@ export async function createScan(input: {
         ? [input.imageUri]
         : [];
 
-  if (input.mock || (!uris.length && !input.videoUri)) form.append('mock', '1');
+  // Mock only when explicitly requested — never silent fallback for live camera path
+  if (input.mock) form.append('mock', '1');
 
   if (!input.mock && uris.length) {
     uris.forEach((uri, i) => {
